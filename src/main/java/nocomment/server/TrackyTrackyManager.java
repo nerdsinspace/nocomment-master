@@ -1,0 +1,57 @@
+package nocomment.server;
+
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+public class TrackyTrackyManager {
+    public static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(16); // at most 16 threads because stupid
+
+    private final Server server;
+    private final World overworld;
+    private final World nether;
+
+    public TrackyTrackyManager(Server server) {
+        this.server = server;
+        this.overworld = server.getWorld(0);
+        this.nether = server.getWorld(-1);
+        highways();
+    }
+
+    private void highways() {
+        new HighwayScanner(nether, 100, this::ingestGeneric).submitTasks();
+    }
+
+    private void ingestGeneric(ChunkPos hit) {
+        System.out.println("Tracky tracky " + hit);
+        if (Math.abs(hit.x) < 100 && Math.abs(hit.z) < 100) {
+            return;
+        }
+        // TODO deduplicate with hits in the last 5 secs so we dont 2x whenever they have 9+epsilon chunks loaded in a row
+        scheduler.schedule(() -> {
+            System.out.println("Gridding");
+            grid(9, 2, hit);
+        }, 5, TimeUnit.SECONDS);
+    }
+
+    private void grid(int gridInterval, int gridRadius, ChunkPos center) {
+        for (int x = -gridRadius; x <= gridRadius; x++) { // iterate X, sweep Z
+            // i'm sorry
+            createCatchupTask(10, center.add(x * gridInterval, -gridRadius * gridInterval), 0, gridInterval, 2 * gridRadius + 1);
+        }
+    }
+
+    private void createCatchupTask(int priority, ChunkPos center, int directionX, int directionZ, int count) {
+        nether.submitTask(new Task(priority, center, directionX, directionZ, count) {
+            @Override
+            public void hitReceived(ChunkPos pos) {
+                ingestGeneric(pos);
+            }
+
+            @Override
+            public void completed() {
+            }
+        });
+    }
+
+}

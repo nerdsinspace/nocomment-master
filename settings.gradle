@@ -1,0 +1,4 @@
+rootProject.name = 'nocomment-server'
+include 'src:main:java'
+findProject(':src:main:java')?.name = 'main'
+
