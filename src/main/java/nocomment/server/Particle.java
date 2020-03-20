@@ -1,5 +1,8 @@
 package nocomment.server;
 
+/**
+ * A guess of a player's position and velocity
+ */
 public class Particle {
     private static final double BACKPROJECTION = 1;
     double x;
@@ -42,6 +45,6 @@ public class Particle {
     }
 
     private double roundForStr(double d) {
-        return Math.round(d * 10D) / 10D;
+        return Math.round(d * 1000D) / 1000D;
     }
 }

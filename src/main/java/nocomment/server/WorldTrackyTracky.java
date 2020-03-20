@@ -1,7 +1,5 @@
 package nocomment.server;
 
-import java.util.concurrent.TimeUnit;
-
 public class WorldTrackyTracky {
     public final World world;
     public final TrackyTrackyManager parent;
@@ -11,7 +9,7 @@ public class WorldTrackyTracky {
         this.parent = parent;
     }
 
-    public void ingestGeneric(ChunkPos hit) {
+    /*private void ingestGeneric(ChunkPos hit) {
         System.out.println("Tracky tracky " + hit);
         if (Math.abs(hit.x) < 100 && Math.abs(hit.z) < 100) {
             return;
@@ -41,6 +39,6 @@ public class WorldTrackyTracky {
             public void completed() {
             }
         });
-    }
+    }*/
 
 }

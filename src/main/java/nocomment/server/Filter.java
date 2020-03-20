@@ -1,5 +1,8 @@
 package nocomment.server;
 
+import javax.swing.*;
+import java.awt.*;
+import java.util.List;
 import java.util.*;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -10,41 +13,106 @@ public class Filter {
     private static final int M = 1000;
     private final Random random = new Random();
     public final WorldTrackyTracky context;
+
     private List<Particle> particles = new ArrayList<>();
+
     private long lastUpdateMS;
     private ChunkPos mostRecentHit;
     private ScheduledFuture updater;
 
     private List<ChunkPos> hits = new ArrayList<>();
     private List<ChunkPos> misses = new ArrayList<>();
+    private final ChunkPos start;
+
+    private JFrame frame;
 
     public Filter(ChunkPos hit, WorldTrackyTracky context) {
         this.context = context;
         deltaT();
         generatePoints(hit, M);
         hits.add(hit);
+        runCheck(hit);
+        mostRecentHit = hit;
+        this.start = hit;
+
+        frame = new JFrame("no comment");
+        frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+        frame.setSize(10000, 10000);
+        frame.setContentPane(new JComponent() {
+            @Override
+            public void paintComponent(Graphics g) {
+                g.setColor(Color.BLACK);
+                for (Particle p : particles) {
+                    int[] pos = worldToScreen(p.x, p.z);
+                    g.drawRect(pos[0], pos[1], 1, 1);
+                }
+
+                for (ChunkPos p : hits) {
+                    int[] pos = worldToScreen(p.x + 0.5, p.z + 0.5);
+                    g.setColor(Color.GREEN);
+                    g.fillRect(pos[0] - 2, pos[1] - 2, 5, 5);
+                    g.drawString(p.blockPos(), pos[0], pos[1]);
+
+                }
+                for (ChunkPos p : misses) {
+                    int[] pos = worldToScreen(p.x + 0.5, p.z + 0.5);
+                    g.setColor(Color.RED);
+                    g.fillRect(pos[0] - 2, pos[1] - 2, 5, 5);
+                    g.drawString(p.blockPos(), pos[0], pos[1]);
+                }
+            }
+        });
+        frame.setVisible(true);
+    }
+
+    private int[] worldToScreen(double x, double z) {
+        int xx = (int) Math.round(2 * (x - start.x)) + frame.getWidth() / 2;
+        int zz = (int) Math.round(2 * (z - start.z)) + frame.getHeight() / 2;
+        return new int[]{xx, zz};
     }
 
     public void start() {
-        updater = TrackyTrackyManager.scheduler.scheduleAtFixedRate(this::updateStep, 0, 2, TimeUnit.SECONDS);
+        updater = TrackyTrackyManager.scheduler.scheduleAtFixedRate(this::updateStep, 0, 1, TimeUnit.SECONDS);
     }
 
     private synchronized void updateStep() {
+        NoComment.executor.execute(() -> {
+            try {
+                Thread.sleep(900);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            frame.repaint();
+        });
+        System.out.println("Update step");
         if (hits.isEmpty() && misses.isEmpty()) {
             System.out.println("Maybe offline");
             // maybe we're offline
             return;
         }
-        hits.forEach(hit -> generatePoints(hit, 5));
+        int numGuesses = 3;
+        boolean failed = hits.isEmpty();
+        if (failed) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    ChunkPos p = mostRecentHit.add(dx * 7, dz * 7);
+                    generatePoints(p, 10);
+                }
+            }
+            for (int dx = -2; dx <= 2; dx++) {
+                for (int dz = -2; dz <= 2; dz++) {
+                    ChunkPos p = mostRecentHit.add(dx * 7, dz * 7);
+                    generatePoints(p, 5);
+                }
+            }
+            System.out.println("Warning: got no hits");
+            numGuesses += 7;
+        }
+        //hits.forEach(hit -> generatePoints(hit, 5));
         hits.forEach(hit -> updateFilter(particle -> particle.wouldLoad(hit)));
         hits.clear();
         misses.forEach(miss -> updateFilter(particle -> particle.wouldUnload(miss)));
         misses.clear();
-        int numGuesses = 5;
-        if (hits.isEmpty()) {
-            System.out.println("Warning: got no hits");
-            numGuesses += 5;
-        }
         List<ChunkPos> guesses = guessLocation(numGuesses);
         System.out.println("Guesses: " + guesses);
         System.out.println("Best guess: " + guesses.get(0));
@@ -54,16 +122,20 @@ public class Filter {
 
 
     private List<ChunkPos> guessLocation(int count) {
-        Map<ChunkPos, Long> candidates = particles.stream().map(Particle::toChunkPos).collect(Collectors.groupingBy(x -> x, Collectors.counting()));
+        Map<ChunkPos, Long> candidates = particles.stream()
+                .map(Particle::toChunkPos)
+                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
         List<ChunkPos> guesses = new ArrayList<>();
         for (int i = 0; i < count; i++) {
-            Optional<ChunkPos> posOpt = candidates.entrySet().stream().max(Comparator.comparingLong(Map.Entry::getValue)).map(Map.Entry::getKey);
+            Optional<ChunkPos> posOpt = candidates.entrySet().stream()
+                    .max(Comparator.comparingLong(Map.Entry::getValue))
+                    .map(Map.Entry::getKey);
             if (!posOpt.isPresent()) {
                 return guesses;
             }
             ChunkPos pos = posOpt.get();
-            for (int dx = -3; dx <= 3; dx++) {
-                for (int dz = -3; dz <= 3; dz++) {
+            for (int dx = -6; dx <= 6; dx++) {
+                for (int dz = -6; dz <= 6; dz++) {
                     candidates.remove(pos.add(dx, dz));
                 }
             }
@@ -108,10 +180,10 @@ public class Filter {
 
     private Particle applyRnd(double dt, Particle older) {
         Particle newer = new Particle();
-        newer.x = older.x + dt * random.nextGaussian() * older.dx / 10;
-        newer.z = older.z + dt * random.nextGaussian() * older.dz / 10;
-        newer.dz = older.dz + dt * random.nextGaussian() / 5;
-        newer.dx = older.dx + dt * random.nextGaussian() / 5;
+        newer.x = older.x + dt * random.nextGaussian() * older.dx / 15; // also tuned by trial and error
+        newer.z = older.z + dt * random.nextGaussian() * older.dz / 15;
+        newer.dz = older.dz + dt * random.nextGaussian() / 4; // tuned by trial and error
+        newer.dx = older.dx + dt * random.nextGaussian() / 4;
         return newer;
     }
 
@@ -129,8 +201,8 @@ public class Filter {
             Particle p = new Particle();
             p.x = cx + random.nextGaussian() * 4;
             p.z = cz + random.nextGaussian() * 4;
-            p.dx = velocity[0] * random.nextGaussian() * 36 / 16 / 1.5;
-            p.dx = velocity[1] * random.nextGaussian() * 36 / 16 / 1.5;
+            p.dx = velocity[0] * random.nextGaussian() * 36 / 16;
+            p.dz = velocity[1] * random.nextGaussian() * 36 / 16;
             particles.add(p);
         }
     }
@@ -140,7 +212,7 @@ public class Filter {
         particles.forEach(particle -> {
             avg.x += particle.x / particles.size();
             avg.z += particle.z / particles.size();
-            avg.dz += particle.dx / particles.size();
+            avg.dx += particle.dx / particles.size();
             avg.dz += particle.dz / particles.size();
         });
         return avg;
@@ -150,6 +222,7 @@ public class Filter {
         context.world.submitTask(new SingleChunkTask(0, pos, () -> {
             synchronized (Filter.this) {
                 hits.add(pos);
+                mostRecentHit = pos;
             }
         }, () -> {
             synchronized (Filter.this) {

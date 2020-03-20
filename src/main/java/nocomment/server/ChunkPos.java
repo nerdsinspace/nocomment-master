@@ -77,4 +77,8 @@ public class ChunkPos {
     public String toString() {
         return "[" + this.x + ", " + this.z + "]";
     }
+
+    public String blockPos() {
+        return "{" + (16 * this.x) + ", " + (16 * this.z) + "}";
+    }
 }

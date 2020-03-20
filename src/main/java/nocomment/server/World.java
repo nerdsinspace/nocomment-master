@@ -39,6 +39,7 @@ public class World {
 
             if (burden > MAX_BURDEN) {
                 // can't send anything rn
+                System.out.println("Too many tasks on this connection");
                 break;
             }
 

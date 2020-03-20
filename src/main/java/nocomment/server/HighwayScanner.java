@@ -7,7 +7,7 @@ public class HighwayScanner {
     private static final int AXIS_INTERVAL = 9;
     private static final int DIAG_INTERVAL = 7; // overlap because otherwise there's a diagonal catty corner
 
-    private static final int OW_WB = 100_000; // TEMP: only scan 1/300th of the way to the WB lol
+    private static final int OW_WB = 1_000_000; // TEMP: only scan 1/300th of the way to the WB lol
     private static final int AXIS_COUNT = 1 + (int) Math.ceil(OW_WB / 16f / 8f / AXIS_INTERVAL);
     private static final int DIAG_COUNT = 1 + (int) Math.ceil(OW_WB / 16f / 8f / AXIS_INTERVAL);
     private static final ChunkPos SPAWN = new ChunkPos(0, 0);

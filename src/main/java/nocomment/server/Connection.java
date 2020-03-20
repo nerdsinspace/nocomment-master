@@ -38,12 +38,20 @@ public abstract class Connection {
         NoComment.executor.execute(() -> dispatchTask(task, id));
     }
 
-    protected synchronized void hitReceived(int taskID, ChunkPos pos) {
-        tasks.get(taskID).hitReceived(pos);
+    protected void hitReceived(int taskID, ChunkPos pos) {
+        Task task;
+        synchronized (this) {
+            task = tasks.get(taskID);
+        }
+        task.hitReceived(pos);
     }
 
-    protected synchronized void taskCompleted(int taskID) {
-        tasks.remove(taskID).completed();
+    protected void taskCompleted(int taskID) {
+        Task task;
+        synchronized (this) {
+            task = tasks.remove(taskID);
+        }
+        task.completed();
         world.update();
     }
 

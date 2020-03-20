@@ -1,12 +1,13 @@
 package nocomment.server;
 
 import java.util.HashSet;
+import java.util.Set;
 import java.util.function.Consumer;
 
 public class TaskHelper extends Task {
     private final Consumer<ChunkPos> onHit;
     private final Consumer<Integer> onCompletion;
-    private final HashSet<ChunkPos> hitsReceived;
+    private final Set<ChunkPos> hitsReceived;
 
     public TaskHelper(int priority, ChunkPos start, int directionX, int directionZ, int count, Consumer<ChunkPos> onHit, Consumer<Integer> onCompletion) {
         super(priority, start, directionX, directionZ, count);
