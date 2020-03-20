@@ -7,6 +7,7 @@ import java.net.Socket;
 
 public class SocketConnection extends Connection {
     private final Socket sock;
+    private final Object sockWriteLock = new Object();
 
     public SocketConnection(World world, Socket sock) {
         super(world);
@@ -14,18 +15,20 @@ public class SocketConnection extends Connection {
     }
 
     @Override
-    protected void dispatchTask(Task task, long taskID) {
-        try {
-            DataOutputStream out = new DataOutputStream(sock.getOutputStream());
-            out.writeLong(taskID);
-            out.writeInt(task.priority);
-            out.writeInt(task.start.x);
-            out.writeInt(task.start.z);
-            out.writeInt(task.directionX);
-            out.writeInt(task.directionZ);
-            out.writeInt(task.count);
-        } catch (IOException ex) {
-            closeUnderlying();
+    protected void dispatchTask(Task task, int taskID) {
+        synchronized (sockWriteLock) {
+            try {
+                DataOutputStream out = new DataOutputStream(sock.getOutputStream());
+                out.writeInt(taskID);
+                out.writeInt(task.priority);
+                out.writeInt(task.start.x);
+                out.writeInt(task.start.z);
+                out.writeInt(task.directionX);
+                out.writeInt(task.directionZ);
+                out.writeInt(task.count);
+            } catch (IOException ex) {
+                closeUnderlying();
+            }
         }
     }
 
@@ -36,14 +39,14 @@ public class SocketConnection extends Connection {
 
         switch (cmd) {
             case 0: { // hit
-                long taskID = in.readLong();
+                int taskID = in.readInt();
                 int x = in.readInt();
                 int z = in.readInt();
                 hitReceived(taskID, new ChunkPos(x, z));
                 break;
             }
             case 1: { // done
-                long taskID = in.readLong();
+                int taskID = in.readInt();
                 taskCompleted(taskID);
                 break;
             }

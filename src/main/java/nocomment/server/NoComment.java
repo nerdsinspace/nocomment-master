@@ -32,7 +32,7 @@ public class NoComment {
 
     public static void main(String[] args) throws IOException {
         NoComment nc = new NoComment();
-        // nc.getServer("constantiam.net").getWorld(0).submitTask(new TestingTask(0, new ChunkPos(0, 0), -9, 0, 26043));
+        //nc.getServer("constantiam.net").getWorld(0).submitTask(new TestingTask(0, new ChunkPos(-32, -10), 0 , 1, 20));
 
         new TrackyTrackyManager(nc.getServer("2b2t.org"));
         ServerSocket ss = new ServerSocket(42069);
