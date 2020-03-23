@@ -10,7 +10,7 @@ public abstract class Task implements Comparable<Task> {
     public final int count;
 
     private static final AtomicInteger globalSeq = new AtomicInteger();
-    public final int seq = globalSeq.incrementAndGet();
+    private final int seq = globalSeq.incrementAndGet();
 
     public Task(int priority, ChunkPos start, int directionX, int directionZ, int count) {
         if (count == 0) {

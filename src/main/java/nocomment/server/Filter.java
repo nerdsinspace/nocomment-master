@@ -76,14 +76,16 @@ public class Filter {
     }
 
     private synchronized void updateStep() {
-        NoComment.executor.execute(() -> {
-            try {
-                Thread.sleep(900);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-            frame.repaint();
-        });
+        if (frame != null) {
+            NoComment.executor.execute(() -> {
+                try {
+                    Thread.sleep(900);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                frame.repaint();
+            });
+        }
         System.out.println("Update step");
         if (hits.isEmpty() && misses.isEmpty()) {
             System.out.println("Maybe offline");
@@ -96,13 +98,13 @@ public class Filter {
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
                     ChunkPos p = mostRecentHit.add(dx * 7, dz * 7);
-                    generatePoints(p, 10);
+                    generatePoints(p, M / 100);
                 }
             }
             for (int dx = -2; dx <= 2; dx++) {
                 for (int dz = -2; dz <= 2; dz++) {
                     ChunkPos p = mostRecentHit.add(dx * 7, dz * 7);
-                    generatePoints(p, 5);
+                    generatePoints(p, M / 200);
                 }
             }
             System.out.println("Warning: got no hits");

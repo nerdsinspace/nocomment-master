@@ -1,5 +1,6 @@
 package nocomment.server;
 
+import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -7,18 +8,20 @@ import java.net.Socket;
 
 public class SocketConnection extends Connection {
     private final Socket sock;
+    private final DataOutputStream out;
     private final Object sockWriteLock = new Object();
 
-    public SocketConnection(World world, Socket sock) {
+    public SocketConnection(World world, Socket sock) throws IOException {
         super(world);
         this.sock = sock;
+        this.out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()));
     }
 
     @Override
     protected void dispatchTask(Task task, int taskID) {
         synchronized (sockWriteLock) {
             try {
-                DataOutputStream out = new DataOutputStream(sock.getOutputStream());
+                out.writeByte(0);
                 out.writeInt(taskID);
                 out.writeInt(task.priority);
                 out.writeInt(task.start.x);
@@ -26,6 +29,7 @@ public class SocketConnection extends Connection {
                 out.writeInt(task.directionX);
                 out.writeInt(task.directionZ);
                 out.writeInt(task.count);
+                out.flush();
             } catch (IOException ex) {
                 closeUnderlying();
             }
