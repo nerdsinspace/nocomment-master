@@ -10,9 +10,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class Filter {
+    private static final boolean GUI = true;
     private static final int M = 1000;
     private final Random random = new Random();
-    public final WorldTrackyTracky context;
+    private final WorldTrackyTracky context;
 
     private List<Particle> particles = new ArrayList<>();
 
@@ -20,21 +21,25 @@ public class Filter {
     private ChunkPos mostRecentHit;
     private ScheduledFuture updater;
 
+    private int iterationsWithoutHits;
+
     private List<ChunkPos> hits = new ArrayList<>();
     private List<ChunkPos> misses = new ArrayList<>();
     private final ChunkPos start;
 
-    private JFrame frame;
+    private final JFrame frame;
 
     public Filter(ChunkPos hit, WorldTrackyTracky context) {
         this.context = context;
         deltaT();
-        generatePoints(hit, M);
+        generatePoints(hit, M, false);
         hits.add(hit);
         runCheck(hit);
         mostRecentHit = hit;
         this.start = hit;
-
+        if (!GUI) {
+            return;
+        }
         frame = new JFrame("no comment");
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         frame.setSize(10000, 10000);
@@ -98,17 +103,27 @@ public class Filter {
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
                     ChunkPos p = mostRecentHit.add(dx * 7, dz * 7);
-                    generatePoints(p, M / 100);
+                    generatePoints(p, M / 100, true);
                 }
             }
             for (int dx = -2; dx <= 2; dx++) {
                 for (int dz = -2; dz <= 2; dz++) {
                     ChunkPos p = mostRecentHit.add(dx * 7, dz * 7);
-                    generatePoints(p, M / 200);
+                    generatePoints(p, M / 200, true);
                 }
             }
             System.out.println("Warning: got no hits");
             numGuesses += 7;
+            iterationsWithoutHits++;
+            if (iterationsWithoutHits >= 5) {
+                System.out.println("Filter has FAILED");
+                updater.cancel(false);
+                NoComment.executor.execute(() -> context.filterFailure(this));
+                if (frame != null) {
+                    frame.dispose();
+                }
+                return;
+            }
         }
         //hits.forEach(hit -> generatePoints(hit, 5));
         hits.forEach(hit -> updateFilter(particle -> particle.wouldLoad(hit)));
@@ -189,7 +204,7 @@ public class Filter {
         return newer;
     }
 
-    private void generatePoints(ChunkPos center, int count) {
+    private void generatePoints(ChunkPos center, int count, boolean close) {
         double cx = center.x + 0.5d;
         double cz = center.z + 0.5d;
 
@@ -201,8 +216,8 @@ public class Filter {
 
         for (int i = 0; i < count; i++) {
             Particle p = new Particle();
-            p.x = cx + random.nextGaussian() * 4;
-            p.z = cz + random.nextGaussian() * 4;
+            p.x = cx + random.nextGaussian() * (close ? 1 : 4);
+            p.z = cz + random.nextGaussian() * (close ? 1 : 4);
             p.dx = velocity[0] * random.nextGaussian() * 36 / 16;
             p.dz = velocity[1] * random.nextGaussian() * 36 / 16;
             particles.add(p);
@@ -220,17 +235,32 @@ public class Filter {
         return avg;
     }
 
+    public synchronized void insertHit(ChunkPos pos) {
+        hits.add(pos);
+        mostRecentHit = pos;
+    }
+
+    public ChunkPos getMostRecentHit() {
+        return mostRecentHit;
+    }
+
+    public synchronized boolean includes(ChunkPos pos) {
+        for (Particle p : particles) {
+            if (Particle.wouldLoad(p.x, p.z, pos)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void runCheck(ChunkPos pos) {
-        context.world.submitTask(new SingleChunkTask(0, pos, () -> {
-            synchronized (Filter.this) {
-                hits.add(pos);
-                mostRecentHit = pos;
-            }
-        }, () -> {
-            synchronized (Filter.this) {
-                misses.add(pos);
-            }
-        }));
+        NoComment.executor.execute(() ->
+                context.world.submitTask(new SingleChunkTask(0, pos, () -> insertHit(pos), () -> {
+                    synchronized (Filter.this) {
+                        misses.add(pos);
+                    }
+                }))
+        );
     }
 
     private static void normalize(double[] weights) {

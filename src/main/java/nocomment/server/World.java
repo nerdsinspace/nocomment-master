@@ -8,11 +8,13 @@ public class World {
     private final Server server;
     private final List<Connection> connections;
     private final PriorityQueue<Task> pendingTasks;
+    public final int dimension;
 
-    public World(Server server) {
+    public World(Server server, int dimension) {
         this.server = server;
         this.connections = new ArrayList<>();
-        this.pendingTasks = new PriorityQueue<>(Comparator.comparingInt(task -> task.priority));
+        this.pendingTasks = new PriorityQueue<>();
+        this.dimension = dimension;
     }
 
     public synchronized void incomingConnection(Connection connection) {

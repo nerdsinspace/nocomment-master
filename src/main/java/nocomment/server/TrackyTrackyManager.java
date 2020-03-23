@@ -12,19 +12,22 @@ public class TrackyTrackyManager {
 
     public TrackyTrackyManager(Server server) {
         this.server = server;
-        this.overworld = new WorldTrackyTracky(server.getWorld(0), this);
-        this.nether = new WorldTrackyTracky(server.getWorld(-1), this);
+        this.overworld = new WorldTrackyTracky(server.getWorld(0), this, this::lostTrackingInOverworld);
+        this.nether = new WorldTrackyTracky(server.getWorld(-1), this, this::lostTrackingInNether);
         highways();
+        //new Filter(new ChunkPos(-32, -4), overworld).start();
     }
 
     private void highways() {
-        //new HighwayScanner(nether.world, 100, nether::ingestGeneric).submitTasks();
-        new HighwayScanner(nether.world, 100, pos -> {
-            if (Math.abs(pos.x) < 100 && Math.abs(pos.z) < 100) {
-                return;
-            }
-            new Filter(pos, nether).start();
-            //new Filter(new ChunkPos(pos.x * 8, pos.z * 8), overworld).start();
-        }).submitTasks();
+        new HighwayScanner(nether.world, 100, nether::ingestGenericKnownHit).submitTasks();
+        new HighwayScanner(overworld.world, 100, overworld::ingestGenericKnownHit).submitTasks();
+    }
+
+    private void lostTrackingInOverworld(ChunkPos pos) {
+        nether.ingestApprox(new ChunkPos(pos.x / 8, pos.z / 8));
+    }
+
+    private void lostTrackingInNether(ChunkPos pos) {
+        overworld.ingestApprox(new ChunkPos(pos.x * 8, pos.z * 8));
     }
 }

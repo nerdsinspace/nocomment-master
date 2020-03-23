@@ -35,6 +35,7 @@ public class NoComment {
         //nc.getServer("constantiam.net").getWorld(0).submitTask(new TestingTask(0, new ChunkPos(-32, -10), 0 , 1, 20));
 
         new TrackyTrackyManager(nc.getServer("2b2t.org"));
+        //new TrackyTrackyManager(nc.getServer("constantiam.net"));
         ServerSocket ss = new ServerSocket(42069);
         System.out.println("SS");
         while (true) {

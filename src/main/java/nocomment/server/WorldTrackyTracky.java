@@ -1,24 +1,51 @@
 package nocomment.server;
 
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.Consumer;
+
 public class WorldTrackyTracky {
     public final World world;
     public final TrackyTrackyManager parent;
+    private final List<Filter> activeFilters;
+    private final Consumer<ChunkPos> onLost;
 
-    public WorldTrackyTracky(World world, TrackyTrackyManager parent) {
+    public WorldTrackyTracky(World world, TrackyTrackyManager parent, Consumer<ChunkPos> onLost) {
         this.world = world;
         this.parent = parent;
+        this.activeFilters = new ArrayList<>();
+        this.onLost = onLost;
     }
 
-    /*private void ingestGeneric(ChunkPos hit) {
-        System.out.println("Tracky tracky " + hit);
-        if (Math.abs(hit.x) < 100 && Math.abs(hit.z) < 100) {
+    public synchronized void ingestGenericKnownHit(ChunkPos pos) { // for example, from a highway scanner
+        if (Math.abs(pos.x) < 100 && Math.abs(pos.z) < 100) {
             return;
         }
-        // TODO deduplicate with hits in the last 5 secs so we dont 2x whenever they have 9+epsilon chunks loaded in a row
-        TrackyTrackyManager.scheduler.schedule(() -> {
-            System.out.println("Gridding");
-            grid(9, 2, hit);
-        }, 5, TimeUnit.SECONDS);
+        for (Filter filter : activeFilters) {
+            if (filter.includes(pos)) {
+                filter.insertHit(pos);
+                return;
+            }
+        }
+        Filter filter = new Filter(pos, this);
+        activeFilters.add(filter);
+        filter.start();
+    }
+
+    public void ingestApprox(ChunkPos pos) { // for example, if tracking was lost in another dimension
+        // 11 by 11 grid pattern, spacing of 7 between each one
+        // so, 121 checks
+        // plus or minus 480 blocks (6*5*16) in any direction
+        grid(7, 5, pos);
+    }
+
+    public synchronized void filterFailure(Filter filter) {
+        activeFilters.remove(filter);
+        ChunkPos last = filter.getMostRecentHit();
+        System.out.println("Filter failed. Last hit at " + last + " dimension " + world.dimension);
+        onLost.accept(last);
+        ingestApprox(last); // one last hail mary
     }
 
     private void grid(int gridInterval, int gridRadius, ChunkPos center) {
@@ -32,13 +59,12 @@ public class WorldTrackyTracky {
         world.submitTask(new Task(priority, center, directionX, directionZ, count) {
             @Override
             public void hitReceived(ChunkPos pos) {
-                ingestGeneric(pos);
+                ingestGenericKnownHit(pos);
             }
 
             @Override
             public void completed() {
             }
         });
-    }*/
-
+    }
 }
