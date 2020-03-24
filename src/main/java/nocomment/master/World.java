@@ -23,12 +23,23 @@ public class World {
     public synchronized void incomingConnection(Connection connection) {
         connections.add(connection);
         NoComment.executor.execute(connection::readLoop);
-        update();
+        worldUpdate();
+        serverUpdate(); // only for connection status change
+    }
+
+    public synchronized void connectionClosed(Connection conn) {
+        // due to the read loop structure, by the time we get here we know for a fact that this connection will read no further data, since its read loop is done
+        // so, shuffling the tasks elsewhere is safe, and doesn't risk "completed" being called twice or anything like that
+        connections.remove(conn);
+        conn.forEachTask(this::submitTask);
+        worldUpdate();
+        serverUpdate(); // only for connection status change
     }
 
     public synchronized void submitTask(Task task) {
         pendingTasks.add(task);
-        update();
+        worldUpdate();
+        // don't server update per-task!
     }
 
     private synchronized void sendTasksOnConnections() {
@@ -53,15 +64,15 @@ public class World {
         }
     }
 
-    public void update() { // something has changed (a connection has completed a task). time to get a new one
+    public synchronized Collection<Connection> getOpenConnections() {
+        return new ArrayList<>(connections);
+    }
+
+    public void worldUpdate() { // something has changed (a connection has completed a task). time to get a new one
         NoComment.executor.execute(this::sendTasksOnConnections);
     }
 
-    public synchronized void connectionClosed(Connection conn) {
-        // due to the read loop structure, by the time we get here we know for a fact that this connection will read no further data, since its read loop is done
-        // so, shuffling the tasks elsewhere is safe, and doesn't risk "completed" being called twice or anything like that
-        connections.remove(conn);
-        conn.forEachTask(this::submitTask);
-        update();
+    public void serverUpdate() {
+        NoComment.executor.execute(server::update);
     }
 }

@@ -3,6 +3,7 @@ package nocomment.master.network;
 import nocomment.master.World;
 import nocomment.master.task.Task;
 import nocomment.master.util.ChunkPos;
+import nocomment.master.util.OnlinePlayer;
 
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -56,6 +57,12 @@ public class SocketConnection extends Connection {
             case 1: { // done
                 int taskID = in.readInt();
                 taskCompleted(taskID);
+                break;
+            }
+            case 2: { // player add remove
+                boolean join = in.readBoolean();
+                OnlinePlayer player = new OnlinePlayer(in);
+                playerJoinLeave(join, player);
                 break;
             }
             case 69: { // ping

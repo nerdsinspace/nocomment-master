@@ -4,10 +4,14 @@ import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.db.Hit;
 import nocomment.master.task.Task;
+import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.ChunkPos;
+import nocomment.master.util.OnlinePlayer;
 
 import java.io.IOException;
-import java.util.HashMap;
+import java.util.*;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
@@ -16,22 +20,36 @@ import java.util.function.Consumer;
  * When a client changes dimension or server, it will drop the connection and make a new one.
  */
 public abstract class Connection {
-    protected final World world;
+    private static final long MIN_READ_INTERVAL_MS = 5_000;
+    private static final long REMOVAL_QUELL_DURATION_MS = 30_000;
 
     public Connection(World world) {
         this.world = world;
     }
 
-    private final HashMap<Integer, Task> tasks = new HashMap<>();
-    private int taskIDSeq;
+    private final World world;
+    private final Map<Integer, Task> tasks = new HashMap<>();
+    private int taskIDSeq = 0;
+    private final Set<OnlinePlayer> onlinePlayerSet = new HashSet<>();
+    private final Map<OnlinePlayer, Long> removalTimestamps = new HashMap<>();
+    private long mostRecentRead = System.currentTimeMillis();
 
     public void readLoop() {
+        ScheduledFuture<?> future = TrackyTrackyManager.scheduler.scheduleAtFixedRate(() -> {
+            long time = System.currentTimeMillis() - mostRecentRead;
+            if (time > MIN_READ_INTERVAL_MS) {
+                closeUnderlying();
+            }
+        }, 0, 1, TimeUnit.SECONDS);
         while (true) {
             try {
                 read();
-            } catch (IOException ex) {
+                mostRecentRead = System.currentTimeMillis();
+            } catch (Throwable th) {
+                th.printStackTrace();
                 closeUnderlying();
                 world.connectionClosed(this); // redistribute tasks to the other connections
+                future.cancel(false);
                 break;
             }
         }
@@ -59,8 +77,32 @@ public abstract class Connection {
         synchronized (this) {
             task = tasks.remove(taskID);
         }
+        // TODO is it overkill to move task.completed here, and task.hitReceived in the prev function, into a NoComment.executor.execute()?
         task.completed();
-        world.update();
+        world.worldUpdate();
+    }
+
+    protected synchronized void playerJoinLeave(boolean join, OnlinePlayer player) {
+        if (join) {
+            onlinePlayerSet.add(player);
+        } else {
+            removalTimestamps.put(player, System.currentTimeMillis());
+            onlinePlayerSet.remove(player);
+        }
+        world.serverUpdate(); // prevent two-way deadlock with the subsequent two functions
+    }
+
+    public synchronized Collection<OnlinePlayer> onlinePlayers() {
+        return new ArrayList<>(onlinePlayerSet);
+    }
+
+    public synchronized Collection<OnlinePlayer> quelledFromRemoval() {
+        for (OnlinePlayer player : new ArrayList<>(removalTimestamps.keySet())) { // god i hate concurrentmodificationexception
+            if (removalTimestamps.get(player) < System.currentTimeMillis() - REMOVAL_QUELL_DURATION_MS) {
+                removalTimestamps.remove(player);
+            }
+        }
+        return new ArrayList<>(removalTimestamps.keySet());
     }
 
     /**
