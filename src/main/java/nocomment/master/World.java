@@ -1,4 +1,7 @@
-package nocomment.server;
+package nocomment.master;
+
+import nocomment.master.network.Connection;
+import nocomment.master.task.Task;
 
 import java.util.*;
 import java.util.stream.Collectors;

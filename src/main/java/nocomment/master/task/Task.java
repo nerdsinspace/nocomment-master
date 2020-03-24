@@ -1,4 +1,6 @@
-package nocomment.server;
+package nocomment.master.task;
+
+import nocomment.master.util.ChunkPos;
 
 import java.util.concurrent.atomic.AtomicInteger;
 

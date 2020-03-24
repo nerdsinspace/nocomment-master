@@ -1,4 +1,6 @@
-package nocomment.server;
+package nocomment.master.tracking;
+
+import nocomment.master.util.ChunkPos;
 
 /**
  * A guess of a player's position and velocity
@@ -27,9 +29,9 @@ public class Particle {
 
     public double wouldUnload(ChunkPos pos) {
         if (wouldLoad(x, z, pos)) {
-            return 0.05;
+            return 0.1;
         }
-        return 0.95;
+        return 0.9;
     }
 
     public static boolean wouldLoad(double x, double z, ChunkPos pos) {

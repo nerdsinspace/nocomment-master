@@ -1,4 +1,8 @@
-package nocomment.server;
+package nocomment.master.tracking;
+
+import nocomment.master.NoComment;
+import nocomment.master.task.SingleChunkTask;
+import nocomment.master.util.ChunkPos;
 
 import javax.swing.*;
 import java.awt.*;
@@ -19,7 +23,7 @@ public class Filter {
 
     private long lastUpdateMS;
     private ChunkPos mostRecentHit;
-    private ScheduledFuture updater;
+    private ScheduledFuture<?> updater;
 
     private int iterationsWithoutHits;
 
@@ -42,7 +46,7 @@ public class Filter {
         }
         frame = new JFrame("no comment");
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-        frame.setSize(10000, 10000);
+        frame.setSize(690, 690);
         frame.setContentPane(new JComponent() {
             @Override
             public void paintComponent(Graphics g) {
@@ -106,10 +110,12 @@ public class Filter {
                     generatePoints(p, M / 100, true);
                 }
             }
-            for (int dx = -2; dx <= 2; dx++) {
-                for (int dz = -2; dz <= 2; dz++) {
-                    ChunkPos p = mostRecentHit.add(dx * 7, dz * 7);
-                    generatePoints(p, M / 200, true);
+            if (iterationsWithoutHits > 1) {
+                for (int dx = -2; dx <= 2; dx++) {
+                    for (int dz = -2; dz <= 2; dz++) {
+                        ChunkPos p = mostRecentHit.add(dx * 7, dz * 7);
+                        generatePoints(p, M / 200, true);
+                    }
                 }
             }
             System.out.println("Warning: got no hits");
@@ -124,6 +130,8 @@ public class Filter {
                 }
                 return;
             }
+        } else {
+            iterationsWithoutHits = 0;
         }
         //hits.forEach(hit -> generatePoints(hit, 5));
         hits.forEach(hit -> updateFilter(particle -> particle.wouldLoad(hit)));
@@ -148,17 +156,25 @@ public class Filter {
                     .max(Comparator.comparingLong(Map.Entry::getValue))
                     .map(Map.Entry::getKey);
             if (!posOpt.isPresent()) {
-                return guesses;
+                break;
             }
             ChunkPos pos = posOpt.get();
-            for (int dx = -6; dx <= 6; dx++) {
-                for (int dz = -6; dz <= 6; dz++) {
+            long val = candidates.get(pos);
+            if (val < M / 200) {
+                break;
+            }
+            for (int dx = -disallowRadius(); dx <= disallowRadius(); dx++) {
+                for (int dz = -disallowRadius(); dz <= disallowRadius(); dz++) {
                     candidates.remove(pos.add(dx, dz));
                 }
             }
             guesses.add(pos);
         }
         return guesses;
+    }
+
+    private int disallowRadius() {
+        return iterationsWithoutHits == 0 ? 5 : 6;
     }
 
     private double deltaT() {

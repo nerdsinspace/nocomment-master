@@ -1,4 +1,8 @@
-package nocomment.server;
+package nocomment.master.tracking;
+
+import nocomment.master.Server;
+import nocomment.master.util.ChunkPos;
+import nocomment.master.util.HighwayScanner;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -15,7 +19,7 @@ public class TrackyTrackyManager {
         this.overworld = new WorldTrackyTracky(server.getWorld(0), this, this::lostTrackingInOverworld);
         this.nether = new WorldTrackyTracky(server.getWorld(-1), this, this::lostTrackingInNether);
         highways();
-        //new Filter(new ChunkPos(-32, -4), overworld).start();
+        //this.overworld.ingestGenericKnownHit(new ChunkPos(5555, -5555));
     }
 
     private void highways() {

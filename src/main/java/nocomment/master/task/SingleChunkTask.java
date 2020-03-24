@@ -1,4 +1,6 @@
-package nocomment.server;
+package nocomment.master.task;
+
+import nocomment.master.util.ChunkPos;
 
 public class SingleChunkTask extends TaskHelper {
     public SingleChunkTask(int priority, ChunkPos pos, Runnable onHit, Runnable onMiss) {

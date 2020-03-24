@@ -1,4 +1,4 @@
-package nocomment.server;
+package nocomment.master.util;
 
 /**
  * You'll never guess where this was pasted from

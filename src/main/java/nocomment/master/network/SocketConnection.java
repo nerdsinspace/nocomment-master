@@ -1,4 +1,8 @@
-package nocomment.server;
+package nocomment.master.network;
+
+import nocomment.master.World;
+import nocomment.master.task.Task;
+import nocomment.master.util.ChunkPos;
 
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
