@@ -1,7 +1,8 @@
 package nocomment.master.util;
 
-import nocomment.master.task.Task;
 import nocomment.master.World;
+import nocomment.master.db.Hit;
+import nocomment.master.task.Task;
 import nocomment.master.tracking.TrackyTrackyManager;
 
 import java.util.concurrent.TimeUnit;
@@ -18,10 +19,10 @@ public class HighwayScanner {
 
     private final World world;
     private final int priority;
-    private final Consumer<ChunkPos> onHit;
+    private final Consumer<Hit> onHit;
     private final long rerunDelayMS;
 
-    public HighwayScanner(World world, int priority, Consumer<ChunkPos> onHit) {
+    public HighwayScanner(World world, int priority, Consumer<Hit> onHit) {
         this.world = world;
         this.priority = priority;
         this.onHit = onHit;
@@ -48,9 +49,9 @@ public class HighwayScanner {
             }
 
             @Override
-            public void hitReceived(ChunkPos pos) {
-                System.out.println("Highway scanner hit " + pos);
-                onHit.accept(pos);
+            public void hitReceived(Hit hit) {
+                System.out.println("Highway scanner hit " + hit.pos);
+                onHit.accept(hit);
             }
 
             @Override

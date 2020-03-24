@@ -47,12 +47,13 @@ CREATE INDEX player_sessions_range ON player_sessions USING GiST (server_id, ran
 
 CREATE TABLE hits
 (
-    id         SERIAL PRIMARY KEY,
+    id         BIGSERIAL PRIMARY KEY,
     created_at BIGINT  NOT NULL,
     x          INTEGER NOT NULL,
     z          INTEGER NOT NULL,
-    server_id  INTEGER NOT NULL,
     dimension  INTEGER NOT NULL,
+    server_id  INTEGER NOT NULL,
+
     FOREIGN KEY (server_id) REFERENCES servers (id)
         ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)

@@ -62,7 +62,7 @@ public class SocketConnection extends Connection {
                 break;
             }
             default:
-                throw new RuntimeException("what  " + cmd);
+                throw new RuntimeException("what " + cmd);
         }
     }
 

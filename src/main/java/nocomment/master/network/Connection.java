@@ -2,6 +2,7 @@ package nocomment.master.network;
 
 import nocomment.master.NoComment;
 import nocomment.master.World;
+import nocomment.master.db.Hit;
 import nocomment.master.task.Task;
 import nocomment.master.util.ChunkPos;
 
@@ -44,11 +45,13 @@ public abstract class Connection {
     }
 
     protected void hitReceived(int taskID, ChunkPos pos) {
+        Hit hit = new Hit(world, pos);
+        hit.saveToDBAsync();
         Task task;
         synchronized (this) {
             task = tasks.get(taskID);
         }
-        task.hitReceived(pos);
+        task.hitReceived(hit);
     }
 
     protected void taskCompleted(int taskID) {

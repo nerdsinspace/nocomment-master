@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 
 public class World {
     private static final int MAX_BURDEN = 400; // about a second
-    private final Server server;
+    public final Server server;
     private final List<Connection> connections;
     private final PriorityQueue<Task> pendingTasks;
     public final int dimension;

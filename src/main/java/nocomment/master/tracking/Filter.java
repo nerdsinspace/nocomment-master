@@ -1,6 +1,7 @@
 package nocomment.master.tracking;
 
 import nocomment.master.NoComment;
+import nocomment.master.db.Hit;
 import nocomment.master.task.SingleChunkTask;
 import nocomment.master.util.ChunkPos;
 
@@ -50,10 +51,13 @@ public class Filter {
         frame.setContentPane(new JComponent() {
             @Override
             public void paintComponent(Graphics g) {
+                double d = (System.currentTimeMillis() - lastUpdateMS) / 1000D;
                 g.setColor(Color.BLACK);
                 for (Particle p : particles) {
-                    int[] pos = worldToScreen(p.x, p.z);
+                    int[] pos = worldToScreen(p.x + p.dx * d, p.z + p.dz * d);
+                    int[] pos2 = worldToScreen(p.x + p.dx, p.z + p.dz);
                     g.drawRect(pos[0], pos[1], 1, 1);
+                    //g.drawLine(pos[0], pos[1], pos2[0], pos2[1]);
                 }
 
                 for (ChunkPos p : hits) {
@@ -72,6 +76,7 @@ public class Filter {
             }
         });
         frame.setVisible(true);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(frame::repaint, 0, 10, TimeUnit.MILLISECONDS);
     }
 
     private int[] worldToScreen(double x, double z) {
@@ -134,10 +139,10 @@ public class Filter {
             iterationsWithoutHits = 0;
         }
         //hits.forEach(hit -> generatePoints(hit, 5));
-        hits.forEach(hit -> updateFilter(particle -> particle.wouldLoad(hit)));
-        hits.clear();
         misses.forEach(miss -> updateFilter(particle -> particle.wouldUnload(miss)));
         misses.clear();
+        hits.forEach(hit -> updateFilter(particle -> particle.wouldLoad(hit)));
+        hits.clear();
         List<ChunkPos> guesses = guessLocation(numGuesses);
         System.out.println("Guesses: " + guesses);
         System.out.println("Best guess: " + guesses.get(0));
@@ -251,9 +256,13 @@ public class Filter {
         return avg;
     }
 
-    public synchronized void insertHit(ChunkPos pos) {
-        hits.add(pos);
-        mostRecentHit = pos;
+    public synchronized void insertHit(Hit hit) {
+        hits.add(hit.pos);
+        mostRecentHit = hit.pos;
+        // TODO
+        // get the hit id
+        // hit.getHitID().get()
+        // and save this tracky relationship to the database
     }
 
     public ChunkPos getMostRecentHit() {
@@ -271,7 +280,7 @@ public class Filter {
 
     private void runCheck(ChunkPos pos) {
         NoComment.executor.execute(() ->
-                context.world.submitTask(new SingleChunkTask(0, pos, () -> insertHit(pos), () -> {
+                context.world.submitTask(new SingleChunkTask(0, pos, this::insertHit, () -> {
                     synchronized (Filter.this) {
                         misses.add(pos);
                     }

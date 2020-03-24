@@ -1,5 +1,6 @@
 package nocomment.master.task;
 
+import nocomment.master.db.Hit;
 import nocomment.master.util.ChunkPos;
 
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,7 +26,7 @@ public abstract class Task implements Comparable<Task> {
         this.count = count;
     }
 
-    public abstract void hitReceived(ChunkPos pos);
+    public abstract void hitReceived(Hit hit);
 
     public abstract void completed(); // anything not hit is a miss
 

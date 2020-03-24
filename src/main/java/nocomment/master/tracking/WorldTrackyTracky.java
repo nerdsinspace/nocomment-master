@@ -1,9 +1,10 @@
 package nocomment.master.tracking;
 
 
-import nocomment.master.util.ChunkPos;
-import nocomment.master.task.Task;
 import nocomment.master.World;
+import nocomment.master.db.Hit;
+import nocomment.master.task.Task;
+import nocomment.master.util.ChunkPos;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,17 +23,17 @@ public class WorldTrackyTracky {
         this.onLost = onLost;
     }
 
-    public synchronized void ingestGenericKnownHit(ChunkPos pos) { // for example, from a highway scanner
-        if (Math.abs(pos.x) < 100 && Math.abs(pos.z) < 100) {
+    public synchronized void ingestGenericKnownHit(Hit hit) { // for example, from a highway scanner
+        if (Math.abs(hit.pos.x) < 100 && Math.abs(hit.pos.z) < 100) {
             return;
         }
         for (Filter filter : activeFilters) {
-            if (filter.includes(pos)) {
-                filter.insertHit(pos);
+            if (filter.includes(hit.pos)) {
+                filter.insertHit(hit);
                 return;
             }
         }
-        Filter filter = new Filter(pos, this);
+        Filter filter = new Filter(hit.pos, this);
         activeFilters.add(filter);
         filter.start();
     }
@@ -62,8 +63,8 @@ public class WorldTrackyTracky {
     private void createCatchupTask(int priority, ChunkPos center, int directionX, int directionZ, int count) {
         world.submitTask(new Task(priority, center, directionX, directionZ, count) {
             @Override
-            public void hitReceived(ChunkPos pos) {
-                ingestGenericKnownHit(pos);
+            public void hitReceived(Hit hit) {
+                ingestGenericKnownHit(hit);
             }
 
             @Override

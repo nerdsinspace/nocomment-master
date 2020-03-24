@@ -18,8 +18,12 @@ public class TrackyTrackyManager {
         this.server = server;
         this.overworld = new WorldTrackyTracky(server.getWorld(0), this, this::lostTrackingInOverworld);
         this.nether = new WorldTrackyTracky(server.getWorld(-1), this, this::lostTrackingInNether);
-        highways();
-        //this.overworld.ingestGenericKnownHit(new ChunkPos(5555, -5555));
+        //highways();
+
+        // around my base lmao
+        this.overworld.ingestApprox(new ChunkPos(13825, -21235));
+        this.overworld.ingestApprox(new ChunkPos(13825, -21278));
+        this.overworld.ingestApprox(new ChunkPos(13825, -21105));
     }
 
     private void highways() {
