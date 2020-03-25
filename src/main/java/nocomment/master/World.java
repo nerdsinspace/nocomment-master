@@ -59,7 +59,7 @@ public class World {
                 break;
             }
 
-            System.out.println("Selected connection with burden " + burden + " for task with priority " + task.priority + " and size " + task.count);
+            //System.out.println("Selected connection with burden " + burden + " for task with priority " + task.priority + " and size " + task.count);
             connection.acceptTask(task);
         }
     }

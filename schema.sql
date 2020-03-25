@@ -53,11 +53,12 @@ CREATE TABLE hits
     z          INTEGER NOT NULL,
     dimension  INTEGER NOT NULL,
     server_id  INTEGER NOT NULL,
+    -- NOTE: AN EXTRA COLUMN IS ADDED LATER. can't be added here due to cyclic references
 
-    FOREIGN KEY (server_id) REFERENCES servers (id)
-        ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
-        ON UPDATE RESTRICT ON DELETE RESTRICT
+        ON UPDATE RESTRICT ON DELETE RESTRICT,
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
 );
 
 CREATE INDEX hits_worlds ON hits (server_id, dimension, created_at);
@@ -65,35 +66,35 @@ CREATE INDEX hits_servers ON hits (server_id, created_at);
 
 CREATE TABLE tracks
 (
-    id           BIGSERIAL PRIMARY KEY, -- this hitting 2^32 is but a faint possibility, but might as well make it a long
-    first_hit_id BIGINT  NOT NULL,
-    last_hit_id  BIGINT  NOT NULL,      -- most recent
-    updated_at   BIGINT  NOT NULL,      -- this is a duplicate of the created_at in last_hit_id for indexing purposes
-    dimension    INTEGER NOT NULL,
-    server_id    INTEGER NOT NULL,
+    id            BIGSERIAL PRIMARY KEY, -- this hitting 2^32 is but a faint possibility, but might as well make it a long
+    first_hit_id  BIGINT  NOT NULL,
+    last_hit_id   BIGINT  NOT NULL,      -- most recent
+    updated_at    BIGINT  NOT NULL,      -- this is a duplicate of the created_at in last_hit_id for indexing purposes
+    prev_track_id BIGINT,                -- for example, if this is an overworld track from the nether when we lost them, this would be the track id in the nether that ended
+    dimension     INTEGER NOT NULL,
+    server_id     INTEGER NOT NULL,
 
-    FOREIGN KEY (server_id) REFERENCES servers (id)
-        ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (first_hit_id) REFERENCES hits (id)
         ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (last_hit_id) REFERENCES hits (id)
         ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (prev_track_id) REFERENCES tracks (id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
     FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
-        ON UPDATE RESTRICT ON DELETE RESTRICT
+        ON UPDATE RESTRICT ON DELETE RESTRICT,
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
 );
+
+ALTER TABLE hits
+    ADD COLUMN
+        track_id BIGINT -- nullable
+            REFERENCES tracks (id)
+                ON UPDATE CASCADE ON DELETE SET NULL;
+
+CREATE INDEX hits_tracks ON hits (track_id);
 
 CREATE INDEX track_endings ON tracks (server_id, updated_at); -- to query what tracks ended in a server at a particular time
 ALTER TABLE tracks
     CLUSTER ON track_endings;
 CLUSTER tracks;
-
-CREATE TABLE track_hits
-(
-    track_id BIGINT NOT NULL,
-    hit_id   BIGINT NOT NULL,
-
-    FOREIGN KEY (track_id) REFERENCES tracks (id)
-        ON UPDATE CASCADE ON DELETE CASCADE,
-    FOREIGN KEY (hit_id) REFERENCES hits (id)
-        ON UPDATE CASCADE ON DELETE CASCADE
-);

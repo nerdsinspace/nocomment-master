@@ -1,5 +1,6 @@
 package nocomment.master.util;
 
+import nocomment.master.NoComment;
 import nocomment.master.Server;
 import nocomment.master.db.Database;
 import nocomment.master.network.Connection;
@@ -39,6 +40,12 @@ public class OnlinePlayerTracker {
         List<Integer> toRemove = minus(onlinePlayerSet, current);
         if (!toAdd.isEmpty()) {
             System.out.println("TO ADD " + toAdd);
+
+            Set<Long> trackIDs = Database.trackIDsToResume(toAdd, server); // have to do this on this thread, strictly before addPlayers ruins their last-leave times :)
+            trackIDs.removeIf(server.tracking::hasActiveFilter);
+
+            NoComment.executor.execute(() -> Database.resumeTracks(trackIDs).forEach(server.tracking::attemptResume));
+
             Database.addPlayers(server.serverID, toAdd, now);
         }
         if (!toRemove.isEmpty()) {

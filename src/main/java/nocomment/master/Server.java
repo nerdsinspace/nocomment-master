@@ -1,6 +1,7 @@
 package nocomment.master;
 
 import nocomment.master.db.Database;
+import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.OnlinePlayerTracker;
 
 import java.util.ArrayList;
@@ -15,15 +16,18 @@ public class Server {
         return servers.computeIfAbsent(serverName, Server::new);
     }
 
-    private final Map<Integer, World> worlds = new HashMap<>();
     public final String hostname;
     public final int serverID;
+
+    private final Map<Integer, World> worlds = new HashMap<>();
     private final OnlinePlayerTracker onlinePlayers;
+    public final TrackyTrackyManager tracking;
 
     private Server(String hostname) {
         this.hostname = hostname;
         this.serverID = Database.idForServer(hostname);
         this.onlinePlayers = new OnlinePlayerTracker(this);
+        this.tracking = new TrackyTrackyManager(this);
         System.out.println("Constructed server " + hostname + " ID " + serverID);
     }
 

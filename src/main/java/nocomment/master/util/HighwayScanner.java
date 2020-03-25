@@ -15,7 +15,6 @@ public class HighwayScanner {
     private static final int OW_WB = 2_500_000; // TEMP: only scan 1/300th of the way to the WB lol
     private static final int AXIS_COUNT = 1 + (int) Math.ceil(OW_WB / 16f / 8f / AXIS_INTERVAL);
     private static final int DIAG_COUNT = 1 + (int) Math.ceil(OW_WB / 16f / 8f / AXIS_INTERVAL);
-    private static final ChunkPos SPAWN = new ChunkPos(0, 0);
 
     private final World world;
     private final int priority;
@@ -30,24 +29,48 @@ public class HighwayScanner {
     }
 
     public void submitTasks() {
-        createInitialDetectionTask(AXIS_INTERVAL, 0, AXIS_COUNT);
-        createInitialDetectionTask(-AXIS_INTERVAL, 0, AXIS_COUNT);
-        createInitialDetectionTask(0, AXIS_INTERVAL, AXIS_COUNT);
-        createInitialDetectionTask(0, -AXIS_INTERVAL, AXIS_COUNT);
-
-        createInitialDetectionTask(DIAG_INTERVAL, DIAG_INTERVAL, DIAG_COUNT);
-        createInitialDetectionTask(DIAG_INTERVAL, -DIAG_INTERVAL, DIAG_COUNT);
-        createInitialDetectionTask(-DIAG_INTERVAL, DIAG_INTERVAL, DIAG_COUNT);
-        createInitialDetectionTask(-DIAG_INTERVAL, -DIAG_INTERVAL, DIAG_COUNT);
+        int intervalSize = 100;
+        for (int start = 0; start < AXIS_COUNT || start < DIAG_COUNT; start += intervalSize) {
+            submitAxisTasks(start, start + intervalSize);
+            submitDiagTasks(start, start + intervalSize);
+        }
     }
 
-    private void createInitialDetectionTask(int directionX, int directionZ, int count) {
-        world.submitTask(new Task(priority, SPAWN, directionX, directionZ, count) {
+    public void submitAxisTasks(int startIndex, int endIndex) {
+        if (endIndex >= AXIS_COUNT) {
+            endIndex = AXIS_COUNT - 1;
+        }
+        runSection(AXIS_INTERVAL, 0, startIndex, endIndex);
+        runSection(-AXIS_INTERVAL, 0, startIndex, endIndex);
+        runSection(0, AXIS_INTERVAL, startIndex, endIndex);
+        runSection(0, -AXIS_INTERVAL, startIndex, endIndex);
+    }
+
+    public void submitDiagTasks(int startIndex, int endIndex) {
+        if (endIndex >= DIAG_COUNT) {
+            endIndex = DIAG_COUNT - 1;
+        }
+        runSection(DIAG_INTERVAL, DIAG_INTERVAL, startIndex, endIndex);
+        runSection(DIAG_INTERVAL, -DIAG_INTERVAL, startIndex, endIndex);
+        runSection(-DIAG_INTERVAL, DIAG_INTERVAL, startIndex, endIndex);
+        runSection(-DIAG_INTERVAL, -DIAG_INTERVAL, startIndex, endIndex);
+    }
+
+    private void runSection(int directionX, int directionZ, int startIndex, int endIndex) {
+        int count = endIndex - startIndex;
+        if (count <= 0) {
+            return;
+        }
+        submitTask(directionX * startIndex, directionZ * startIndex, directionX, directionZ, count);
+    }
+
+    private void submitTask(int startX, int startZ, int directionX, int directionZ, int count) {
+        world.submitTask(new Task(priority, new ChunkPos(startX, startZ), directionX, directionZ, count) {
 
             private void resubmit() {
                 // we cannot just call submitTask(this) because our task seq is low, which would make highway scanning stay on one highway since it's always the lowest seq
                 // instead, cycle through all highways as they complete, round robin
-                createInitialDetectionTask(directionX, directionZ, count);
+                submitTask(startX, startZ, directionX, directionZ, count);
                 // INCORRECT OLD CODE: HighwayScanner.this.world.submitTask(this);
             }
 

@@ -37,11 +37,11 @@ public class Filter {
 
     private final JFrame frame;
 
-    public Filter(Hit hit, WorldTrackyTracky context) {
+    public Filter(Hit hit, WorldTrackyTracky context, OptionalLong prevTrackID) {
         this.context = context;
         deltaT();
         generatePoints(new ChunkPos(0, 0), hit.pos, M, false);
-        this.trackID = Database.createTrack(hit);
+        this.trackID = Database.createTrack(hit, prevTrackID);
         insertHit(hit);
         runCheck(hit.pos);
         this.start = hit.pos;
@@ -120,12 +120,7 @@ public class Filter {
             numGuesses += 7;
             iterationsWithoutHits++;
             if (iterationsWithoutHits >= 5) {
-                System.out.println("Filter has FAILED");
-                updater.cancel(false);
-                NoComment.executor.execute(() -> context.filterFailure(this));
-                if (frame != null) {
-                    frame.dispose();
-                }
+                failed();
                 return;
             }
         } else {
@@ -137,12 +132,24 @@ public class Filter {
         hits.forEach(hit -> updateFilter(particle -> particle.wouldLoad(hit)));
         hits.clear();
         List<ChunkPos> guesses = guessLocation(numGuesses);
+        if (guesses.isEmpty()) {
+            failed();
+            return;
+        }
         System.out.println("Guesses: " + guesses);
         System.out.println("Best guess: " + guesses.get(0));
         System.out.println("Avg: " + getAvg());
         guesses.forEach(this::runCheck);
     }
 
+    private void failed() {
+        System.out.println("Filter has FAILED");
+        updater.cancel(false);
+        NoComment.executor.execute(() -> context.filterFailure(this));
+        if (frame != null) {
+            frame.dispose();
+        }
+    }
 
     private List<ChunkPos> guessLocation(int count) {
         Map<ChunkPos, Long> candidates = particles.stream()
@@ -262,6 +269,10 @@ public class Filter {
 
     public ChunkPos getMostRecentHit() {
         return mostRecentHit;
+    }
+
+    public long getTrackID() {
+        return trackID;
     }
 
     public synchronized boolean includes(ChunkPos pos) {
