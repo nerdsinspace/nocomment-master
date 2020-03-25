@@ -13,4 +13,5 @@ repositories {
 
 dependencies {
     compile 'org.postgresql:postgresql:42.2.0'
+    compile 'org.apache.commons:commons-dbcp2:2.7.0'
 }

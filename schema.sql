@@ -11,9 +11,9 @@ CREATE TABLE dimensions
 );
 
 INSERT INTO dimensions (ordinal, name)
-VALUES (-1, 'Nether')
-     , (0, 'Overworld')
-     , (1, 'End');
+VALUES (-1, 'Nether'),
+       (0, 'Overworld'),
+       (1, 'End');
 
 CREATE TABLE players
 (
@@ -61,4 +61,5 @@ CREATE TABLE hits
 );
 
 CREATE INDEX hits_worlds ON hits (server_id, dimension, created_at);
+CREATE INDEX hits_servers ON hits (server_id, created_at);
 

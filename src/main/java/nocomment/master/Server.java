@@ -17,25 +17,25 @@ public class Server {
 
     private final Map<Integer, World> worlds = new HashMap<>();
     public final String hostname;
-    public final int databaseID;
+    public final int serverID;
     private final OnlinePlayerTracker onlinePlayers;
 
     private Server(String hostname) {
         this.hostname = hostname;
-        this.databaseID = Database.idForHostname(hostname);
+        this.serverID = Database.idForServer(hostname);
         this.onlinePlayers = new OnlinePlayerTracker(this);
-        System.out.println("Constructed server " + hostname + " ID " + databaseID);
+        System.out.println("Constructed server " + hostname + " ID " + serverID);
     }
 
     public synchronized World getWorld(int dimension) {
         return worlds.computeIfAbsent(dimension, d -> new World(this, d));
     }
 
-    public synchronized void update() {
+    public void update() {
         // called whenever anything changes with a connection
         // also called like, all the time lol
 
-        // currently all this needs to do is update onlinePlayers
+        // currently all this needs to do is update onlinePlayers, so only synchronize there
         onlinePlayers.update();
     }
 

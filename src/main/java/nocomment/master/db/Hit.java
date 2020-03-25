@@ -16,7 +16,7 @@ public class Hit {
 
     public Hit(World world, ChunkPos pos) {
         this.pos = pos;
-        this.serverID = world.server.databaseID;
+        this.serverID = world.server.serverID;
         this.dimension = world.dimension;
         this.createdAt = System.currentTimeMillis();
     }

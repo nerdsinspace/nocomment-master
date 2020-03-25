@@ -37,7 +37,7 @@ public class Filter {
     public Filter(ChunkPos hit, WorldTrackyTracky context) {
         this.context = context;
         deltaT();
-        generatePoints(hit, M, false);
+        generatePoints(new ChunkPos(0, 0), hit, M, false);
         hits.add(hit);
         runCheck(hit);
         mostRecentHit = hit;
@@ -112,14 +112,14 @@ public class Filter {
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
                     ChunkPos p = mostRecentHit.add(dx * 7, dz * 7);
-                    generatePoints(p, M / 100, true);
+                    generatePoints(mostRecentHit, p, M / 100, true);
                 }
             }
             if (iterationsWithoutHits > 1) {
                 for (int dx = -2; dx <= 2; dx++) {
                     for (int dz = -2; dz <= 2; dz++) {
                         ChunkPos p = mostRecentHit.add(dx * 7, dz * 7);
-                        generatePoints(p, M / 200, true);
+                        generatePoints(mostRecentHit, p, M / 200, true);
                     }
                 }
             }
@@ -225,11 +225,11 @@ public class Filter {
         return newer;
     }
 
-    private void generatePoints(ChunkPos center, int count, boolean close) {
+    private void generatePoints(ChunkPos from, ChunkPos center, int count, boolean close) {
         double cx = center.x + 0.5d;
         double cz = center.z + 0.5d;
 
-        double[] velocity = new double[]{Math.abs(cx), Math.abs(cz)};
+        double[] velocity = new double[]{Math.abs(center.x - from.x), Math.abs(center.z - from.z)};
         normalize(velocity);
         velocity[0] += 0.2;
         velocity[1] += 0.2;

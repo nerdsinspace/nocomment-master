@@ -13,7 +13,8 @@ public class NoComment {
 
     public static void main(String[] args) throws IOException {
         new TrackyTrackyManager(Server.getServer("2b2t.org"));
-        //new TrackyTrackyManager(Server.getServer("constantiam.net"));
+        new TrackyTrackyManager(Server.getServer("constantiam.net"));
+        //Database.addPlayers(1, Arrays.asList(1, 2, 3), 100);
         NoCommentServer.listen();
     }
 }

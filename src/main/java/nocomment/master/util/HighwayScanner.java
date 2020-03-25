@@ -45,7 +45,10 @@ public class HighwayScanner {
         world.submitTask(new Task(priority, SPAWN, directionX, directionZ, count) {
 
             private void resubmit() {
-                HighwayScanner.this.world.submitTask(this);
+                // we cannot just call submitTask(this) because our task seq is low, which would make highway scanning stay on one highway since it's always the lowest seq
+                // instead, cycle through all highways as they complete, round robin
+                createInitialDetectionTask(directionX, directionZ, count);
+                // INCORRECT OLD CODE: HighwayScanner.this.world.submitTask(this);
             }
 
             @Override

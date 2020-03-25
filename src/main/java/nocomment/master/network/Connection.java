@@ -21,7 +21,6 @@ import java.util.function.Consumer;
  */
 public abstract class Connection {
     private static final long MIN_READ_INTERVAL_MS = 5_000;
-    private static final long REMOVAL_QUELL_DURATION_MS = 30_000;
 
     public Connection(World world) {
         this.world = world;
@@ -38,6 +37,7 @@ public abstract class Connection {
         ScheduledFuture<?> future = TrackyTrackyManager.scheduler.scheduleAtFixedRate(() -> {
             long time = System.currentTimeMillis() - mostRecentRead;
             if (time > MIN_READ_INTERVAL_MS) {
+                System.out.println("NO DATA!");
                 closeUnderlying();
             }
         }, 0, 1, TimeUnit.SECONDS);
@@ -69,6 +69,7 @@ public abstract class Connection {
         synchronized (this) {
             task = tasks.get(taskID);
         }
+        // this cannot be on another thread / executor because then a hitReceived could possibly be reorder after taskCompleted
         task.hitReceived(hit);
     }
 
@@ -77,7 +78,7 @@ public abstract class Connection {
         synchronized (this) {
             task = tasks.remove(taskID);
         }
-        // TODO is it overkill to move task.completed here, and task.hitReceived in the prev function, into a NoComment.executor.execute()?
+        // this could theoretically be on another thread / executor, because it's guaranteed to be the last thing in this task, so no worries if it gets delayed for any amount of time
         task.completed();
         world.worldUpdate();
     }
@@ -92,17 +93,15 @@ public abstract class Connection {
         world.serverUpdate(); // prevent two-way deadlock with the subsequent two functions
     }
 
-    public synchronized Collection<OnlinePlayer> onlinePlayers() {
-        return new ArrayList<>(onlinePlayerSet);
+    public synchronized void addOnlinePlayers(Collection<OnlinePlayer> collection) {
+        collection.addAll(onlinePlayerSet);
     }
 
-    public synchronized Collection<OnlinePlayer> quelledFromRemoval() {
-        for (OnlinePlayer player : new ArrayList<>(removalTimestamps.keySet())) { // god i hate concurrentmodificationexception
-            if (removalTimestamps.get(player) < System.currentTimeMillis() - REMOVAL_QUELL_DURATION_MS) {
-                removalTimestamps.remove(player);
-            }
-        }
-        return new ArrayList<>(removalTimestamps.keySet());
+    public synchronized void addQuelledFromRemoval(Map<OnlinePlayer, Long> map) {
+        // this just overwrites
+        // this is Probably Fine
+        map.putAll(removalTimestamps);
+        removalTimestamps.clear();
     }
 
     /**

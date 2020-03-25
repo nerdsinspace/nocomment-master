@@ -24,7 +24,7 @@ public class World {
         connections.add(connection);
         NoComment.executor.execute(connection::readLoop);
         worldUpdate();
-        serverUpdate(); // only for connection status change
+        // dont preemptively update server until data comes in tbh
     }
 
     public synchronized void connectionClosed(Connection conn) {

@@ -1,31 +1,51 @@
 package nocomment.master.util;
 
 import nocomment.master.Server;
+import nocomment.master.db.Database;
 import nocomment.master.network.Connection;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 public class OnlinePlayerTracker {
     public final Server server;
     private Set<OnlinePlayer> onlinePlayerSet;
+    private static final long REMOVAL_QUELL_DURATION_MS = 30_000;
+    private final Map<OnlinePlayer, Long> removalTimestamps = new HashMap<>();
 
     public OnlinePlayerTracker(Server server) {
         this.server = server;
         this.onlinePlayerSet = new HashSet<>();
-        // TODO clear database of currently active ppl
+        Database.clearSessions(server.serverID);
     }
 
-    public void update() {
+    public synchronized void update() {
         // anything could have changed
         // we have lock on Server, but not on World nor any Connections
 
+        long now = System.currentTimeMillis();
         Set<OnlinePlayer> current = coalesceFromConnections();
-        // TODO diff current with onlinePlayerSet
-        // TODO make necessary changes to database
+        List<Integer> toAdd = minus(current, onlinePlayerSet);
+        List<Integer> toRemove = minus(onlinePlayerSet, current);
+        if (!toAdd.isEmpty()) {
+            System.out.println("TO ADD " + toAdd);
+            Database.addPlayers(server.serverID, toAdd, now);
+        }
+        if (!toRemove.isEmpty()) {
+            System.out.println("TO REMOVE " + toRemove);
+            Database.removePlayers(server.serverID, toRemove, now);
+        }
+        onlinePlayerSet = current;
     }
+
+    private static List<Integer> minus(Set<OnlinePlayer> a, Set<OnlinePlayer> b) {
+        Set<OnlinePlayer> subtracted = new HashSet<>(a);
+        subtracted.removeAll(b);
+
+        List<Integer> IDs = new ArrayList<>();
+        subtracted.forEach(player -> IDs.add(Database.idForPlayer(player)));
+        return IDs;
+    }
+
 
     private Set<OnlinePlayer> coalesceFromConnections() {
 
@@ -35,13 +55,22 @@ public class OnlinePlayerTracker {
 
         HashSet<OnlinePlayer> online = new HashSet<>();
         for (Connection conn : conns) {
-            online.addAll(conn.onlinePlayers());
+            conn.addOnlinePlayers(online);
+            conn.addQuelledFromRemoval(removalTimestamps);
         }
-        for (Connection conn : conns) {
-            online.removeAll(conn.quelledFromRemoval());
-        }
+        clearQuelled();
+        online.removeAll(removalTimestamps.keySet());
         return online;
     }
+
+    private void clearQuelled() {
+        for (OnlinePlayer player : new ArrayList<>(removalTimestamps.keySet())) { // god i hate concurrentmodificationexception
+            if (removalTimestamps.get(player) < System.currentTimeMillis() - REMOVAL_QUELL_DURATION_MS) {
+                removalTimestamps.remove(player);
+            }
+        }
+    }
+
 
     // the actual list is a UNION of all active connections lists, which are separately maintained by each connection
     // with an additional "stickiness" clause, which is that a "remove player" also quells any connection contributing that player to the pot, for the next 30 seconds
