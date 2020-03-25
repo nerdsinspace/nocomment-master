@@ -23,7 +23,8 @@ public class TrackyTrackyManager {
         // around my base lmao
         this.overworld.ingestApprox(new ChunkPos(13825, -21235));
         this.overworld.ingestApprox(new ChunkPos(13825, -21278));
-        this.overworld.ingestApprox(new ChunkPos(13825, -21105));
+        this.overworld.ingestApprox(new ChunkPos(13825, -21200));
+        // this.overworld.ingestApprox(new ChunkPos(13825, -21105));
     }
 
     private void highways() {

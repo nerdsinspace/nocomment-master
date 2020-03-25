@@ -4,6 +4,7 @@ import nocomment.master.NoComment;
 import nocomment.master.db.Hit;
 import nocomment.master.task.SingleChunkTask;
 import nocomment.master.util.ChunkPos;
+import nocomment.master.util.LoggingExecutor;
 
 import javax.swing.*;
 import java.awt.*;
@@ -76,7 +77,7 @@ public class Filter {
             }
         });
         frame.setVisible(true);
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(frame::repaint, 0, 10, TimeUnit.MILLISECONDS);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(frame::repaint), 0, 10, TimeUnit.MILLISECONDS);
     }
 
     private int[] worldToScreen(double x, double z) {
@@ -86,7 +87,7 @@ public class Filter {
     }
 
     public void start() {
-        updater = TrackyTrackyManager.scheduler.scheduleAtFixedRate(this::updateStep, 0, 1, TimeUnit.SECONDS);
+        updater = TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::updateStep), 0, 1, TimeUnit.SECONDS);
     }
 
     private synchronized void updateStep() {
@@ -229,7 +230,12 @@ public class Filter {
         double cx = center.x + 0.5d;
         double cz = center.z + 0.5d;
 
-        double[] velocity = new double[]{Math.abs(center.x - from.x), Math.abs(center.z - from.z)};
+        double[] velocity;
+        if (close) {
+            velocity = new double[]{1, 1};
+        } else {
+            velocity = new double[]{Math.abs(cx), Math.abs(cz)};
+        }
         normalize(velocity);
         velocity[0] += 0.2;
         velocity[1] += 0.2;
@@ -294,7 +300,7 @@ public class Filter {
             sum += w;
         }
         if (sum == 0) {
-            throw new IllegalStateException();
+            return;
         }
         for (int i = 0; i < weights.length; i++) {
             weights[i] /= sum;

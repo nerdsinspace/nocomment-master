@@ -60,7 +60,7 @@ public class HighwayScanner {
             @Override
             public void completed() {
                 if (rerunDelayMS >= 0) {
-                    TrackyTrackyManager.scheduler.schedule(this::resubmit, rerunDelayMS, TimeUnit.MILLISECONDS);
+                    TrackyTrackyManager.scheduler.schedule(LoggingExecutor.wrap(this::resubmit), rerunDelayMS, TimeUnit.MILLISECONDS);
                 }
             }
         });

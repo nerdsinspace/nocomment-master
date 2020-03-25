@@ -6,6 +6,7 @@ import nocomment.master.db.Hit;
 import nocomment.master.task.Task;
 import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.ChunkPos;
+import nocomment.master.util.LoggingExecutor;
 import nocomment.master.util.OnlinePlayer;
 
 import java.io.IOException;
@@ -34,13 +35,13 @@ public abstract class Connection {
     private long mostRecentRead = System.currentTimeMillis();
 
     public void readLoop() {
-        ScheduledFuture<?> future = TrackyTrackyManager.scheduler.scheduleAtFixedRate(() -> {
+        ScheduledFuture<?> future = TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(() -> {
             long time = System.currentTimeMillis() - mostRecentRead;
             if (time > MIN_READ_INTERVAL_MS) {
                 System.out.println("NO DATA!");
                 closeUnderlying();
             }
-        }, 0, 1, TimeUnit.SECONDS);
+        }), 0, 1, TimeUnit.SECONDS);
         while (true) {
             try {
                 read();
