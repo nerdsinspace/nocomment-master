@@ -30,10 +30,10 @@ public class Database {
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("INSERT INTO hits (created_at, x, z, dimension, server_id) VALUES (?, ?, ?, ?, ?) RETURNING id")) {
             stmt.setLong(1, hit.createdAt);
-            stmt.setLong(2, hit.pos.x);
-            stmt.setLong(3, hit.pos.z);
-            stmt.setLong(4, hit.dimension);
-            stmt.setLong(5, hit.serverID);
+            stmt.setInt(2, hit.pos.x);
+            stmt.setInt(3, hit.pos.z);
+            stmt.setInt(4, hit.dimension);
+            stmt.setInt(5, hit.serverID);
             try (ResultSet rs = stmt.executeQuery()) {
                 rs.next();
                 hitID.complete(rs.getLong("id"));

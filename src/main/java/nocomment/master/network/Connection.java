@@ -69,7 +69,7 @@ public abstract class Connection {
         synchronized (this) {
             task = tasks.get(taskID);
         }
-        // this cannot be on another thread / executor because then a hitReceived could possibly be reorder after taskCompleted
+        // this cannot be on another thread / executor because then a hitReceived could possibly be reordered after taskCompleted
         task.hitReceived(hit);
     }
 
