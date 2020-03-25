@@ -85,6 +85,7 @@ public abstract class Connection {
 
     protected synchronized void playerJoinLeave(boolean join, OnlinePlayer player) {
         if (join) {
+            onlinePlayerSet.remove(player);
             onlinePlayerSet.add(player);
         } else {
             removalTimestamps.put(player, System.currentTimeMillis());
@@ -94,6 +95,7 @@ public abstract class Connection {
     }
 
     public synchronized void addOnlinePlayers(Collection<OnlinePlayer> collection) {
+        collection.removeAll(onlinePlayerSet);
         collection.addAll(onlinePlayerSet);
     }
 
