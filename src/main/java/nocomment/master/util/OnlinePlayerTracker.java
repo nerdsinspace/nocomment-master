@@ -23,6 +23,17 @@ public class OnlinePlayerTracker {
         // we have lock on Server, but not on World nor any Connections
 
         long now = System.currentTimeMillis();
+        if (onlinePlayerSet.isEmpty()) {
+            try {
+                // when a player joins for the first time, they send us all their online players all at once
+                // this, in practice, ends up being exactly two batches in this functions, since the function takes some time the first time, so that by the second time they're all in
+                // just wait so it's all in one batch
+                // this is on an executor thread so this is Fine™
+                Thread.sleep(250);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
         Set<OnlinePlayer> current = coalesceFromConnections();
         List<Integer> toAdd = minus(current, onlinePlayerSet);
         List<Integer> toRemove = minus(onlinePlayerSet, current);

@@ -1,6 +1,7 @@
 package nocomment.master.tracking;
 
 import nocomment.master.NoComment;
+import nocomment.master.db.Database;
 import nocomment.master.db.Hit;
 import nocomment.master.task.SingleChunkTask;
 import nocomment.master.util.ChunkPos;
@@ -20,6 +21,7 @@ public class Filter {
     private static final int M = 1000;
     private final Random random = new Random();
     private final WorldTrackyTracky context;
+    private final long trackID;
 
     private List<Particle> particles = new ArrayList<>();
 
@@ -35,14 +37,14 @@ public class Filter {
 
     private final JFrame frame;
 
-    public Filter(ChunkPos hit, WorldTrackyTracky context) {
+    public Filter(Hit hit, WorldTrackyTracky context) {
         this.context = context;
         deltaT();
-        generatePoints(new ChunkPos(0, 0), hit, M, false);
-        hits.add(hit);
-        runCheck(hit);
-        mostRecentHit = hit;
-        this.start = hit;
+        generatePoints(new ChunkPos(0, 0), hit.pos, M, false);
+        this.trackID = Database.createTrack(hit);
+        insertHit(hit);
+        runCheck(hit.pos);
+        this.start = hit.pos;
         if (!GUI) {
             return;
         }
@@ -255,10 +257,7 @@ public class Filter {
     public synchronized void insertHit(Hit hit) {
         hits.add(hit.pos);
         mostRecentHit = hit.pos;
-        // TODO
-        // get the hit id
-        // hit.getHitID().get()
-        // and save this tracky relationship to the database
+        NoComment.executor.execute(() -> Database.addHitToTrack(hit, trackID));
     }
 
     public ChunkPos getMostRecentHit() {

@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.util.Collection;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 public class Database {
     private static BasicDataSource pool;
@@ -27,6 +28,7 @@ public class Database {
     }
 
     static void saveHit(Hit hit, CompletableFuture<Long> hitID) {
+        long id;
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("INSERT INTO hits (created_at, x, z, dimension, server_id) VALUES (?, ?, ?, ?, ?) RETURNING id")) {
             stmt.setLong(1, hit.createdAt);
@@ -36,13 +38,14 @@ public class Database {
             stmt.setInt(5, hit.serverID);
             try (ResultSet rs = stmt.executeQuery()) {
                 rs.next();
-                hitID.complete(rs.getLong("id"));
+                id = rs.getLong("id");
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
             hitID.completeExceptionally(ex);
             throw new RuntimeException(ex);
         }
+        hitID.complete(id); // only complete the future outside the try, when the connection is closed and the statement is committed!
     }
 
     public static void clearSessions(int serverID) {
@@ -51,7 +54,7 @@ public class Database {
         if (setLeaveTo >= System.currentTimeMillis()) {
             // this will crash later, as soon as we try and add a player and the range overlaps
             // might as well crash early
-            throw new RuntimeException();
+            throw new RuntimeException("lol server clock went backwards");
         }
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("UPDATE player_sessions SET leave = ? WHERE range @> ? AND server_id = ?")) {
@@ -67,7 +70,6 @@ public class Database {
 
     private static long mostRecentEvent(int serverID) {
         try (Connection connection = pool.getConnection()) {
-            System.out.println(connection.getClass());
             long mostRecent;
             try (PreparedStatement stmt = connection.prepareStatement("SELECT MAX(created_at) FROM hits WHERE server_id = ?")) {
                 stmt.setInt(1, serverID);
@@ -202,6 +204,45 @@ public class Database {
             }
             stmt.executeBatch();
         } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static long createTrack(Hit initialHit) {
+        try (Connection connection = pool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("INSERT INTO tracks (first_hit_id, last_hit_id, updated_at, dimension, server_id) VALUES (?, ?, ?, ?, ?) RETURNING id")) {
+            long hitID = initialHit.getHitID().get();
+            stmt.setLong(1, hitID);
+            stmt.setLong(2, hitID);
+            stmt.setLong(3, initialHit.createdAt);
+            stmt.setInt(4, initialHit.dimension);
+            stmt.setInt(5, initialHit.serverID);
+            try (ResultSet rs = stmt.executeQuery()) {
+                rs.next();
+                return rs.getLong("id");
+            }
+        } catch (SQLException | InterruptedException | ExecutionException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static void addHitToTrack(Hit hit, long trackID) {
+        try (Connection connection = pool.getConnection()) {
+            long hitID = hit.getHitID().get();
+            try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO track_hits (track_id, hit_id) VALUES (?, ?)")) {
+                stmt.setLong(1, trackID);
+                stmt.setLong(2, hitID);
+                stmt.execute();
+            }
+            try (PreparedStatement stmt = connection.prepareStatement("UPDATE tracks SET last_hit_id = ?, updated_at = ? WHERE id = ?")) {
+                stmt.setLong(1, hitID);
+                stmt.setLong(2, hit.createdAt);
+                stmt.setLong(3, trackID);
+                stmt.executeUpdate();
+            }
+        } catch (SQLException | InterruptedException | ExecutionException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
         }

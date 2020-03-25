@@ -33,7 +33,7 @@ public class WorldTrackyTracky {
                 return;
             }
         }
-        Filter filter = new Filter(hit.pos, this);
+        Filter filter = new Filter(hit, this);
         activeFilters.add(filter);
         filter.start();
     }
