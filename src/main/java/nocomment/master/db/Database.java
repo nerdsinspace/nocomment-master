@@ -290,7 +290,7 @@ public class Database {
 
     public static List<TrackResume> resumeTracks(Collection<Long> trackIDs) {
         try (Connection connection = pool.getConnection();
-             PreparedStatement stmt = connection.prepareStatement("SELECT hits.x, hits.z, hits.dimension FROM tracks INNER JOIN hits ON hits.id = tracks.last_hit_id WHERE track_id = ?")) {
+             PreparedStatement stmt = connection.prepareStatement("SELECT hits.x, hits.z, hits.dimension FROM tracks INNER JOIN hits ON hits.id = tracks.last_hit_id WHERE tracks.id = ?")) {
             List<TrackResume> ret = new ArrayList<>();
             for (long trackID : trackIDs) {
                 stmt.setLong(1, trackID);
