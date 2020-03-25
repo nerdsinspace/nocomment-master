@@ -91,16 +91,6 @@ public class Filter {
     }
 
     private synchronized void updateStep() {
-        if (frame != null) {
-            NoComment.executor.execute(() -> {
-                try {
-                    Thread.sleep(900);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                frame.repaint();
-            });
-        }
         System.out.println("Update step");
         if (hits.isEmpty() && misses.isEmpty()) {
             System.out.println("Maybe offline");
