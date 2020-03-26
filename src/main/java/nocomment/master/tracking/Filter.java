@@ -17,7 +17,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class Filter {
-    private static final boolean GUI = true;
+    private static final boolean GUI = false;
     private static final int M = 1000;
     private final Random random = new Random();
     private final WorldTrackyTracky context;
@@ -46,6 +46,7 @@ public class Filter {
         runCheck(hit.pos);
         this.start = hit.pos;
         if (!GUI) {
+            frame = null;
             return;
         }
         frame = new JFrame("no comment");
@@ -79,7 +80,7 @@ public class Filter {
             }
         });
         frame.setVisible(true);
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(frame::repaint), 0, 10, TimeUnit.MILLISECONDS);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(frame::repaint), 0, 100, TimeUnit.MILLISECONDS);
     }
 
     private int[] worldToScreen(double x, double z) {

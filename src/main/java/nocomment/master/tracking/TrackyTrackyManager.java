@@ -34,7 +34,9 @@ public class TrackyTrackyManager {
 
     private void highways() {
         new HighwayScanner(nether.world, 100, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
-        //new HighwayScanner(overworld.world, 100, hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        new HighwayScanner(overworld.world, 100, hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        overworld.grid(10000, 9, 50, new ChunkPos(-689 * 8, 1470 * 8), hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty()));
+        nether.grid(10000, 9, 50, new ChunkPos(-689, 1470), hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty()));
     }
 
     private void spiral() {

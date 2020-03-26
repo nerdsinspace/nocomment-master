@@ -43,7 +43,7 @@ public class WorldTrackyTracky {
         // 11 by 11 grid pattern, spacing of 7 between each one
         // so, 121 checks
         // plus or minus 480 blocks (6*5*16) in any direction
-        grid(7, 5, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
+        grid(10, 7, 5, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
     }
 
     public synchronized void filterFailure(Filter filter) {
@@ -54,10 +54,10 @@ public class WorldTrackyTracky {
         ingestApprox(last, OptionalLong.of(filter.getTrackID())); // one last hail mary
     }
 
-    private void grid(int gridInterval, int gridRadius, ChunkPos center, Consumer<Hit> onHit) {
+    public void grid(int priority, int gridInterval, int gridRadius, ChunkPos center, Consumer<Hit> onHit) {
         for (int x = -gridRadius; x <= gridRadius; x++) { // iterate X, sweep Z
             // i'm sorry
-            createCatchupTask(10, center.add(x * gridInterval, -gridRadius * gridInterval), 0, gridInterval, 2 * gridRadius + 1, onHit);
+            createCatchupTask(priority, center.add(x * gridInterval, -gridRadius * gridInterval), 0, gridInterval, 2 * gridRadius + 1, onHit);
         }
     }
 

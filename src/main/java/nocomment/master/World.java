@@ -47,7 +47,7 @@ public class World {
             return;
         }
         while (!pendingTasks.isEmpty()) {
-            Task task = pendingTasks.poll();
+            Task task = pendingTasks.peek();
             // create a map from a connection to the number of checks that connection still has to run through before it could get to this task in question
             Map<Connection, Integer> burdens = connections.stream().collect(Collectors.toMap(c -> c, c -> c.sumHigherPriority(task.priority)));
             Connection connection = connections.stream().min(Comparator.comparingInt(burdens::get)).get();
@@ -55,11 +55,15 @@ public class World {
 
             if (burden > MAX_BURDEN) {
                 // can't send anything rn
-                System.out.println("Too many tasks on this connection");
+                System.out.println("Too many tasks on this connection " + burden + " lower than " + task.priority);
                 break;
             }
-
-            //System.out.println("Selected connection with burden " + burden + " for task with priority " + task.priority + " and size " + task.count);
+            pendingTasks.poll();
+            int sum = 0;
+            for (Object o : pendingTasks.toArray()) {
+                sum += ((Task) o).count;
+            }
+            System.out.println("Selected connection with burden " + burden + " for task with priority " + task.priority + " and size " + task.count + " from " + task.start + ". Total sum pending is " + sum);
             connection.acceptTask(task);
         }
     }
