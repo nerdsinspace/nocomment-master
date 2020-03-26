@@ -14,10 +14,10 @@ public class Database {
 
     static {
         System.out.println("Connecting to database...");
-        // docker run --rm  --name pg-docker -e POSTGRES_PASSWORD=docker -d -p 5432:5432 -v $HOME/docker/volumes/postgres:/var/lib/postgresql/data postgres
+        // docker run --rm  --name pg-docker -e POSTGRES_PASSWORD=6bf40e917cdc202f627398c433899a0cc9aa8880a6dc25aacc4342779eccd227 -d -p 5432:5432 -v $HOME/docker/volumes/postgres:/var/lib/postgresql/data postgres
         pool = new BasicDataSource();
         pool.setUsername("postgres");
-        pool.setPassword("docker");
+        pool.setPassword("6bf40e917cdc202f627398c433899a0cc9aa8880a6dc25aacc4342779eccd227");
         pool.setDriverClassName("org.postgresql.Driver");
         pool.setUrl("jdbc:postgresql://localhost:5432/postgres");
         pool.setInitialSize(1);
