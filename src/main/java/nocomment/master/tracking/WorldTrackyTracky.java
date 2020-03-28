@@ -5,10 +5,12 @@ import nocomment.master.World;
 import nocomment.master.db.Hit;
 import nocomment.master.task.TaskHelper;
 import nocomment.master.util.ChunkPos;
+import nocomment.master.util.LoggingExecutor;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.OptionalLong;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class WorldTrackyTracky {
@@ -22,6 +24,40 @@ public class WorldTrackyTracky {
         this.parent = parent;
         this.activeFilters = new ArrayList<>();
         this.onLost = onLost;
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pairwiseFilterCheck), 0, 5, TimeUnit.SECONDS);
+    }
+
+    public void pairwiseFilterCheck() {
+        List<Filter> copy;
+        synchronized (this) {
+            copy = new ArrayList<>(activeFilters);
+        }
+        for (Filter earlier : copy) {
+            ChunkPos earlierHit = earlier.getMostRecentHit();
+            if (Math.abs(earlierHit.x) < 30 && Math.abs(earlierHit.z) < 30) {
+                System.out.println("Too close to spawn");
+                // too close to spawn and the permaloaded area
+                earlier.failed();
+                return;
+            }
+            for (Filter later : copy) {
+                if (earlier == later) {
+                    continue;
+                }
+                if (earlierHit.distSq(later.getMostRecentHit()) < 6 * 6) {
+                    if (earlier.includes(later.getMostRecentHit())) {
+                        System.out.println("Too close to another filter");
+                        later.failed();
+                        return;
+                    }
+                    if (later.includes(earlierHit)) {
+                        System.out.println("Too close to another filter");
+                        earlier.failed();
+                        return;
+                    }
+                }
+            }
+        }
     }
 
     public synchronized void ingestGenericKnownHit(Hit hit, OptionalLong prevTrack) { // for example, from a highway scanner
@@ -55,8 +91,11 @@ public class WorldTrackyTracky {
     }
 
     public void grid(int priority, int gridInterval, int gridRadius, ChunkPos center, Consumer<Hit> onHit) {
-        for (int x = -gridRadius; x <= gridRadius; x++) { // iterate X, sweep Z
-            // i'm sorry
+        for (int x = 0; x <= gridRadius; x++) {
+            createCatchupTask(priority, center.add(-x * gridInterval, -gridRadius * gridInterval), 0, gridInterval, 2 * gridRadius + 1, onHit);
+            if (x == 0) {
+                continue;
+            }
             createCatchupTask(priority, center.add(x * gridInterval, -gridRadius * gridInterval), 0, gridInterval, 2 * gridRadius + 1, onHit);
         }
     }

@@ -3,8 +3,10 @@ package nocomment.master;
 import nocomment.master.network.Connection;
 import nocomment.master.task.Task;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.PriorityQueue;
 
 public class World {
     private static final int MAX_BURDEN = 400; // about a second
@@ -49,13 +51,20 @@ public class World {
         while (!pendingTasks.isEmpty()) {
             Task task = pendingTasks.peek();
             // create a map from a connection to the number of checks that connection still has to run through before it could get to this task in question
-            Map<Connection, Integer> burdens = connections.stream().collect(Collectors.toMap(c -> c, c -> c.sumHigherPriority(task.priority)));
-            Connection connection = connections.stream().min(Comparator.comparingInt(burdens::get)).get();
-            int burden = burdens.get(connection);
+            Connection min = connections.get(0);
+            int burden = min.sumHigherPriority(task.priority);
+            for (int i = 1; i < connections.size(); i++) {
+                Connection conn = connections.get(i);
+                int connBurden = conn.sumHigherPriority(task.priority);
+                if (connBurden < burden) {
+                    burden = connBurden;
+                    min = conn;
+                }
+            }
 
             if (burden > MAX_BURDEN) {
                 // can't send anything rn
-                System.out.println("Too many tasks on this connection " + burden + " lower than " + task.priority);
+                //System.out.println("Too many tasks on this connection " + burden + " lower than " + task.priority);
                 break;
             }
             pendingTasks.poll();
@@ -63,8 +72,8 @@ public class World {
             for (Object o : pendingTasks.toArray()) {
                 sum += ((Task) o).count;
             }
-            System.out.println("Selected connection with burden " + burden + " for task with priority " + task.priority + " and size " + task.count + " from " + task.start + ". Total sum pending is " + sum);
-            connection.acceptTask(task);
+            //System.out.println("Selected connection with burden " + burden + " for task with priority " + task.priority + " and size " + task.count + " from " + task.start + ". Total sum pending is " + sum);
+            min.acceptTask(task);
         }
     }
 

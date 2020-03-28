@@ -94,7 +94,7 @@ public class Filter {
     }
 
     private synchronized void updateStep() {
-        System.out.println("Update step");
+        //System.out.println("Update step");
         if (hits.isEmpty() && misses.isEmpty()) {
             System.out.println("Maybe offline");
             // maybe we're offline
@@ -117,7 +117,7 @@ public class Filter {
                     }
                 }
             }
-            System.out.println("Warning: got no hits");
+            //System.out.println("Warning: got no hits");
             numGuesses += 7;
             iterationsWithoutHits++;
             if (iterationsWithoutHits >= 5) {
@@ -137,14 +137,14 @@ public class Filter {
             failed();
             return;
         }
-        System.out.println("Guesses: " + guesses);
-        System.out.println("Best guess: " + guesses.get(0));
-        System.out.println("Avg: " + getAvg());
+        //System.out.println("Guesses: " + guesses);
+        //System.out.println("Best guess: " + guesses.get(0));
+        //System.out.println("Avg: " + getAvg());
         guesses.forEach(this::runCheck);
     }
 
-    private void failed() {
-        System.out.println("Filter has FAILED");
+    public void failed() {
+        System.out.println("Filter " + trackID + " has FAILED");
         updater.cancel(false);
         NoComment.executor.execute(() -> context.filterFailure(this));
         if (frame != null) {

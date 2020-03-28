@@ -22,25 +22,18 @@ public class TrackyTrackyManager {
         this.nether = new WorldTrackyTracky(server.getWorld(-1), this, this::lostTrackingInNether);
         highways();
         spiral();
-
-        // around my base lmao
-        //this.overworld.ingestApprox(new ChunkPos(13825, -21235), OptionalLong.empty());
-        //this.overworld.ingestApprox(new ChunkPos(13825, -21278), OptionalLong.empty());
-        //this.overworld.ingestApprox(new ChunkPos(13825, -21200), OptionalLong.empty());
-        //this.overworld.ingestApprox(new ChunkPos(-12, 36), OptionalLong.empty());
-        // this.overworld.ingestApprox(new ChunkPos(13825, -21105));
         //this.overworld.ingestApprox(new ChunkPos(-38, -70), OptionalLong.empty());
     }
 
     private void highways() {
-        new HighwayScanner(nether.world, 100, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
-        new HighwayScanner(overworld.world, 100, hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
-        overworld.grid(10000, 9, 50, new ChunkPos(-689 * 8, 1470 * 8), hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty()));
-        nether.grid(10000, 9, 50, new ChunkPos(-689, 1470), hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty()));
+        new HighwayScanner(nether.world, 1000, 2_000_000 / 8, 400_000, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        new HighwayScanner(nether.world, 100, 25_000, 40_000, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        new HighwayScanner(overworld.world, 100, 25_000, 40_000, hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
     }
 
     private void spiral() {
-        // TODO: overworld spiral
+        overworld.grid(10000, 9, 250, new ChunkPos(0, 0), hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty()));
+        nether.grid(10000, 9, 250, new ChunkPos(0, 0), hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty()));
     }
 
     private void lostTrackingInOverworld(Filter lost) {

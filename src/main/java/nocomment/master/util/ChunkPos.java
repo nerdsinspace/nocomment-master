@@ -42,6 +42,12 @@ public class ChunkPos {
         }
     }
 
+    public int distSq(ChunkPos other) {
+        int dx = this.x - other.x;
+        int dz = this.z - other.z;
+        return dx * dx + dz * dz;
+    }
+
     public ChunkPos add(int dx, int dz) {
         return new ChunkPos(this.x + dx, this.z + dz);
     }

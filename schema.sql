@@ -61,8 +61,7 @@ CREATE TABLE hits
         ON UPDATE CASCADE ON DELETE CASCADE
 );
 
-CREATE INDEX hits_worlds ON hits (server_id, dimension, created_at);
-CREATE INDEX hits_servers ON hits (server_id, created_at);
+CREATE INDEX hits_time_and_place ON hits (server_id, created_at, dimension); -- yes, this ordering is intentional, no, dimension shouldn't be before created_at
 
 CREATE TABLE tracks
 (

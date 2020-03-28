@@ -12,33 +12,40 @@ public class HighwayScanner {
     private static final int AXIS_INTERVAL = 9;
     private static final int DIAG_INTERVAL = 7; // overlap because otherwise there's a diagonal catty corner
 
-    private static final int OW_WB = 100_000; // TEMP: only scan 1/300th of the way to the WB lol
-    private static final int AXIS_COUNT = 1 + (int) Math.ceil(OW_WB / 16f / AXIS_INTERVAL);
-    private static final int DIAG_COUNT = 1 + (int) Math.ceil(OW_WB / 16f / DIAG_INTERVAL);
-
     private final World world;
     private final int priority;
     private final Consumer<Hit> onHit;
     private final long rerunDelayMS;
+    private final int axisCount;
+    private final int diagCount;
 
-    public HighwayScanner(World world, int priority, Consumer<Hit> onHit) {
+    public HighwayScanner(World world, int priority, int distanceBlocks, long rerunDelayMS, Consumer<Hit> onHit) {
+        System.out.println("Constructing highway scanner with priority " + priority + " block distance " + distanceBlocks + " and rerun delay " + rerunDelayMS);
         this.world = world;
         this.priority = priority;
         this.onHit = onHit;
-        this.rerunDelayMS = 120_000;
+        this.rerunDelayMS = rerunDelayMS;
+        this.axisCount = 1 + (int) Math.ceil(distanceBlocks / 16f / AXIS_INTERVAL);
+        this.diagCount = 1 + (int) Math.ceil(distanceBlocks / 16f / DIAG_INTERVAL);
+        System.out.println("Axis count: " + axisCount);
+        System.out.println("Diag count: " + diagCount);
+        int tot = axisCount * 4 + diagCount * 4;
+        System.out.println("Total count: " + tot);
+        System.out.println("Estimated time in seconds: " + tot / 400);
+        System.out.println("Fraction of time: " + tot / 400.0 / (rerunDelayMS / 1000.0));
     }
 
     public void submitTasks() {
         int intervalSize = 100;
-        for (int start = 0; start < AXIS_COUNT || start < DIAG_COUNT; start += intervalSize) {
+        for (int start = 0; start < axisCount || start < diagCount; start += intervalSize) {
             submitAxisTasks(start, start + intervalSize);
             submitDiagTasks(start, start + intervalSize);
         }
     }
 
     public void submitAxisTasks(int startIndex, int endIndex) {
-        if (endIndex >= AXIS_COUNT) {
-            endIndex = AXIS_COUNT - 1;
+        if (endIndex >= axisCount) {
+            endIndex = axisCount - 1;
         }
         runSection(AXIS_INTERVAL, 0, startIndex, endIndex);
         runSection(-AXIS_INTERVAL, 0, startIndex, endIndex);
@@ -47,8 +54,8 @@ public class HighwayScanner {
     }
 
     public void submitDiagTasks(int startIndex, int endIndex) {
-        if (endIndex >= DIAG_COUNT) {
-            endIndex = DIAG_COUNT - 1;
+        if (endIndex >= diagCount) {
+            endIndex = diagCount - 1;
         }
         runSection(DIAG_INTERVAL, DIAG_INTERVAL, startIndex, endIndex);
         runSection(DIAG_INTERVAL, -DIAG_INTERVAL, startIndex, endIndex);
