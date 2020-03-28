@@ -70,6 +70,7 @@ public class WorldTrackyTracky {
                 return;
             }
         }
+        System.out.println("Success. Starting new filter from confirmed hit at " + hit.pos);
         Filter filter = new Filter(hit, this, prevTrack);
         activeFilters.add(filter);
         filter.start();
