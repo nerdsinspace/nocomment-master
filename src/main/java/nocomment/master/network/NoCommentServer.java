@@ -19,12 +19,14 @@ public class NoCommentServer {
                 return;
             }
             String serverName = in.readUTF();
+            if (serverName.endsWith(":25565")) {
+                serverName = serverName.split(":25565")[0];
+            }
             int dim = in.readInt();
             System.out.println("Connection! " + serverName + " " + dim);
             World world = Server.getServer(serverName).getWorld(dim);
             world.incomingConnection(new SocketConnection(world, s));
         } catch (IOException ex) {
-            ex.printStackTrace();
         }
     }
 
