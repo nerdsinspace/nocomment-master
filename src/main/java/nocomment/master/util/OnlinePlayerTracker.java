@@ -39,7 +39,7 @@ public class OnlinePlayerTracker {
         List<Integer> toAdd = minus(current, onlinePlayerSet);
         List<Integer> toRemove = minus(onlinePlayerSet, current);
         if (!toAdd.isEmpty()) {
-            System.out.println("TO ADD " + toAdd);
+            System.out.println("Players joined: " + toAdd);
 
             Set<Long> trackIDs = Database.trackIDsToResume(toAdd, server); // have to do this on this thread, strictly before addPlayers ruins their last-leave times :)
             trackIDs.removeIf(server.tracking::hasActiveFilter);
@@ -49,7 +49,7 @@ public class OnlinePlayerTracker {
             Database.addPlayers(server.serverID, toAdd, now);
         }
         if (!toRemove.isEmpty()) {
-            System.out.println("TO REMOVE " + toRemove);
+            System.out.println("Players left: " + toRemove);
             Database.removePlayers(server.serverID, toRemove, now);
         }
         onlinePlayerSet = current;
