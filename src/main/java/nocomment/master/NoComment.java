@@ -8,7 +8,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 public class NoComment {
-    public static Executor executor = new LoggingExecutor(Executors.newCachedThreadPool());
+    public static Executor executor = new LoggingExecutor(Executors.newFixedThreadPool(64));
 
     public static void main(String[] args) throws IOException {
         Server.getServer("2b2t.org");
