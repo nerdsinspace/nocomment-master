@@ -77,6 +77,18 @@ public class SocketConnection extends Connection {
     protected void closeUnderlying() {
         try {
             sock.close();
-        } catch (Throwable th) {}
+        } catch (Throwable th) {
+            th.printStackTrace();
+        }
+        try {
+            sock.getInputStream().close();
+        } catch (Throwable th) {
+            th.printStackTrace();
+        }
+        try {
+            sock.getOutputStream().close();
+        } catch (Throwable th) {
+            th.printStackTrace();
+        }
     }
 }
