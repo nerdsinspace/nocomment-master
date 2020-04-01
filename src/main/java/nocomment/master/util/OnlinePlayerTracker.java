@@ -41,10 +41,12 @@ public class OnlinePlayerTracker {
         if (!toAdd.isEmpty()) {
             System.out.println("Players joined: " + toAdd);
 
-            Set<Long> trackIDs = Database.trackIDsToResume(toAdd, server); // have to do this on this thread, strictly before addPlayers ruins their last-leave times :)
-            trackIDs.removeIf(server.tracking::hasActiveFilter);
+            Set<Long> trackIDs = Database.trackIDsToResume(toAdd, server.serverID); // have to do this on this thread, strictly before addPlayers ruins their last-leave times :)
 
-            NoComment.executor.execute(() -> Database.resumeTracks(trackIDs).forEach(server.tracking::attemptResume));
+            NoComment.executor.execute(() -> {
+                trackIDs.removeIf(server.tracking::hasActiveFilter);
+                Database.resumeTracks(trackIDs).forEach(server.tracking::attemptResume);
+            });
 
             Database.addPlayers(server.serverID, toAdd, now);
         }

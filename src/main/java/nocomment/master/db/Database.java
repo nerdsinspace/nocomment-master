@@ -1,6 +1,5 @@
 package nocomment.master.db;
 
-import nocomment.master.Server;
 import nocomment.master.util.OnlinePlayer;
 import org.apache.commons.dbcp2.BasicDataSource;
 
@@ -251,7 +250,7 @@ public class Database {
         }
     }
 
-    public static Set<Long> trackIDsToResume(Collection<Integer> playerIDs, Server server) {
+    public static Set<Long> trackIDsToResume(Collection<Integer> playerIDs, int serverID) {
         try (Connection connection = pool.getConnection()) {
 
             Set<Long> logoutTimestamps = new HashSet<>(); // set because there will be many duplicates
@@ -259,7 +258,7 @@ public class Database {
             try (PreparedStatement stmt = connection.prepareStatement("SELECT MAX(UPPER(range)) FROM player_sessions WHERE player_id = ? AND server_id = ?")) {
                 for (int playerID : playerIDs) {
                     stmt.setInt(1, playerID);
-                    stmt.setInt(2, server.serverID);
+                    stmt.setInt(2, serverID);
                     try (ResultSet rs = stmt.executeQuery()) {
                         rs.next();
                         logoutTimestamps.add(rs.getLong(1));
@@ -273,7 +272,7 @@ public class Database {
                 for (long logoutTimestamp : logoutTimestamps) {
                     stmt.setLong(1, logoutTimestamp - 10_000);
                     stmt.setLong(2, logoutTimestamp + 10_000); // plus or minus 10 seconds
-                    stmt.setInt(3, server.serverID);
+                    stmt.setInt(3, serverID);
                     try (ResultSet rs = stmt.executeQuery()) {
                         while (rs.next()) {
                             trackIDsToResume.add(rs.getLong(1));
