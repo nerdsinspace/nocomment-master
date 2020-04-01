@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.PriorityQueue;
 
 public class World {
-    private static final int MAX_BURDEN = 400; // about a second
+    private static final int MAX_BURDEN = 1000; // about 2.3 seconds
     public final Server server;
     private final List<Connection> connections;
     private final PriorityQueue<Task> pendingTasks;
