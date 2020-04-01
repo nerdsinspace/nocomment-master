@@ -22,6 +22,7 @@ public class NoCommentServer {
             if (serverName.endsWith(":25565")) {
                 serverName = serverName.split(":25565")[0];
             }
+            serverName += "_temp_map_apr_1_2020";
             int dim = in.readInt();
             System.out.println("Connection! " + serverName + " " + dim);
             World world = Server.getServer(serverName).getWorld(dim);
