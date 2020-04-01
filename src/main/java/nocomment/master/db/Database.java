@@ -270,8 +270,8 @@ public class Database {
 
             try (PreparedStatement stmt = connection.prepareStatement("SELECT id FROM tracks WHERE updated_at >= ? AND updated_at <= ? AND server_id = ?")) {
                 for (long logoutTimestamp : logoutTimestamps) {
-                    stmt.setLong(1, logoutTimestamp - 10_000);
-                    stmt.setLong(2, logoutTimestamp + 10_000); // plus or minus 10 seconds
+                    stmt.setLong(1, logoutTimestamp - 60_000);
+                    stmt.setLong(2, logoutTimestamp + 60_000); // plus or minus 1 minute
                     stmt.setInt(3, serverID);
                     try (ResultSet rs = stmt.executeQuery()) {
                         while (rs.next()) {
