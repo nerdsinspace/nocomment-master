@@ -60,7 +60,11 @@ public class WorldTrackyTracky {
         }
     }
 
-    public synchronized void ingestGenericKnownHit(Hit hit, OptionalLong prevTrack) { // for example, from a highway scanner
+    public void ingestGenericNewHit(Hit hit) { // for example, from a highway scanner
+        ingestGenericKnownHit(hit, OptionalLong.empty());
+    }
+
+    public synchronized void ingestGenericKnownHit(Hit hit, OptionalLong prevTrack) {
         if (Math.abs(hit.pos.x) < 30 && Math.abs(hit.pos.z) < 30) {
             return;
         }
@@ -79,7 +83,7 @@ public class WorldTrackyTracky {
     public void ingestApprox(ChunkPos pos, OptionalLong prevTrack) { // for example, if tracking was lost in another dimension
         // 11 by 11 grid pattern, spacing of 7 between each one
         // so, 121 checks
-        // plus or minus 480 blocks (6*5*16) in any direction
+        // plus or minus 560 blocks (7*5*16) in any direction
         grid(10, 7, 5, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
     }
 

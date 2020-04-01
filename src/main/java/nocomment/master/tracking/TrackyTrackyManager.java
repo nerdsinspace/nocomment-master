@@ -28,23 +28,23 @@ public class TrackyTrackyManager {
     private void highways() {
         System.out.println("Nether:");
         // scan the entire highway network every four hours
-        new HighwayScanner(nether.world, 10001, 30_000_000 / 8, 14_400_000, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        new HighwayScanner(nether.world, 10001, 30_000_000 / 8, 14_400_000, nether::ingestGenericNewHit).submitTasks();
         // scan up to 250k (2m overworld) every 400 seconds (7 minutes ish)
-        new HighwayScanner(nether.world, 1000, 2_000_000 / 8, 400_000, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        new HighwayScanner(nether.world, 1000, 2_000_000 / 8, 400_000, nether::ingestGenericNewHit).submitTasks();
         // scan up to 25k (200k overworld) every 40 seconds
-        new HighwayScanner(nether.world, 100, 25_000, 40_000, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        new HighwayScanner(nether.world, 100, 25_000, 40_000, nether::ingestGenericNewHit).submitTasks();
         // scan the 2k ring road every 4 seconds
-        new RingScanner(nether.world, 99, 2000, 4_000, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        new RingScanner(nether.world, 99, 2000, 4_000, nether::ingestGenericNewHit).submitTasks();
         System.out.println("Overworld:");
         // scan up to 25k overworld every 40 seconds
-        new HighwayScanner(overworld.world, 100, 25_000, 40_000, hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        new HighwayScanner(overworld.world, 100, 25_000, 40_000, overworld::ingestGenericNewHit).submitTasks();
         // scan the 2k ring road every 4 seconds
-        new RingScanner(overworld.world, 99, 2000, 4_000, hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        new RingScanner(overworld.world, 99, 2000, 4_000, overworld::ingestGenericNewHit).submitTasks();
     }
 
     private void spiral() {
-        overworld.grid(10000, 9, 250, new ChunkPos(0, 0), hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty()));
-        nether.grid(10000, 9, 250, new ChunkPos(0, 0), hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty()));
+        overworld.grid(10000, 9, 250, new ChunkPos(0, 0), overworld::ingestGenericNewHit);
+        nether.grid(10000, 9, 250, new ChunkPos(0, 0), nether::ingestGenericNewHit);
     }
 
     private void lostTrackingInOverworld(Filter lost) {
