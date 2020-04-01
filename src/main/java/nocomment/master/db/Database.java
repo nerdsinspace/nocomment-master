@@ -22,6 +22,7 @@ public class Database {
         pool.setInitialSize(1);
         pool.setMaxTotal(50);
         System.out.println("Connected.");
+        Maintenance.scheduleMaintenance();
     }
 
     static void saveHit(Hit hit, CompletableFuture<Long> hitID) {
@@ -300,6 +301,24 @@ public class Database {
                 }
             }
             return ret;
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
+    static void vacuum() {
+        try (Connection connection = pool.getConnection(); PreparedStatement stmt = connection.prepareStatement("VACUUM ANALYZE")) {
+            stmt.execute();
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
+    static void reindex(String indexName) {
+        try (Connection connection = pool.getConnection(); PreparedStatement stmt = connection.prepareStatement("REINDEX INDEX CONCURRENTLY " + indexName)) {
+            stmt.execute();
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
