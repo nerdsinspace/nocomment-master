@@ -4,6 +4,7 @@ import nocomment.master.Server;
 import nocomment.master.db.TrackResume;
 import nocomment.master.util.ChunkPos;
 import nocomment.master.util.HighwayScanner;
+import nocomment.master.util.RingScanner;
 
 import java.util.OptionalLong;
 import java.util.concurrent.Executors;
@@ -22,13 +23,23 @@ public class TrackyTrackyManager {
         this.nether = new WorldTrackyTracky(server.getWorld(-1), this, this::lostTrackingInNether);
         highways();
         spiral();
-        //this.overworld.ingestApprox(new ChunkPos(-38, -70), OptionalLong.empty());
     }
 
     private void highways() {
+        System.out.println("Nether:");
+        // scan the entire highway network every four hours
+        new HighwayScanner(nether.world, 10001, 30_000_000 / 8, 14_400_000, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        // scan up to 250k (2m overworld) every 400 seconds (7 minutes ish)
         new HighwayScanner(nether.world, 1000, 2_000_000 / 8, 400_000, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        // scan up to 25k (200k overworld) every 40 seconds
         new HighwayScanner(nether.world, 100, 25_000, 40_000, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        // scan the 2k ring road every 4 seconds
+        new RingScanner(nether.world, 99, 2000, 4_000, hit -> nether.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        System.out.println("Overworld:");
+        // scan up to 25k overworld every 40 seconds
         new HighwayScanner(overworld.world, 100, 25_000, 40_000, hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
+        // scan the 2k ring road every 4 seconds
+        new RingScanner(overworld.world, 99, 2000, 4_000, hit -> overworld.ingestGenericKnownHit(hit, OptionalLong.empty())).submitTasks();
     }
 
     private void spiral() {
