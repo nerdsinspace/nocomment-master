@@ -37,7 +37,7 @@ public class WorldTrackyTracky {
             if (Math.abs(earlierHit.x) < 30 && Math.abs(earlierHit.z) < 30) {
                 System.out.println("Too close to spawn");
                 // too close to spawn and the permaloaded area
-                earlier.failed();
+                fail(earlier);
                 return;
             }
             for (Filter later : copy) {
@@ -47,16 +47,23 @@ public class WorldTrackyTracky {
                 if (earlierHit.distSq(later.getMostRecentHit()) < 6 * 6) {
                     if (earlier.includes(later.getMostRecentHit())) {
                         System.out.println("Too close to another filter");
-                        later.failed();
+                        fail(later);
                         return;
                     }
                     if (later.includes(earlierHit)) {
                         System.out.println("Too close to another filter");
-                        earlier.failed();
+                        fail(earlier);
                         return;
                     }
                 }
             }
+        }
+    }
+
+    private void fail(Filter filter) {
+        filter.failed(false);
+        synchronized (this) {
+            activeFilters.remove(filter);
         }
     }
 

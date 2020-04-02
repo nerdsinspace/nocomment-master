@@ -121,7 +121,7 @@ public class Filter {
             numGuesses += 7;
             iterationsWithoutHits++;
             if (iterationsWithoutHits >= 5) {
-                failed();
+                failed(true);
                 return;
             }
         } else {
@@ -134,7 +134,7 @@ public class Filter {
         hits.clear();
         List<ChunkPos> guesses = guessLocation(numGuesses);
         if (guesses.isEmpty()) {
-            failed();
+            failed(true);
             return;
         }
         //System.out.println("Guesses: " + guesses);
@@ -143,10 +143,12 @@ public class Filter {
         guesses.forEach(this::runCheck);
     }
 
-    public void failed() {
+    public void failed(boolean callUpwards) {
         System.out.println("Filter " + trackID + " has FAILED");
         updater.cancel(false);
-        NoComment.executor.execute(() -> context.filterFailure(this));
+        if (callUpwards) {
+            NoComment.executor.execute(() -> context.filterFailure(this));
+        }
         if (frame != null) {
             frame.dispose();
         }
