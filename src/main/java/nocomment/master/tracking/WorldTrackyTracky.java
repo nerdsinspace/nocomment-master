@@ -106,7 +106,7 @@ public class WorldTrackyTracky {
     }
 
     private void createCatchupTask(int priority, ChunkPos center, int directionX, int directionZ, int count, Consumer<Hit> onHit) {
-        world.submitTask(new TaskHelper(priority, center, directionX, directionZ, count, onHit, i -> {}));
+        world.submitTaskUnlessAlreadyPending(new TaskHelper(priority, center, directionX, directionZ, count, onHit, i -> {}));
     }
 
     public synchronized boolean hasActiveFilter(long trackID) {

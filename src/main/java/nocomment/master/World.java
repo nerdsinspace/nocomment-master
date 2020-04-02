@@ -1,6 +1,7 @@
 package nocomment.master;
 
 import nocomment.master.network.Connection;
+import nocomment.master.task.CombinedTask;
 import nocomment.master.task.Task;
 
 import java.util.ArrayList;
@@ -42,6 +43,18 @@ public class World {
         pendingTasks.add(task);
         worldUpdate();
         // don't server update per-task!
+    }
+
+    public synchronized void submitTaskUnlessAlreadyPending(Task task) {
+        for (Task dup : pendingTasks) {
+            if (dup.interchangable(task)) {
+                System.out.println("Already queued. Not adding duplicate task. Queue size is " + pendingTasks.size());
+                pendingTasks.remove(dup);
+                pendingTasks.add(new CombinedTask(task, dup));
+                return;
+            }
+        }
+        submitTask(task);
     }
 
     private synchronized void sendTasksOnConnections() {

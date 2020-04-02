@@ -40,4 +40,8 @@ public abstract class Task implements Comparable<Task> {
         }
         return Integer.compare(seq, t.seq);
     }
+
+    public boolean interchangable(Task other) {
+        return priority == other.priority && start.equals(other.start) && directionX == other.directionX && directionZ == other.directionZ && count == other.count;
+    }
 }
