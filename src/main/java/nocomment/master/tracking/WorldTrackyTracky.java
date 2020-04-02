@@ -24,7 +24,7 @@ public class WorldTrackyTracky {
         this.parent = parent;
         this.activeFilters = new ArrayList<>();
         this.onLost = onLost;
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pairwiseFilterCheck), 0, 5, TimeUnit.SECONDS);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pairwiseFilterCheck), 0, 1, TimeUnit.SECONDS);
     }
 
     public void pairwiseFilterCheck() {
