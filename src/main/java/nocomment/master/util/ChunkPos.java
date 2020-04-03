@@ -4,6 +4,9 @@ package nocomment.master.util;
  * You'll never guess where this was pasted from
  */
 public class ChunkPos {
+
+    public static final ChunkPos SPAWN = new ChunkPos(0, 0);
+
     /**
      * The X position of this Chunk Coordinate Pair
      */
@@ -42,9 +45,12 @@ public class ChunkPos {
         }
     }
 
-    public int distSq(ChunkPos other) {
-        int dx = this.x - other.x;
-        int dz = this.z - other.z;
+    public long distSq(ChunkPos other) {
+        // this could actually overflow int easily
+        // world border is 30_000_000/16 chunks, which is about 1.8 million
+        // square that? you'll overflow int!
+        long dx = this.x - other.x;
+        long dz = this.z - other.z;
         return dx * dx + dz * dz;
     }
 

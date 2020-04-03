@@ -180,9 +180,8 @@ public class Database {
                 stmt.setInt(1, playerID);
                 stmt.setInt(2, serverID);
                 stmt.setLong(3, now);
-                stmt.addBatch();
+                stmt.execute();
             }
-            stmt.executeBatch();
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
@@ -197,9 +196,8 @@ public class Database {
                 stmt.setLong(2, Long.MAX_VALUE - 1); // must be -1 since postgres ranges are exclusive on the upper end
                 stmt.setInt(3, playerID);
                 stmt.setInt(4, serverID);
-                stmt.addBatch();
+                stmt.executeUpdate();
             }
-            stmt.executeBatch();
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);

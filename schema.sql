@@ -37,6 +37,7 @@ CREATE TABLE player_sessions
                           INT8RANGE("join", "leave", '[]')
                       END
                   ) STORED,
+    legacy    BOOLEAN NOT NULL DEFAULT FALSE,
     EXCLUDE USING GiST (server_id WITH =, player_id WITH =, range WITH &&),
     FOREIGN KEY (player_id) REFERENCES players (id)
         ON UPDATE CASCADE ON DELETE CASCADE,
@@ -53,6 +54,7 @@ CREATE TABLE hits
     z          INTEGER NOT NULL,
     dimension  INTEGER NOT NULL,
     server_id  INTEGER NOT NULL,
+    legacy     BOOLEAN NOT NULL DEFAULT FALSE,
     -- NOTE: AN EXTRA COLUMN IS ADDED LATER. can't be added here due to cyclic references
 
     FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
@@ -72,6 +74,7 @@ CREATE TABLE tracks
     prev_track_id BIGINT,                -- for example, if this is an overworld track from the nether when we lost them, this would be the track id in the nether that ended
     dimension     INTEGER NOT NULL,
     server_id     INTEGER NOT NULL,
+    legacy        BOOLEAN NOT NULL DEFAULT FALSE,
 
     FOREIGN KEY (first_hit_id) REFERENCES hits (id)
         ON UPDATE CASCADE ON DELETE CASCADE,

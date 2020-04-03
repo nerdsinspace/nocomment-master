@@ -24,7 +24,7 @@ public class WorldTrackyTracky {
         this.parent = parent;
         this.activeFilters = new ArrayList<>();
         this.onLost = onLost;
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pairwiseFilterCheck), 0, 1, TimeUnit.SECONDS);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pairwiseFilterCheck), 0, 250, TimeUnit.MILLISECONDS);
     }
 
     public void pairwiseFilterCheck() {
@@ -44,7 +44,7 @@ public class WorldTrackyTracky {
                 if (earlier == later) {
                     continue;
                 }
-                if (earlierHit.distSq(later.getMostRecentHit()) < 6 * 6) {
+                if (earlierHit.distSq(later.getMostRecentHit()) < 6L * 6L) {
                     if (earlier.includes(later.getMostRecentHit())) {
                         System.out.println("Too close to another filter");
                         fail(later);
@@ -87,11 +87,20 @@ public class WorldTrackyTracky {
         filter.start();
     }
 
-    public void ingestApprox(ChunkPos pos, OptionalLong prevTrack) { // for example, if tracking was lost in another dimension
-        // 11 by 11 grid pattern, spacing of 7 between each one
-        // so, 121 checks
-        // plus or minus 560 blocks (7*5*16) in any direction
-        grid(10, 7, 5, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
+    public void ingestApprox(ChunkPos pos, OptionalLong prevTrack, boolean doWeCare) { // for example, if tracking was lost in another dimension
+        if (doWeCare) {
+            // 11 by 11 grid pattern, spacing of 7 between each one
+            // so, 121 checks
+            // plus or minus 560 blocks (7*5*16) in any direction
+            grid(10, 7, 5, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
+            // also, with slightly higher priority, hit the exact location (9 checks)
+            grid(9, 9, 1, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
+        } else {
+            // 3 by 3 grid pattern, we don't care all that much
+            // 9 checks
+            // plus or minus 144 blocks (9*1*16) in any direction
+            grid(11, 9, 1, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
+        }
     }
 
     public synchronized void filterFailure(Filter filter) {
@@ -99,7 +108,7 @@ public class WorldTrackyTracky {
         ChunkPos last = filter.getMostRecentHit();
         System.out.println("Filter failed. Last hit at " + last + " dimension " + world.dimension);
         onLost.accept(filter);
-        ingestApprox(last, OptionalLong.of(filter.getTrackID())); // one last hail mary
+        ingestApprox(last, OptionalLong.of(filter.getTrackID()), true); // one last hail mary
     }
 
     public void grid(int priority, int gridInterval, int gridRadius, ChunkPos center, Consumer<Hit> onHit) {

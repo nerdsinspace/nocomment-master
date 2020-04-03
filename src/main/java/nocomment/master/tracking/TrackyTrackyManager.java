@@ -48,11 +48,11 @@ public class TrackyTrackyManager {
     }
 
     private void lostTrackingInOverworld(Filter lost) {
-        nether.ingestApprox(new ChunkPos(lost.getMostRecentHit().x / 8, lost.getMostRecentHit().z / 8), OptionalLong.of(lost.getTrackID()));
+        nether.ingestApprox(new ChunkPos(lost.getMostRecentHit().x / 8, lost.getMostRecentHit().z / 8), OptionalLong.of(lost.getTrackID()), true);
     }
 
     private void lostTrackingInNether(Filter lost) {
-        overworld.ingestApprox(new ChunkPos(lost.getMostRecentHit().x * 8, lost.getMostRecentHit().z * 8), OptionalLong.of(lost.getTrackID()));
+        overworld.ingestApprox(new ChunkPos(lost.getMostRecentHit().x * 8, lost.getMostRecentHit().z * 8), OptionalLong.of(lost.getTrackID()), true);
     }
 
     public boolean hasActiveFilter(long trackID) {
@@ -61,18 +61,34 @@ public class TrackyTrackyManager {
 
     public void attemptResume(TrackResume resumeData) {
         System.out.println("Attempting to resume tracking at " + resumeData.pos + " in dimension " + resumeData.dimension + " in server " + server.hostname + " from track id " + resumeData.prevTrackID);
+        boolean interesting = trackInterestingEnoughToGridResume(resumeData);
         switch (resumeData.dimension) {
             case 0: {
-                overworld.ingestApprox(resumeData.pos, OptionalLong.of(resumeData.prevTrackID));
+                overworld.ingestApprox(resumeData.pos, OptionalLong.of(resumeData.prevTrackID), interesting);
                 break;
             }
             case -1: {
-                nether.ingestApprox(resumeData.pos, OptionalLong.of(resumeData.prevTrackID));
+                nether.ingestApprox(resumeData.pos, OptionalLong.of(resumeData.prevTrackID), interesting);
                 break;
             }
             default: {
                 System.out.println("We don't do that here " + resumeData.dimension);
             }
         }
+    }
+
+    private static boolean trackInterestingEnoughToGridResume(TrackResume resumeData) {
+        long spawnDistanceSq = resumeData.pos.distSq(ChunkPos.SPAWN);
+        // within 1600 blocks of spawn = within 100 chunks of spawn = we don't care
+        if (spawnDistanceSq <= 100 * 100) {
+            return false;
+        }
+        // within 3 chunks of an axis = highway scanner will get it again, not worth gridding prob
+        // unless they're more than 1000 chunks (16000 blocks) away, in which case we won't get to them all that quickly
+        int axisDistance = Math.min(Math.min(Math.abs(resumeData.pos.x), Math.abs(resumeData.pos.z)), Math.abs(Math.abs(resumeData.pos.x) - Math.abs(resumeData.pos.z)));
+        if (axisDistance <= 3 && spawnDistanceSq <= 1000 * 1000) {
+            return false;
+        }
+        return true;
     }
 }
