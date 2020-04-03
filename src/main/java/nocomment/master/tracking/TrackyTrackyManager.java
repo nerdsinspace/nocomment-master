@@ -60,8 +60,8 @@ public class TrackyTrackyManager {
     }
 
     public void attemptResume(TrackResume resumeData) {
-        System.out.println("Attempting to resume tracking at " + resumeData.pos + " in dimension " + resumeData.dimension + " in server " + server.hostname + " from track id " + resumeData.prevTrackID);
         boolean interesting = trackInterestingEnoughToGridResume(resumeData);
+        System.out.println("Attempting to resume tracking at " + resumeData.pos + " in dimension " + resumeData.dimension + " in server " + server.hostname + " from track id " + resumeData.prevTrackID + " interesting " + interesting);
         switch (resumeData.dimension) {
             case 0: {
                 overworld.ingestApprox(resumeData.pos, OptionalLong.of(resumeData.prevTrackID), interesting);
