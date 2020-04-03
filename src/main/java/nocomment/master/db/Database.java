@@ -19,7 +19,7 @@ public class Database {
         pool.setDriverClassName("org.postgresql.Driver");
         pool.setUrl("jdbc:postgresql://localhost:5432/nocom");
         pool.setInitialSize(1);
-        pool.setMaxTotal(50);
+        pool.setMaxTotal(75);
         System.out.println("Connected.");
         Maintenance.scheduleMaintenance();
     }
