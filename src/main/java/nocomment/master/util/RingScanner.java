@@ -49,7 +49,7 @@ public class RingScanner {
 
             @Override
             public void hitReceived(Hit hit) {
-                System.out.println("Ring scanner hit " + hit.pos);
+                System.out.println("Ring scanner hit " + hit.pos + " in dimension " + world.dimension);
                 onHit.accept(hit);
             }
 

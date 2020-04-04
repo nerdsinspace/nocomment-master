@@ -83,7 +83,7 @@ public class HighwayScanner {
 
             @Override
             public void hitReceived(Hit hit) {
-                System.out.println("Highway scanner hit " + hit.pos);
+                System.out.println("Highway scanner hit " + hit.pos + " in dimension " + world.dimension);
                 onHit.accept(hit);
             }
 
