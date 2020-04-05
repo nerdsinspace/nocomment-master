@@ -321,4 +321,8 @@ public class Database {
             throw new RuntimeException(ex);
         }
     }
+
+    public static Connection getConnection() throws SQLException {
+        return pool.getConnection();
+    }
 }

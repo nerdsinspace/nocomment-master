@@ -45,6 +45,7 @@ CREATE TABLE player_sessions
         ON UPDATE CASCADE ON DELETE CASCADE
 );
 CREATE INDEX player_sessions_range ON player_sessions USING GiST (server_id, range);
+CREATE INDEX player_sessions_by_leave ON player_sessions (server_id, player_id, UPPER(range));
 
 CREATE TABLE hits
 (
@@ -100,3 +101,38 @@ CREATE INDEX track_endings ON tracks (server_id, updated_at); -- to query what t
 ALTER TABLE tracks
     CLUSTER ON track_endings;
 CLUSTER tracks;
+
+CREATE TABLE dbscan
+(
+    id             INTEGER PRIMARY KEY,
+    cnt            INTEGER NOT NULL,
+    x              INTEGER NOT NULL,
+    z              INTEGER NOT NULL,
+    dimension      INTEGER NOT NULL,
+    server_id      INTEGER NOT NULL,
+    needs_update   BOOLEAN NOT NULL,
+    is_core        BOOLEAN NOT NULL,
+    cluster_parent INTEGER, -- nullable
+    disjoint_rank  INTEGER NOT NULL,
+
+    FOREIGN KEY (cluster_parent) REFERENCES dbscan (id)
+        ON UPDATE CASCADE ON DELETE SET NULL,
+    FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
+        ON UPDATE RESTRICT ON DELETE RESTRICT,
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX dbscan_cluster_roots ON dbscan (server_id, dimension, id) WHERE cluster_parent IS NULL AND is_core;
+CREATE UNIQUE INDEX dbscan_ingest ON dbscan (server_id, dimension, x, z);
+CREATE INDEX dbscan_process ON dbscan USING GiST (server_id, dimension, CIRCLE(POINT(x, z), 32)) WHERE cnt > 3;
+CREATE INDEX dbscan_to_update ON dbscan (needs_update) WHERE needs_update;
+CREATE INDEX dbscan_disjoint_traversal ON dbscan (cluster_parent) WHERE cluster_parent IS NOT NULL;
+
+CREATE TABLE dbscan_progress
+(
+    last_processed_hit_id BIGINT NOT NULL
+);
+
+INSERT INTO dbscan_progress(last_processed_hit_id)
+VALUES (0);

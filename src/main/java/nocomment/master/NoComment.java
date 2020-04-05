@@ -10,9 +10,13 @@ import java.util.concurrent.Executors;
 public class NoComment {
     public static Executor executor = new LoggingExecutor(Executors.newFixedThreadPool(48));
 
-    public static void main(String[] args) throws IOException {
+    public static void main1(String[] args) throws IOException {
         Server.getServer("2b2t.org");
         Server.getServer("constantiam.net");
         NoCommentServer.listen();
+    }
+
+    public static void main(String[] args){
+
     }
 }
