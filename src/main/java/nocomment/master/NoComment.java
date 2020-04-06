@@ -1,5 +1,6 @@
 package nocomment.master;
 
+import nocomment.master.clustering.Aggregator;
 import nocomment.master.network.NoCommentServer;
 import nocomment.master.util.LoggingExecutor;
 
@@ -16,7 +17,8 @@ public class NoComment {
         NoCommentServer.listen();
     }
 
-    public static void main(String[] args){
-
+    public static void main(String[] args) {
+        while (new Aggregator().aggregateHits()) ;
+        System.exit(0);
     }
 }

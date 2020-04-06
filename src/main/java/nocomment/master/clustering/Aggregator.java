@@ -45,9 +45,9 @@ public class Aggregator {
                 "                    AND ABS(ABS(x) - ABS(z)) > 100                                  " +
                 "                    AND x::BIGINT * x::BIGINT + z::BIGINT * z::BIGINT > 1000 * 1000 " +
                 "                ORDER BY id                                                         " +
-                "                LIMIT 10000                                                         " +
+                "                LIMIT 50000                                                         " +
                 "             ) tmp                                                                  " +
-                "         GROUP BY                                                                   " +
+                "        GROUP BY                                                                    " +
                 "            server_id, dimension, x, z                                              "
         )) {
             stmt.setLong(1, startID);
@@ -69,7 +69,7 @@ public class Aggregator {
         }
     }
 
-    public void aggregateHits() {
+    public boolean aggregateHits() {
         try (Connection connection = Database.getConnection()) {
             try {
                 connection.setAutoCommit(false);
@@ -80,11 +80,16 @@ public class Aggregator {
                     lastProcessedHitID = rs.getLong("last_processed_hit_id");
                 }
                 long maxHitIDProcessed = 0;
-                for (AggregatedHits aggr : queryAggregates(lastProcessedHitID, connection)) {
+                List<AggregatedHits> aggregated = queryAggregates(lastProcessedHitID, connection);
+                if (aggregated.isEmpty()) {
+                    return false;
+                }
+                for (int i = 0; i < aggregated.size(); i++) {
+                    AggregatedHits aggr = aggregated.get(i);
                     maxHitIDProcessed = Math.max(aggr.maxID, maxHitIDProcessed);
                     int syntheticCount = aggr.count;
                     if (aggr.anyLegacy) {
-                        syntheticCount += THRESHOLD;
+                        syntheticCount += THRESHOLD + 1; // bump it up to THRESHOLD+1 so that it's >THRESHOLD, not just >=
                     }
 
                     int prevCountInDB = 0;
@@ -100,6 +105,7 @@ public class Aggregator {
                         try (ResultSet rs = stmt.executeQuery()) {
                             if (rs.next()) {
                                 prevCountInDB = rs.getInt("cnt");
+                                syntheticCount += prevCountInDB;
                                 dbID = rs.getInt("id");
                                 dbIsCore = rs.getBoolean("is_core");
                                 wasInDB = true;
@@ -111,20 +117,26 @@ public class Aggregator {
 
                     boolean needsRangedUpdate = false;
                     if (!wasInDB) {
-                        try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO dbscan (cnt, server_id, dimenison, x, z, needs_update, is_core, cluster_parent, disjoint_rank) VALUES" +
-                                "                                                                          (?,   ?,         ?,         ?, ?, TRUE,         ?,       NULL,           0)")) {
-                            stmt.setInt(1, /*                                             */ syntheticCount);
-                            stmt.setInt(2, /*                                                   */ aggr.serverID);
-                            stmt.setInt(3, /*                                                              */ aggr.dimension);
-                            stmt.setInt(4, /*                                                                         */ aggr.x);
-                            stmt.setInt(5, /*                                                                            */ aggr.z);
-                            stmt.setBoolean(6, /*                                                                                         */ aggr.anyLegacy);
+                        try (PreparedStatement stmt = connection.prepareStatement("" +
+                                "INSERT INTO dbscan (cnt, server_id, dimension, x, z, needs_update, is_core, cluster_parent, disjoint_rank) VALUES" +
+                                "                   (?,   ?,         ?,         ?, ?, TRUE,         ?,       NULL,           0)")) {
+                            stmt.setInt(1, syntheticCount);
+                            stmt.setInt(2, aggr.serverID);
+                            stmt.setInt(3, aggr.dimension);
+                            stmt.setInt(4, aggr.x);
+                            stmt.setInt(5, aggr.z);
+                            stmt.setBoolean(6, aggr.anyLegacy);
                             stmt.execute();
                         }
                         needsRangedUpdate = true;
                     } else {
+                        // was in db
                         if (aggr.anyLegacy && !dbIsCore) {
                             needsRangedUpdate = true;
+                            try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET is_core = TRUE WHERE id = ?")) {
+                                stmt.setInt(1, dbID);
+                                stmt.execute();
+                            }
                         }
                         if (prevCountInDB <= THRESHOLD) { // if it's already >THRESHOLD, then there's nothing to do at all
                             try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET cnt = ? WHERE id = ?")) {
@@ -140,12 +152,17 @@ public class Aggregator {
                     if (needsRangedUpdate) { // NOTE: the ranged update will include the centered point itself!
                         DBSCAN.markForUpdateAllWithinRadius(aggr.serverID, aggr.dimension, aggr.x, aggr.z, connection);
                     }
+                    if (i % 250 == 0 || i == aggregated.size() - 1) {
+                        System.out.println("Processing aggregated hits " + i + " of " + aggregated.size());
+                        connection.commit();
+                    }
                 }
                 try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan_progress SET last_processed_hit_id = ?")) {
                     stmt.setLong(1, maxHitIDProcessed);
                     stmt.execute();
                 }
                 connection.commit();
+                return true;
             } catch (SQLException ex) {
                 connection.rollback();
                 throw ex;

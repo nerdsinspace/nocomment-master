@@ -104,7 +104,7 @@ CLUSTER tracks;
 
 CREATE TABLE dbscan
 (
-    id             INTEGER PRIMARY KEY,
+    id             SERIAL PRIMARY KEY,
     cnt            INTEGER NOT NULL,
     x              INTEGER NOT NULL,
     z              INTEGER NOT NULL,

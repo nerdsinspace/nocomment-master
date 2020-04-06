@@ -46,6 +46,9 @@ public class Database {
     }
 
     public static void clearSessions(int serverID) {
+        if (true) {
+            throw new IllegalStateException();
+        }
         long mostRecent = mostRecentEvent(serverID);
         long setLeaveTo = mostRecent + 1; // range inclusivity
         if (setLeaveTo >= System.currentTimeMillis()) {
@@ -259,12 +262,19 @@ public class Database {
                     stmt.setInt(2, serverID);
                     try (ResultSet rs = stmt.executeQuery()) {
                         rs.next();
-                        logoutTimestamps.add(rs.getLong(1));
+                        long time = rs.getLong(1);
+                        if (!rs.wasNull()) {
+                            logoutTimestamps.add(time);
+                        }
                     }
                 }
             }
 
             Set<Long> trackIDsToResume = new HashSet<>(); // set because there will be many duplicates
+
+            if (logoutTimestamps.isEmpty()) {
+                return trackIDsToResume;
+            }
 
             try (PreparedStatement stmt = connection.prepareStatement("SELECT id FROM tracks WHERE updated_at >= ? AND updated_at <= ? AND server_id = ?")) {
                 for (long logoutTimestamp : logoutTimestamps) {

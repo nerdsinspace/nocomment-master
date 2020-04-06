@@ -24,6 +24,8 @@ public class Server {
     public final TrackyTrackyManager tracking;
 
     private Server(String hostname) {
+        if (true)
+            throw new IllegalStateException();
         this.hostname = hostname;
         this.serverID = Database.idForServer(hostname);
         this.onlinePlayers = new OnlinePlayerTracker(this);
