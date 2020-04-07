@@ -13,6 +13,7 @@ enum Aggregator {
     INSTANCE;
     private static final int THRESHOLD = 3;
     private static final int MAX_COUNT = THRESHOLD + 1;
+    private static final boolean ENABLE_LEGACY_CORE_AUTOPROMOTION = false;
 
     private static class AggregatedHits {
         int serverID;
@@ -62,7 +63,7 @@ enum Aggregator {
                     aggr.x = rs.getInt("x");
                     aggr.z = rs.getInt("z");
                     aggr.count = rs.getInt("cnt");
-                    aggr.anyLegacy = rs.getBoolean("any_legacy");
+                    aggr.anyLegacy = rs.getBoolean("any_legacy") && ENABLE_LEGACY_CORE_AUTOPROMOTION;
                     aggr.maxID = rs.getLong("max_id");
                     ret.add(aggr);
                 }

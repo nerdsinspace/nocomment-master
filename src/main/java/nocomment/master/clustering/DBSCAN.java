@@ -21,7 +21,7 @@ public enum DBSCAN {
     }
 
     public synchronized void incrementalRun() {
-        //while (Aggregator.INSTANCE.aggregateHits()) ;
+        while (Aggregator.INSTANCE.aggregateHits()) ;
         try (Connection connection = Database.getConnection()) {
             try {
                 dbscan(connection);
@@ -189,6 +189,7 @@ public enum DBSCAN {
 
     public void dbscan(Connection connection) throws SQLException {
         connection.setAutoCommit(false);
+        int i = 0;
         while (true) {
             Datapoint point = getDatapoint(connection);
             if (point == null) {
@@ -198,6 +199,7 @@ public enum DBSCAN {
             if (!neighbors.contains(point)) {
                 throw new IllegalStateException();
             }
+            boolean commit = i++ % 250 == 0;
             if (neighbors.size() > MIN_PTS && !point.isCore) {
                 System.out.println("DBSCAN promoting " + point + " to core point");
                 try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET is_core = TRUE WHERE id = ?")) {
@@ -205,7 +207,9 @@ public enum DBSCAN {
                     stmt.execute();
                 }
                 point.isCore = true;
+                commit = true;
                 //markForUpdateAllWithinRadius(point.serverID, point.dimension, point.x, point.z, connection);
+                // TODO I REALLY thought that this ^ would be necessary, but it isn't. WHY?
             }
 
             if (point.isCore) {
@@ -231,9 +235,13 @@ public enum DBSCAN {
                     for (Datapoint remain : clustersToMerge) {
                         merging = merge(merging, remain, connection);
                     }
+                    commit = true;
                 }
             }
-            connection.commit();
+            if (commit) {
+                connection.commit();
+            }
         }
+        connection.commit();
     }
 }
