@@ -79,6 +79,7 @@ public enum DBSCAN {
             Datapoint root = directParent.root(connection);
             if (root.id != directParent.id) { // disjoint-set path compression
                 clusterParent = OptionalInt.of(root.id);
+                System.out.println("Updating my parent from " + directParent.id + " to " + root.id);
                 try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET cluster_parent = ? WHERE id = ?")) {
                     stmt.setInt(1, root.id);
                     stmt.setInt(2, id);
@@ -203,7 +204,7 @@ public enum DBSCAN {
             if (!neighbors.contains(point)) {
                 throw new IllegalStateException();
             }
-            commit = i++ % 250 == 0;
+            commit = i++ % 100 == 0;
             if (neighbors.size() > MIN_PTS && !point.isCore) {
                 System.out.println("DBSCAN promoting " + point + " to core point");
                 point.isCore = true;
@@ -219,19 +220,20 @@ public enum DBSCAN {
             if (point.isCore) {
                 // initial really fast sanity check
                 Set<Integer> chkParents = new HashSet<>();
-                for (Datapoint d : neighbors) {
-                    if (!d.assignedEdge()) {
-                        chkParents.add(d.directClusterParent());
+                for (Datapoint neighbor : neighbors) {
+                    if (!neighbor.assignedEdge()) {
+                        chkParents.add(neighbor.directClusterParent());
                     }
                 }
                 // if all direct parents are the same, then we're already all merged and happy
                 if (chkParents.size() > 1) { // otherwise we actually need to figure this shit out!
                     Set<Datapoint> clustersToMerge = new HashSet<>(); // dedupe on id
-                    for (Datapoint d : neighbors) {
-                        if (!d.assignedEdge()) {
-                            clustersToMerge.add(d.root(connection));
+                    for (Datapoint neighbor : neighbors) {
+                        if (!neighbor.assignedEdge()) {
+                            clustersToMerge.add(neighbor.root(connection));
                         }
                     }
+                    System.out.println("Clusters to merge: " + clustersToMerge);
                     Datapoint merging = point.root(connection);
                     if (!clustersToMerge.remove(merging)) {
                         throw new IllegalStateException();
