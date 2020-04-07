@@ -89,6 +89,12 @@ public enum DBSCAN {
                     stmt.setInt(2, id);
                     stmt.execute();
                 }
+                // my previous parent is therefore no longer as big as they used to be
+                try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET disjoint_size = disjoint_size - ? WHERE id = ?")) {
+                    stmt.setInt(1, disjointSize);
+                    stmt.setInt(2, directParentID);
+                    stmt.execute();
+                }
                 commit = true;
             }
             knownEventualRoots.put(this.id, root);
@@ -111,7 +117,7 @@ public enum DBSCAN {
 
         @Override
         public String toString() {
-            return "{x=" + x + " z=" + z + " server_id=" + serverID + " dimension=" + dimension + "}";
+            return "{x=" + x + " z=" + z + " server_id=" + serverID + " dimension=" + dimension + " size=" + disjointSize + " rank=" + disjointRank + " iscore=" + isCore + " isroot=" + !clusterParent.isPresent() + "}";
         }
     }
 
@@ -234,17 +240,13 @@ public enum DBSCAN {
                 if (chkParents.size() > 1) { // otherwise we actually need to figure this shit out!
                     Set<Datapoint> clustersToMerge = new HashSet<>(); // dedupe on id
                     Map<Integer, Datapoint> knownEventualRoots = new HashMap<>();
-                    long a = System.currentTimeMillis();
                     for (Datapoint neighbor : neighbors) {
                         if (!neighbor.assignedEdge()) {
                             clustersToMerge.add(neighbor.root(connection, knownEventualRoots));
                         }
                     }
                     Datapoint merging = point.root(connection, knownEventualRoots);
-                    long b = System.currentTimeMillis();
-                    System.out.println("Took " + (b - a) + "ms to fetch all cluster roots from a neighbor set of size " + neighbors.size());
                     System.out.println("Clusters to merge: " + clustersToMerge);
-
                     if (!clustersToMerge.remove(merging)) {
                         throw new IllegalStateException();
                     }
@@ -259,5 +261,6 @@ public enum DBSCAN {
             }
         }
         connection.commit();
+        System.out.println("DBSCAN merger committing");
     }
 }
