@@ -78,12 +78,12 @@ public enum DBSCAN {
             Datapoint directParent = getByID(connection, clusterParent.getAsInt());
             Datapoint root = directParent.root(connection);
             if (root.id != directParent.id) { // disjoint-set path compression
+                clusterParent = OptionalInt.of(root.id);
                 try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET cluster_parent = ? WHERE id = ?")) {
                     stmt.setInt(1, root.id);
                     stmt.setInt(2, id);
                     stmt.execute();
                 }
-                clusterParent = OptionalInt.of(root.id);
             }
             return root;
         }
@@ -169,6 +169,7 @@ public enum DBSCAN {
         System.out.println("Merging cluster " + yRoot + " into " + xRoot);
         // yRoot.disjointRank <= xRoot.disjointRank
         // so, merge yRoot into a new child of xRoot
+        yRoot.clusterParent = OptionalInt.of(xRoot.id);
         try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET cluster_parent = ? WHERE id = ?")) {
             stmt.setInt(1, xRoot.id);
             stmt.setInt(2, yRoot.id);
@@ -202,11 +203,11 @@ public enum DBSCAN {
             boolean commit = i++ % 250 == 0;
             if (neighbors.size() > MIN_PTS && !point.isCore) {
                 System.out.println("DBSCAN promoting " + point + " to core point");
+                point.isCore = true;
                 try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET is_core = TRUE WHERE id = ?")) {
                     stmt.setInt(1, point.id);
                     stmt.execute();
                 }
-                point.isCore = true;
                 commit = true;
                 //markForUpdateAllWithinRadius(point.serverID, point.dimension, point.x, point.z, connection);
                 // TODO I REALLY thought that this ^ would be necessary, but it isn't. WHY?

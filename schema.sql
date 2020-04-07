@@ -128,7 +128,7 @@ CREATE INDEX dbscan_cluster_roots ON dbscan (server_id, dimension, id) WHERE clu
 CREATE UNIQUE INDEX dbscan_ingest ON dbscan (server_id, dimension, x, z);
 CREATE INDEX dbscan_process ON dbscan USING GiST (server_id, dimension, CIRCLE(POINT(x, z), 32)) WHERE cnt > 3;
 CREATE INDEX dbscan_to_update ON dbscan (is_core, id) WHERE needs_update;
-CREATE INDEX dbscan_disjoint_traversal ON dbscan (id) WHERE cluster_parent IS NOT NULL;
+CREATE INDEX dbscan_disjoint_traversal ON dbscan (cluster_parent, id) WHERE cluster_parent IS NOT NULL;
 
 CREATE TABLE dbscan_progress
 (
