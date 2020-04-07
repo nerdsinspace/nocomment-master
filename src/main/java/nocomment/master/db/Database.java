@@ -1,5 +1,7 @@
 package nocomment.master.db;
 
+import nocomment.master.NoComment;
+import nocomment.master.clustering.DBSCAN;
 import nocomment.master.util.OnlinePlayer;
 import org.apache.commons.dbcp2.BasicDataSource;
 
@@ -20,8 +22,12 @@ public class Database {
         pool.setUrl("jdbc:postgresql://localhost:5432/nocom");
         pool.setInitialSize(1);
         pool.setMaxTotal(75);
+        pool.setAutoCommitOnReturn(true); // make absolutely sure
         System.out.println("Connected.");
-        Maintenance.scheduleMaintenance();
+        if (!NoComment.DRY_RUN) {
+            Maintenance.scheduleMaintenance();
+        }
+        DBSCAN.beginIncrementalDBSCANThread();
     }
 
     static void saveHit(Hit hit, CompletableFuture<Long> hitID) {
@@ -46,7 +52,7 @@ public class Database {
     }
 
     public static void clearSessions(int serverID) {
-        if (true) {
+        if (NoComment.DRY_RUN) {
             throw new IllegalStateException();
         }
         long mostRecent = mostRecentEvent(serverID);
@@ -232,20 +238,37 @@ public class Database {
     }
 
     public static void addHitToTrack(Hit hit, long trackID) {
+        long hitID;
+        try {
+            hitID = hit.getHitID().get(); // do NOT block on this with a connection
+        } catch (InterruptedException | ExecutionException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
         try (Connection connection = pool.getConnection()) {
-            long hitID = hit.getHitID().get();
-            try (PreparedStatement stmt = connection.prepareStatement("UPDATE hits SET track_id = ? WHERE id = ?")) {
-                stmt.setLong(1, trackID);
-                stmt.setLong(2, hitID);
-                stmt.execute();
+            try {
+                connection.setAutoCommit(false);
+                try (PreparedStatement stmt = connection.prepareStatement("UPDATE tracks SET last_hit_id = ?, updated_at = ? WHERE id = ?")) {
+                    stmt.setLong(1, hitID);
+                    stmt.setLong(2, hit.createdAt);
+                    stmt.setLong(3, trackID);
+                    stmt.executeUpdate();
+                }
+                try (PreparedStatement stmt = connection.prepareStatement("UPDATE hits SET track_id = ? WHERE id = ?")) {
+                    stmt.setLong(1, trackID);
+                    stmt.setLong(2, hitID);
+                    stmt.execute();
+                }
+                connection.commit();
+            } catch (SQLException ex) {
+                connection.rollback();
+                throw ex;
+            } catch (Throwable th) {
+                connection.rollback();
+                th.printStackTrace();
+                throw new RuntimeException(th);
             }
-            try (PreparedStatement stmt = connection.prepareStatement("UPDATE tracks SET last_hit_id = ?, updated_at = ? WHERE id = ?")) {
-                stmt.setLong(1, hitID);
-                stmt.setLong(2, hit.createdAt);
-                stmt.setLong(3, trackID);
-                stmt.executeUpdate();
-            }
-        } catch (SQLException | InterruptedException | ExecutionException ex) {
+        } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
         }

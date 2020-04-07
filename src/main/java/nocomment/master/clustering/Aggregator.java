@@ -9,8 +9,10 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Aggregator {
+enum Aggregator {
+    INSTANCE;
     private static final int THRESHOLD = 3;
+    private static final int MAX_COUNT = THRESHOLD + 1;
 
     private static class AggregatedHits {
         int serverID;
@@ -45,7 +47,7 @@ public class Aggregator {
                 "                    AND ABS(ABS(x) - ABS(z)) > 100                                  " +
                 "                    AND x::BIGINT * x::BIGINT + z::BIGINT * z::BIGINT > 1000 * 1000 " +
                 "                ORDER BY id                                                         " +
-                "                LIMIT 50000                                                         " +
+                "                LIMIT 1000                                                          " +
                 "             ) tmp                                                                  " +
                 "        GROUP BY                                                                    " +
                 "            server_id, dimension, x, z                                              "
@@ -70,6 +72,7 @@ public class Aggregator {
     }
 
     public boolean aggregateHits() {
+        System.out.println("DBSCAN aggregator triggered");
         try (Connection connection = Database.getConnection()) {
             try {
                 connection.setAutoCommit(false);
@@ -79,17 +82,28 @@ public class Aggregator {
                     rs.next();
                     lastProcessedHitID = rs.getLong("last_processed_hit_id");
                 }
+                long lastRealHitID;
+                try (PreparedStatement stmt = connection.prepareStatement("SELECT MAX(id) AS max_id FROM hits");
+                     ResultSet rs = stmt.executeQuery()) {
+                    rs.next();
+                    lastRealHitID = rs.getLong("max_id");
+                }
+                long lag = lastRealHitID - lastProcessedHitID;
+                if (lag < 1000) {
+                    System.out.println("DBSCAN aggregator not running, only " + lag + " hits behind real time");
+                    return false;
+                }
+                System.out.println("DBSCAN aggregator running " + lag + " hits behind real time");
                 long maxHitIDProcessed = 0;
                 List<AggregatedHits> aggregated = queryAggregates(lastProcessedHitID, connection);
                 if (aggregated.isEmpty()) {
                     return false;
                 }
-                for (int i = 0; i < aggregated.size(); i++) {
-                    AggregatedHits aggr = aggregated.get(i);
+                for (AggregatedHits aggr : aggregated) {
                     maxHitIDProcessed = Math.max(aggr.maxID, maxHitIDProcessed);
                     int syntheticCount = aggr.count;
                     if (aggr.anyLegacy) {
-                        syntheticCount += THRESHOLD + 1; // bump it up to THRESHOLD+1 so that it's >THRESHOLD, not just >=
+                        syntheticCount += MAX_COUNT;
                     }
 
                     int prevCountInDB = 0;
@@ -115,17 +129,20 @@ public class Aggregator {
                         }
                     }
 
+                    syntheticCount = Math.min(syntheticCount, MAX_COUNT); // clamp to at most 4
+
                     boolean needsRangedUpdate = false;
                     if (!wasInDB) {
                         try (PreparedStatement stmt = connection.prepareStatement("" +
-                                "INSERT INTO dbscan (cnt, server_id, dimension, x, z, needs_update, is_core, cluster_parent, disjoint_rank) VALUES" +
-                                "                   (?,   ?,         ?,         ?, ?, TRUE,         ?,       NULL,           0)")) {
+                                "INSERT INTO dbscan (cnt, server_id, dimension, x, z, needs_update, is_core, cluster_parent, disjoint_rank, disjoint_size) VALUES" +
+                                "                   (?,   ?,         ?,         ?, ?, ?,            ?,       NULL,           0,             1)")) {
                             stmt.setInt(1, syntheticCount);
                             stmt.setInt(2, aggr.serverID);
                             stmt.setInt(3, aggr.dimension);
                             stmt.setInt(4, aggr.x);
                             stmt.setInt(5, aggr.z);
-                            stmt.setBoolean(6, aggr.anyLegacy);
+                            stmt.setBoolean(6, syntheticCount > THRESHOLD || aggr.anyLegacy);
+                            stmt.setBoolean(7, aggr.anyLegacy);
                             stmt.execute();
                         }
                         needsRangedUpdate = true;
@@ -152,15 +169,12 @@ public class Aggregator {
                     if (needsRangedUpdate) { // NOTE: the ranged update will include the centered point itself!
                         DBSCAN.markForUpdateAllWithinRadius(aggr.serverID, aggr.dimension, aggr.x, aggr.z, connection);
                     }
-                    if (i % 250 == 0 || i == aggregated.size() - 1) {
-                        System.out.println("Processing aggregated hits " + i + " of " + aggregated.size());
-                        connection.commit();
-                    }
                 }
                 try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan_progress SET last_processed_hit_id = ?")) {
                     stmt.setLong(1, maxHitIDProcessed);
                     stmt.execute();
                 }
+                System.out.println("DBSCAN aggregator committing");
                 connection.commit();
                 return true;
             } catch (SQLException ex) {
@@ -170,8 +184,6 @@ public class Aggregator {
                 connection.rollback();
                 th.printStackTrace();
                 throw new RuntimeException(th);
-            } finally {
-                connection.setAutoCommit(true);
             }
         } catch (SQLException ex) {
             ex.printStackTrace();

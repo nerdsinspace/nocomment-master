@@ -114,6 +114,7 @@ CREATE TABLE dbscan
     is_core        BOOLEAN NOT NULL,
     cluster_parent INTEGER, -- nullable
     disjoint_rank  INTEGER NOT NULL,
+    disjoint_size  INTEGER NOT NULL,
 
     FOREIGN KEY (cluster_parent) REFERENCES dbscan (id)
         ON UPDATE CASCADE ON DELETE SET NULL,
@@ -123,10 +124,10 @@ CREATE TABLE dbscan
         ON UPDATE CASCADE ON DELETE CASCADE
 );
 
-CREATE INDEX dbscan_cluster_roots ON dbscan (server_id, dimension, id) WHERE cluster_parent IS NULL AND is_core;
+CREATE INDEX dbscan_cluster_roots ON dbscan (server_id, dimension, id) WHERE cluster_parent IS NULL AND disjoint_rank > 0; -- non-core points can be cluster cores just as much
 CREATE UNIQUE INDEX dbscan_ingest ON dbscan (server_id, dimension, x, z);
 CREATE INDEX dbscan_process ON dbscan USING GiST (server_id, dimension, CIRCLE(POINT(x, z), 32)) WHERE cnt > 3;
-CREATE INDEX dbscan_to_update ON dbscan (needs_update) WHERE needs_update;
+CREATE INDEX dbscan_to_update ON dbscan (is_core, id) WHERE needs_update;
 CREATE INDEX dbscan_disjoint_traversal ON dbscan (cluster_parent) WHERE cluster_parent IS NOT NULL;
 
 CREATE TABLE dbscan_progress
