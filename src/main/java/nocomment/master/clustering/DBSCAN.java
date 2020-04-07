@@ -39,7 +39,7 @@ public enum DBSCAN {
         }
     }
 
-    public static class Datapoint {
+    public class Datapoint {
         int id;
         int x;
         int z;
@@ -84,6 +84,7 @@ public enum DBSCAN {
                     stmt.setInt(2, id);
                     stmt.execute();
                 }
+                commit = true;
             }
             return root;
         }
@@ -111,7 +112,7 @@ public enum DBSCAN {
     private static final String DANK_CONDITION = "cnt > 3 AND server_id = ? AND dimension = ? AND CIRCLE(POINT(x, z), 32) @> CIRCLE(POINT(?, ?), 0)";
     private static final String COLS = "id, x, z, dimension, server_id, is_core, cluster_parent, disjoint_rank, disjoint_size";
 
-    private static Datapoint getByID(Connection connection, int id) throws SQLException {
+    private Datapoint getByID(Connection connection, int id) throws SQLException {
         try (PreparedStatement stmt = connection.prepareStatement("SELECT " + COLS + " FROM dbscan WHERE id = ?")) {
             stmt.setInt(1, id);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -188,7 +189,9 @@ public enum DBSCAN {
         return xRoot;
     }
 
-    public void dbscan(Connection connection) throws SQLException {
+    private boolean commit;
+
+    private void dbscan(Connection connection) throws SQLException {
         connection.setAutoCommit(false);
         int i = 0;
         while (true) {
@@ -200,7 +203,7 @@ public enum DBSCAN {
             if (!neighbors.contains(point)) {
                 throw new IllegalStateException();
             }
-            boolean commit = i++ % 250 == 0;
+            commit = i++ % 250 == 0;
             if (neighbors.size() > MIN_PTS && !point.isCore) {
                 System.out.println("DBSCAN promoting " + point + " to core point");
                 point.isCore = true;
