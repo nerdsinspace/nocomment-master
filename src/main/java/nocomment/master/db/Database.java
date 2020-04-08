@@ -23,6 +23,7 @@ public class Database {
         pool.setInitialSize(1);
         pool.setMaxTotal(75);
         pool.setAutoCommitOnReturn(true); // make absolutely sure
+        pool.setDefaultTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
         System.out.println("Connected.");
         if (!NoComment.DRY_RUN) {
             Maintenance.scheduleMaintenance();

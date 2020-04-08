@@ -6,7 +6,6 @@ import nocomment.master.db.Hit;
 import nocomment.master.task.Task;
 import nocomment.master.tracking.TrackyTrackyManager;
 
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -16,8 +15,6 @@ public class ClusterRetryScanner {
     private final Consumer<Hit> onHit;
     private final long rerunDelayMS;
     private final int volume;
-
-    private final LinkedBlockingQueue<ChunkPos> toChk;
 
     public ClusterRetryScanner(World world, int priority, int volume, long rerunDelayMS, Consumer<Hit> onHit) {
         System.out.println("Constructing cluster retry scanner with priority " + priority + " and rerun delay " + rerunDelayMS);
@@ -29,7 +26,6 @@ public class ClusterRetryScanner {
         if (rerunDelayMS <= 0) {
             throw new IllegalArgumentException();
         }
-        this.toChk = HitRetry.INSTANCE.getQueueFor(new HitRetry.ServerAndDimension(world.server.serverID, world.dimension));
     }
 
     public void submitTasks() {
@@ -39,10 +35,9 @@ public class ClusterRetryScanner {
     }
 
     private void submitTask() {
-        ChunkPos pos = toChk.poll();
+        ChunkPos pos = HitRetry.INSTANCE.clusterTraverse(world.server.serverID, world.dimension);
         if (pos == null) {
-            System.out.println("Chk is empty, rescheduling");
-            reschedule();
+            System.out.println("Cancelling cluster retry scanner since there are no clusters to retry!");
             return;
         }
         world.submitTask(new Task(priority, pos, 0, 0, 1) {

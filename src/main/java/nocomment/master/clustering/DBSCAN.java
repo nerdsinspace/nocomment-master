@@ -14,31 +14,28 @@ import java.util.concurrent.TimeUnit;
 public enum DBSCAN {
     INSTANCE;
     private static final int MIN_PTS = 200;
-    public static final Object DBSCAN_TRAVERSAL_LOCK = new Object();
 
     public void beginIncrementalDBSCANThread() {
         // schedule with fixed delay is Very Important, so that we get no overlaps
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::incrementalRun), 0, 30, TimeUnit.SECONDS);
     }
 
-    public void incrementalRun() {
+    private synchronized void incrementalRun() {
         while (Aggregator.INSTANCE.aggregateHits()) ;
-        synchronized (DBSCAN_TRAVERSAL_LOCK) {
-            try (Connection connection = Database.getConnection()) {
-                try {
-                    dbscan(connection);
-                } catch (SQLException ex) {
-                    connection.rollback();
-                    throw ex;
-                } catch (Throwable th) {
-                    connection.rollback();
-                    th.printStackTrace();
-                    throw new RuntimeException(th);
-                }
+        try (Connection connection = Database.getConnection()) {
+            try {
+                dbscan(connection);
             } catch (SQLException ex) {
-                ex.printStackTrace();
-                throw new RuntimeException(ex);
+                connection.rollback();
+                throw ex;
+            } catch (Throwable th) {
+                connection.rollback();
+                th.printStackTrace();
+                throw new RuntimeException(th);
             }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
         }
     }
 
@@ -210,14 +207,23 @@ public enum DBSCAN {
         connection.setAutoCommit(false);
         int i = 0;
         while (true) {
+            long c = System.currentTimeMillis();
             Datapoint point = getDatapoint(connection);
+            long d = System.currentTimeMillis();
+            if (d - c > 5)
+                System.out.println("Took " + (d - c) + "ms to get a point");
             if (point == null) {
                 break;
             }
+            long a = System.currentTimeMillis();
             List<Datapoint> neighbors = getWithinRange(point, connection); // IMPORTANT: THIS INCLUDES THE POINT ITSELF!
+            long b = System.currentTimeMillis();
+            if (b - a > 30)
+                System.out.println("Took " + (b - a) + "ms to get " + neighbors.size() + " neighbors");
             if (!neighbors.contains(point)) {
                 throw new IllegalStateException();
             }
+            long e = System.currentTimeMillis();
             commit = i++ % 100 == 0;
             if (neighbors.size() > MIN_PTS && !point.isCore) {
                 System.out.println("DBSCAN promoting " + point + " to core point");
@@ -259,6 +265,9 @@ public enum DBSCAN {
                     commit = true;
                 }
             }
+            long f = System.currentTimeMillis();
+            if (f - e > 5)
+                System.out.println("Took " + (f - e) + "ms to do all the other shit");
             if (commit) {
                 connection.commit();
             }
