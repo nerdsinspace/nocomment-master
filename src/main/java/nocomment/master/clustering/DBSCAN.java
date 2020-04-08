@@ -23,16 +23,7 @@ public enum DBSCAN {
     private synchronized void incrementalRun() {
         while (Aggregator.INSTANCE.aggregateHits()) ;
         try (Connection connection = Database.getConnection()) {
-            try {
-                dbscan(connection);
-            } catch (SQLException ex) {
-                connection.rollback();
-                throw ex;
-            } catch (Throwable th) {
-                connection.rollback();
-                th.printStackTrace();
-                throw new RuntimeException(th);
-            }
+            dbscan(connection);
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);

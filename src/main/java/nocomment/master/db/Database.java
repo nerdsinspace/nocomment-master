@@ -24,6 +24,7 @@ public class Database {
         pool.setMaxTotal(75);
         pool.setAutoCommitOnReturn(true); // make absolutely sure
         pool.setDefaultTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        pool.setRollbackOnReturn(true);
         System.out.println("Connected.");
         if (!NoComment.DRY_RUN) {
             Maintenance.scheduleMaintenance();
@@ -247,28 +248,19 @@ public class Database {
             throw new RuntimeException(ex);
         }
         try (Connection connection = pool.getConnection()) {
-            try {
-                connection.setAutoCommit(false);
-                try (PreparedStatement stmt = connection.prepareStatement("UPDATE tracks SET last_hit_id = ?, updated_at = ? WHERE id = ?")) {
-                    stmt.setLong(1, hitID);
-                    stmt.setLong(2, hit.createdAt);
-                    stmt.setLong(3, trackID);
-                    stmt.executeUpdate();
-                }
-                try (PreparedStatement stmt = connection.prepareStatement("UPDATE hits SET track_id = ? WHERE id = ?")) {
-                    stmt.setLong(1, trackID);
-                    stmt.setLong(2, hitID);
-                    stmt.execute();
-                }
-                connection.commit();
-            } catch (SQLException ex) {
-                connection.rollback();
-                throw ex;
-            } catch (Throwable th) {
-                connection.rollback();
-                th.printStackTrace();
-                throw new RuntimeException(th);
+            connection.setAutoCommit(false);
+            try (PreparedStatement stmt = connection.prepareStatement("UPDATE tracks SET last_hit_id = ?, updated_at = ? WHERE id = ?")) {
+                stmt.setLong(1, hitID);
+                stmt.setLong(2, hit.createdAt);
+                stmt.setLong(3, trackID);
+                stmt.executeUpdate();
             }
+            try (PreparedStatement stmt = connection.prepareStatement("UPDATE hits SET track_id = ? WHERE id = ?")) {
+                stmt.setLong(1, trackID);
+                stmt.setLong(2, hitID);
+                stmt.execute();
+            }
+            connection.commit();
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
