@@ -72,7 +72,7 @@ enum Aggregator {
         }
     }
 
-    public boolean aggregateHits() {
+    synchronized boolean aggregateHits() {
         System.out.println("DBSCAN aggregator triggered");
         try (Connection connection = Database.getConnection()) {
             try {

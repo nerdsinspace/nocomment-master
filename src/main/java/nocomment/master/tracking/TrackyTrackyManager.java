@@ -3,6 +3,7 @@ package nocomment.master.tracking;
 import nocomment.master.Server;
 import nocomment.master.db.TrackResume;
 import nocomment.master.util.ChunkPos;
+import nocomment.master.util.ClusterRetryScanner;
 import nocomment.master.util.HighwayScanner;
 import nocomment.master.util.RingScanner;
 
@@ -40,6 +41,8 @@ public class TrackyTrackyManager {
         new HighwayScanner(overworld.world, 100, 25_000, 40_000, overworld::ingestGenericNewHit).submitTasks();
         // scan the 2k ring road every 4 seconds
         new RingScanner(overworld.world, 99, 2000, 4_000, overworld::ingestGenericNewHit).submitTasks();
+
+        new ClusterRetryScanner(overworld.world, 50, 5, 1000, overworld::ingestGenericNewHit).submitTasks();
     }
 
     private void spiral() {

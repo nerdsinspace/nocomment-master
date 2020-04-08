@@ -15,6 +15,12 @@ public class Maintenance {
         scheduleReindex("player_sessions_range");
         scheduleReindex("player_sessions_by_leave");
         scheduleReindex("player_sessions_server_id_player_id_range_excl");
+        scheduleReindex("dbscan_pkey");
+        scheduleReindex("dbscan_cluster_roots");
+        scheduleReindex("dbscan_ingest");
+        scheduleReindex("dbscan_process");
+        scheduleReindex("dbscan_to_update");
+        scheduleReindex("dbscan_disjoint_traversal");
     }
 
     private static void scheduleReindex(String indexName) {

@@ -26,8 +26,8 @@ public class Database {
         System.out.println("Connected.");
         if (!NoComment.DRY_RUN) {
             Maintenance.scheduleMaintenance();
+            DBSCAN.INSTANCE.beginIncrementalDBSCANThread();
         }
-        DBSCAN.beginIncrementalDBSCANThread();
     }
 
     static void saveHit(Hit hit, CompletableFuture<Long> hitID) {

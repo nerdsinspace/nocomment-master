@@ -14,28 +14,31 @@ import java.util.concurrent.TimeUnit;
 public enum DBSCAN {
     INSTANCE;
     private static final int MIN_PTS = 200;
+    public static final Object DBSCAN_TRAVERSAL_LOCK = new Object();
 
-    public static void beginIncrementalDBSCANThread() {
+    public void beginIncrementalDBSCANThread() {
         // schedule with fixed delay is Very Important, so that we get no overlaps
-        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(INSTANCE::incrementalRun), 0, 10, TimeUnit.SECONDS);
+        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::incrementalRun), 0, 30, TimeUnit.SECONDS);
     }
 
-    public synchronized void incrementalRun() {
+    public void incrementalRun() {
         while (Aggregator.INSTANCE.aggregateHits()) ;
-        try (Connection connection = Database.getConnection()) {
-            try {
-                dbscan(connection);
+        synchronized (DBSCAN_TRAVERSAL_LOCK) {
+            try (Connection connection = Database.getConnection()) {
+                try {
+                    dbscan(connection);
+                } catch (SQLException ex) {
+                    connection.rollback();
+                    throw ex;
+                } catch (Throwable th) {
+                    connection.rollback();
+                    th.printStackTrace();
+                    throw new RuntimeException(th);
+                }
             } catch (SQLException ex) {
-                connection.rollback();
-                throw ex;
-            } catch (Throwable th) {
-                connection.rollback();
-                th.printStackTrace();
-                throw new RuntimeException(th);
+                ex.printStackTrace();
+                throw new RuntimeException(ex);
             }
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            throw new RuntimeException(ex);
         }
     }
 
