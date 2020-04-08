@@ -23,4 +23,9 @@ public class CombinedTask extends Task {
         childA.completed();
         childB.completed();
     }
+
+    @Override
+    public boolean isCanceled() {
+        return childA.isCanceled() && childB.isCanceled();
+    }
 }

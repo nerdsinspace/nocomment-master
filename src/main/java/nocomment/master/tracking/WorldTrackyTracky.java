@@ -3,6 +3,7 @@ package nocomment.master.tracking;
 
 import nocomment.master.World;
 import nocomment.master.db.Hit;
+import nocomment.master.task.Task;
 import nocomment.master.task.TaskHelper;
 import nocomment.master.util.ChunkPos;
 import nocomment.master.util.LoggingExecutor;
@@ -92,9 +93,14 @@ public class WorldTrackyTracky {
             // 11 by 11 grid pattern, spacing of 7 between each one
             // so, 121 checks
             // plus or minus 560 blocks (7*5*16) in any direction
-            grid(10, 7, 5, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
+            List<Task> largerGrid = grid(10, 7, 5, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
             // also, with slightly higher priority, hit the exact location (9 checks)
-            grid(9, 9, 1, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
+            grid(9, 9, 1, pos, hit -> {
+                // if we get a hit in the center 9 checks, then cancel the other 121 checks
+                largerGrid.forEach(Task::cancel);
+
+                ingestGenericKnownHit(hit, prevTrack);
+            });
         } else {
             // 3 by 3 grid pattern, we don't care all that much
             // 9 checks
@@ -111,18 +117,20 @@ public class WorldTrackyTracky {
         ingestApprox(last, OptionalLong.of(filter.getTrackID()), true); // one last hail mary
     }
 
-    public void grid(int priority, int gridInterval, int gridRadius, ChunkPos center, Consumer<Hit> onHit) {
+    public List<Task> grid(int priority, int gridInterval, int gridRadius, ChunkPos center, Consumer<Hit> onHit) {
+        List<Task> tasks = new ArrayList<>();
         for (int x = 0; x <= gridRadius; x++) {
-            createCatchupTask(priority, center.add(-x * gridInterval, -gridRadius * gridInterval), 0, gridInterval, 2 * gridRadius + 1, onHit);
+            tasks.add(createCatchupTask(priority, center.add(-x * gridInterval, -gridRadius * gridInterval), 0, gridInterval, 2 * gridRadius + 1, onHit));
             if (x == 0) {
                 continue;
             }
-            createCatchupTask(priority, center.add(x * gridInterval, -gridRadius * gridInterval), 0, gridInterval, 2 * gridRadius + 1, onHit);
+            tasks.add(createCatchupTask(priority, center.add(x * gridInterval, -gridRadius * gridInterval), 0, gridInterval, 2 * gridRadius + 1, onHit));
         }
+        return tasks;
     }
 
-    private void createCatchupTask(int priority, ChunkPos center, int directionX, int directionZ, int count, Consumer<Hit> onHit) {
-        world.submitTaskUnlessAlreadyPending(new TaskHelper(priority, center, directionX, directionZ, count, onHit, i -> {}));
+    private Task createCatchupTask(int priority, ChunkPos center, int directionX, int directionZ, int count, Consumer<Hit> onHit) {
+        return world.submitTaskUnlessAlreadyPending(new TaskHelper(priority, center, directionX, directionZ, count, onHit, i -> {}));
     }
 
     public synchronized boolean hasActiveFilter(long trackID) {

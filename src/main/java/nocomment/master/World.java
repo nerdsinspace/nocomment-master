@@ -45,16 +45,17 @@ public class World {
         // don't server update per-task!
     }
 
-    public synchronized void submitTaskUnlessAlreadyPending(Task task) {
+    public synchronized Task submitTaskUnlessAlreadyPending(Task task) {
         for (Task dup : pendingTasks) {
             if (dup.interchangable(task)) {
                 System.out.println("Already queued. Not adding duplicate task. Queue size is " + pendingTasks.size());
                 pendingTasks.remove(dup);
                 pendingTasks.add(new CombinedTask(task, dup));
-                return;
+                return task;
             }
         }
         submitTask(task);
+        return task;
     }
 
     private synchronized void sendTasksOnConnections() {
@@ -63,6 +64,10 @@ public class World {
         }
         while (!pendingTasks.isEmpty()) {
             Task task = pendingTasks.peek();
+            if (task.isCanceled()) {
+                pendingTasks.poll();
+                continue;
+            }
             // create a map from a connection to the number of checks that connection still has to run through before it could get to this task in question
             Connection min = connections.get(0);
             int burden = min.sumHigherPriority(task.priority);

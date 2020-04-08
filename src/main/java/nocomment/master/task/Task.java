@@ -12,6 +12,8 @@ public abstract class Task implements Comparable<Task> {
     public final int directionZ;
     public final int count;
 
+    private boolean canceled;
+
     private static final AtomicInteger globalSeq = new AtomicInteger();
     private final int seq = globalSeq.incrementAndGet();
 
@@ -43,5 +45,13 @@ public abstract class Task implements Comparable<Task> {
 
     public boolean interchangable(Task other) {
         return priority == other.priority && start.equals(other.start) && directionX == other.directionX && directionZ == other.directionZ && count == other.count;
+    }
+
+    public void cancel() {
+        canceled = true;
+    }
+
+    public boolean isCanceled() {
+        return canceled;
     }
 }
