@@ -17,9 +17,9 @@ public class Server {
     }
 
     public final String hostname;
-    public final int serverID;
+    public final short serverID;
 
-    private final Map<Integer, World> worlds = new HashMap<>();
+    private final Map<Short, World> worlds = new HashMap<>();
     private final OnlinePlayerTracker onlinePlayers;
     public final TrackyTrackyManager tracking;
 
@@ -34,7 +34,7 @@ public class Server {
         System.out.println("Constructed server " + hostname + " ID " + serverID);
     }
 
-    public synchronized World getWorld(int dimension) {
+    public synchronized World getWorld(short dimension) {
         return worlds.computeIfAbsent(dimension, d -> new World(this, d));
     }
 

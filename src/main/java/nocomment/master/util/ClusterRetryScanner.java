@@ -30,8 +30,12 @@ public class ClusterRetryScanner {
 
     public void submitTasks() {
         for (int i = 0; i < volume; i++) {
-            submitTask();
+            schedule(); // don't run the cluster traversal algorithm on the "main" thread for this connection, blocking server construction
         }
+    }
+
+    private void schedule() {
+        TrackyTrackyManager.scheduler.schedule(LoggingExecutor.wrap(this::submitTask), rerunDelayMS, TimeUnit.MILLISECONDS);
     }
 
     private void submitTask() {
@@ -49,12 +53,8 @@ public class ClusterRetryScanner {
 
             @Override
             public void completed() {
-                reschedule();
+                schedule();
             }
         });
-    }
-
-    private void reschedule() {
-        TrackyTrackyManager.scheduler.schedule(LoggingExecutor.wrap(this::submitTask), rerunDelayMS, TimeUnit.MILLISECONDS);
     }
 }

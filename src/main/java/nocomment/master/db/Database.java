@@ -39,8 +39,8 @@ public class Database {
             stmt.setLong(1, hit.createdAt);
             stmt.setInt(2, hit.pos.x);
             stmt.setInt(3, hit.pos.z);
-            stmt.setInt(4, hit.dimension);
-            stmt.setInt(5, hit.serverID);
+            stmt.setShort(4, hit.dimension);
+            stmt.setShort(5, hit.serverID);
             try (ResultSet rs = stmt.executeQuery()) {
                 rs.next();
                 id = rs.getLong("id");
@@ -53,7 +53,7 @@ public class Database {
         hitID.complete(id); // only complete the future outside the try, when the connection is closed and the statement is committed!
     }
 
-    public static void clearSessions(int serverID) {
+    public static void clearSessions(short serverID) {
         if (NoComment.DRY_RUN) {
             throw new IllegalStateException();
         }
@@ -68,7 +68,7 @@ public class Database {
              PreparedStatement stmt = connection.prepareStatement("UPDATE player_sessions SET leave = ? WHERE range @> ? AND server_id = ?")) {
             stmt.setLong(1, setLeaveTo);
             stmt.setLong(2, Long.MAX_VALUE - 1); // must be -1 since postgres ranges are exclusive on the upper end
-            stmt.setInt(3, serverID);
+            stmt.setShort(3, serverID);
             stmt.executeUpdate();
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -76,11 +76,11 @@ public class Database {
         }
     }
 
-    private static long mostRecentEvent(int serverID) {
+    private static long mostRecentEvent(short serverID) {
         try (Connection connection = pool.getConnection()) {
             long mostRecent;
             try (PreparedStatement stmt = connection.prepareStatement("SELECT MAX(created_at) FROM hits WHERE server_id = ?")) {
-                stmt.setInt(1, serverID);
+                stmt.setShort(1, serverID);
                 try (ResultSet rs = stmt.executeQuery()) {
                     rs.next();
                     mostRecent = rs.getLong(1);
@@ -88,7 +88,7 @@ public class Database {
             }
             try (PreparedStatement stmt = connection.prepareStatement("SELECT MAX(\"join\") FROM player_sessions WHERE range @> ? AND server_id = ?")) {
                 stmt.setLong(1, Long.MAX_VALUE - 1); // must be -1 since postgres ranges are exclusive on the upper end
-                stmt.setInt(2, serverID);
+                stmt.setShort(2, serverID);
                 try (ResultSet rs = stmt.executeQuery()) {
                     rs.next();
                     mostRecent = Math.max(mostRecent, rs.getLong(1));
@@ -149,15 +149,15 @@ public class Database {
         }
     }
 
-    private static OptionalInt idForExistingServer(String hostname) {
+    private static Optional<Short> idForExistingServer(String hostname) {
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT id FROM servers WHERE hostname = ?")) {
             stmt.setString(1, hostname);
             try (ResultSet existing = stmt.executeQuery()) {
                 if (existing.next()) {
-                    return OptionalInt.of(existing.getInt("id"));
+                    return Optional.of(existing.getShort("id"));
                 } else {
-                    return OptionalInt.empty();
+                    return Optional.empty();
                 }
             }
         } catch (SQLException ex) {
@@ -166,30 +166,30 @@ public class Database {
         }
     }
 
-    public static int idForServer(String hostname) {
-        OptionalInt existing = idForExistingServer(hostname);
+    public static short idForServer(String hostname) {
+        Optional<Short> existing = idForExistingServer(hostname);
         if (existing.isPresent()) {
-            return existing.getAsInt();
+            return existing.get();
         }
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("INSERT INTO servers (hostname) VALUES (?) RETURNING id")) {
             stmt.setString(1, hostname);
             try (ResultSet rs = stmt.executeQuery()) {
                 rs.next();
-                return rs.getInt("id");
+                return rs.getShort("id");
             }
         } catch (SQLException ex) {
             ex.printStackTrace(); // two threads ask for same server for the first time, at same time
-            return idForExistingServer(hostname).getAsInt();
+            return idForExistingServer(hostname).get();
         }
     }
 
-    public static void addPlayers(int serverID, Collection<Integer> playerIDs, long now) {
+    public static void addPlayers(short serverID, Collection<Integer> playerIDs, long now) {
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("INSERT INTO player_sessions (player_id, server_id, \"join\", leave) VALUES (?, ?, ?, NULL)")) {
             for (int playerID : playerIDs) {
                 stmt.setInt(1, playerID);
-                stmt.setInt(2, serverID);
+                stmt.setShort(2, serverID);
                 stmt.setLong(3, now);
                 stmt.execute();
             }
@@ -199,14 +199,14 @@ public class Database {
         }
     }
 
-    public static void removePlayers(int serverID, Collection<Integer> playerIDs, long now) {
+    public static void removePlayers(short serverID, Collection<Integer> playerIDs, long now) {
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("UPDATE player_sessions SET leave = ? WHERE range @> ? AND player_id = ? AND server_id = ?")) {
             for (int playerID : playerIDs) {
                 stmt.setLong(1, now);
                 stmt.setLong(2, Long.MAX_VALUE - 1); // must be -1 since postgres ranges are exclusive on the upper end
                 stmt.setInt(3, playerID);
-                stmt.setInt(4, serverID);
+                stmt.setShort(4, serverID);
                 stmt.executeUpdate();
             }
         } catch (SQLException ex) {
@@ -227,8 +227,8 @@ public class Database {
             } else {
                 stmt.setNull(4, Types.BIGINT);
             }
-            stmt.setInt(5, initialHit.dimension);
-            stmt.setInt(6, initialHit.serverID);
+            stmt.setShort(5, initialHit.dimension);
+            stmt.setShort(6, initialHit.serverID);
             try (ResultSet rs = stmt.executeQuery()) {
                 rs.next();
                 return rs.getLong("id");
@@ -267,7 +267,7 @@ public class Database {
         }
     }
 
-    public static Set<Long> trackIDsToResume(Collection<Integer> playerIDs, int serverID) {
+    public static Set<Long> trackIDsToResume(Collection<Integer> playerIDs, short serverID) {
         try (Connection connection = pool.getConnection()) {
 
             Set<Long> logoutTimestamps = new HashSet<>(); // set because there will be many duplicates
@@ -275,7 +275,7 @@ public class Database {
             try (PreparedStatement stmt = connection.prepareStatement("SELECT MAX(UPPER(range)) FROM player_sessions WHERE player_id = ? AND server_id = ?")) {
                 for (int playerID : playerIDs) {
                     stmt.setInt(1, playerID);
-                    stmt.setInt(2, serverID);
+                    stmt.setShort(2, serverID);
                     try (ResultSet rs = stmt.executeQuery()) {
                         rs.next();
                         long time = rs.getLong(1);
@@ -296,7 +296,7 @@ public class Database {
                 for (long logoutTimestamp : logoutTimestamps) {
                     stmt.setLong(1, logoutTimestamp - 60_000);
                     stmt.setLong(2, logoutTimestamp + 60_000); // plus or minus 1 minute
-                    stmt.setInt(3, serverID);
+                    stmt.setShort(3, serverID);
                     try (ResultSet rs = stmt.executeQuery()) {
                         while (rs.next()) {
                             trackIDsToResume.add(rs.getLong(1));
@@ -320,7 +320,7 @@ public class Database {
                 stmt.setLong(1, trackID);
                 try (ResultSet rs = stmt.executeQuery()) {
                     rs.next();
-                    ret.add(new TrackResume(rs.getInt("x"), rs.getInt("z"), rs.getInt("dimension"), trackID));
+                    ret.add(new TrackResume(rs.getInt("x"), rs.getInt("z"), rs.getShort("dimension"), trackID));
                 }
             }
             return ret;

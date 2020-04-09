@@ -20,8 +20,8 @@ public class TrackyTrackyManager {
 
     public TrackyTrackyManager(Server server) {
         this.server = server;
-        this.overworld = new WorldTrackyTracky(server.getWorld(0), this, this::lostTrackingInOverworld);
-        this.nether = new WorldTrackyTracky(server.getWorld(-1), this, this::lostTrackingInNether);
+        this.overworld = new WorldTrackyTracky(server.getWorld((short) 0), this, this::lostTrackingInOverworld);
+        this.nether = new WorldTrackyTracky(server.getWorld((short) -1), this, this::lostTrackingInNether);
         highways();
         spiral();
     }

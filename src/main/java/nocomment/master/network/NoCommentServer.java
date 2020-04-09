@@ -24,7 +24,7 @@ public class NoCommentServer {
             }
             int dim = in.readInt();
             System.out.println("Connection! " + serverName + " " + dim);
-            World world = Server.getServer(serverName).getWorld(dim);
+            World world = Server.getServer(serverName).getWorld((short) dim);
             world.incomingConnection(new SocketConnection(world, s));
         } catch (IOException ex) {
         }

@@ -16,8 +16,8 @@ enum Aggregator {
     private static final boolean ENABLE_LEGACY_CORE_AUTOPROMOTION = false;
 
     private static class AggregatedHits {
-        int serverID;
-        int dimension;
+        short serverID;
+        short dimension;
         int x;
         int z;
         int count;
@@ -58,8 +58,8 @@ enum Aggregator {
                 List<AggregatedHits> ret = new ArrayList<>();
                 while (rs.next()) {
                     AggregatedHits aggr = new AggregatedHits();
-                    aggr.serverID = rs.getInt("server_id");
-                    aggr.dimension = rs.getInt("dimension");
+                    aggr.serverID = rs.getShort("server_id");
+                    aggr.dimension = rs.getShort("dimension");
                     aggr.x = rs.getInt("x");
                     aggr.z = rs.getInt("z");
                     aggr.count = rs.getInt("cnt");
@@ -112,8 +112,8 @@ enum Aggregator {
                 boolean dbIsCore = false;
 
                 try (PreparedStatement stmt = connection.prepareStatement("SELECT cnt, id, is_core FROM dbscan WHERE server_id = ? AND dimension = ? AND x = ? AND z = ?")) {
-                    stmt.setInt(1, aggr.serverID);
-                    stmt.setInt(2, aggr.dimension);
+                    stmt.setShort(1, aggr.serverID);
+                    stmt.setShort(2, aggr.dimension);
                     stmt.setInt(3, aggr.x);
                     stmt.setInt(4, aggr.z);
                     try (ResultSet rs = stmt.executeQuery()) {
@@ -137,8 +137,8 @@ enum Aggregator {
                             "INSERT INTO dbscan (cnt, server_id, dimension, x, z, needs_update, is_core, cluster_parent, disjoint_rank, disjoint_size) VALUES" +
                             "                   (?,   ?,         ?,         ?, ?, ?,            ?,       NULL,           0,             1)")) {
                         stmt.setInt(1, syntheticCount);
-                        stmt.setInt(2, aggr.serverID);
-                        stmt.setInt(3, aggr.dimension);
+                        stmt.setShort(2, aggr.serverID);
+                        stmt.setShort(3, aggr.dimension);
                         stmt.setInt(4, aggr.x);
                         stmt.setInt(5, aggr.z);
                         stmt.setBoolean(6, syntheticCount > THRESHOLD || aggr.anyLegacy);

@@ -38,10 +38,10 @@ public enum HitRetry {
         }
     }
 
-    private DisjointTraversalCursor pickClusterRoot(Connection connection, int serverID, int dimension) throws SQLException {
+    private DisjointTraversalCursor pickClusterRoot(Connection connection, short serverID, short dimension) throws SQLException {
         try (PreparedStatement stmt = connection.prepareStatement("SELECT id, disjoint_size FROM dbscan WHERE cluster_parent IS NULL AND disjoint_rank > 0 AND server_id = ? AND dimension = ? ORDER BY RANDOM() LIMIT 1")) {
-            stmt.setInt(1, serverID);
-            stmt.setInt(2, dimension);
+            stmt.setShort(1, serverID);
+            stmt.setShort(2, dimension);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     return new DisjointTraversalCursor(rs);
@@ -61,9 +61,10 @@ public enum HitRetry {
         return traverseRandomly(connection, src.fetchNthChild(connection, index), rand);
     }
 
-    public ChunkPos clusterTraverse(int serverID, int dimension) {
+    public ChunkPos clusterTraverse(short serverID, short dimension) {
         try (Connection connection = Database.getConnection()) {
             connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ); // :elmo:
+            connection.setAutoCommit(false);
             DisjointTraversalCursor root = pickClusterRoot(connection, serverID, dimension);
             if (root == null) {
                 return null;

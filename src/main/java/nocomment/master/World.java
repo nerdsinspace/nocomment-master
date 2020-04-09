@@ -14,9 +14,9 @@ public class World {
     public final Server server;
     private final List<Connection> connections;
     private final PriorityQueue<Task> pendingTasks;
-    public final int dimension;
+    public final short dimension;
 
-    public World(Server server, int dimension) {
+    public World(Server server, short dimension) {
         this.server = server;
         this.connections = new ArrayList<>();
         this.pendingTasks = new PriorityQueue<>();

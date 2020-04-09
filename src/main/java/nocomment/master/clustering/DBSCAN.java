@@ -34,8 +34,8 @@ public enum DBSCAN {
         int id;
         int x;
         int z;
-        int dimension;
-        int serverID;
+        short dimension;
+        short serverID;
         boolean isCore;
         OptionalInt clusterParent;
         int disjointRank;
@@ -45,8 +45,8 @@ public enum DBSCAN {
             this.id = rs.getInt("id");
             this.x = rs.getInt("x");
             this.z = rs.getInt("z");
-            this.dimension = rs.getInt("dimension");
-            this.serverID = rs.getInt("server_id");
+            this.dimension = rs.getShort("dimension");
+            this.serverID = rs.getShort("server_id");
             this.isCore = rs.getBoolean("is_core");
             int parent = rs.getInt("cluster_parent");
             if (rs.wasNull()) {
@@ -125,10 +125,10 @@ public enum DBSCAN {
         }
     }
 
-    public static void markForUpdateAllWithinRadius(int serverID, int dimension, int x, int z, Connection connection) throws SQLException {
+    public static void markForUpdateAllWithinRadius(short serverID, short dimension, int x, int z, Connection connection) throws SQLException {
         try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET needs_update = TRUE WHERE " + DANK_CONDITION)) {
-            stmt.setInt(1, serverID);
-            stmt.setInt(2, dimension);
+            stmt.setShort(1, serverID);
+            stmt.setShort(2, dimension);
             stmt.setInt(3, x);
             stmt.setInt(4, z);
             stmt.execute();
@@ -151,8 +151,8 @@ public enum DBSCAN {
 
     private List<Datapoint> getWithinRange(Datapoint source, Connection connection) throws SQLException {
         try (PreparedStatement stmt = connection.prepareStatement("SELECT " + COLS + " FROM dbscan WHERE " + DANK_CONDITION)) {
-            stmt.setInt(1, source.serverID);
-            stmt.setInt(2, source.dimension);
+            stmt.setShort(1, source.serverID);
+            stmt.setShort(2, source.dimension);
             stmt.setInt(3, source.x);
             stmt.setInt(4, source.z);
             try (ResultSet rs = stmt.executeQuery()) {

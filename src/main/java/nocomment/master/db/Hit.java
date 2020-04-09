@@ -9,8 +9,8 @@ import java.util.concurrent.Future;
 
 public class Hit {
     public final ChunkPos pos;
-    public final int serverID;
-    public final int dimension;
+    public final short serverID;
+    public final short dimension;
     public final long createdAt;
     private Future<Long> hitID;
 

@@ -1,12 +1,12 @@
 CREATE TABLE servers
 (
-    id       SERIAL PRIMARY KEY,
+    id       SMALLINT PRIMARY KEY, -- NOTE: this is serial, but there is no datatype for SMALLINT SERIAL. so i "made my own" by creating a serial then altering its type to smallint lol
     hostname TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE dimensions
 (
-    ordinal INTEGER PRIMARY KEY,
+    ordinal SMALLINT PRIMARY KEY,
     name    TEXT NOT NULL UNIQUE
 );
 
@@ -25,9 +25,9 @@ CREATE TABLE players
 CREATE EXTENSION btree_gist;
 CREATE TABLE player_sessions
 (
-    player_id INTEGER NOT NULL,
-    server_id INTEGER NOT NULL,
-    "join"    BIGINT  NOT NULL,
+    player_id INTEGER  NOT NULL,
+    server_id SMALLINT NOT NULL,
+    "join"    BIGINT   NOT NULL,
     "leave"   BIGINT,
     range     INT8RANGE GENERATED ALWAYS AS (
                   CASE
@@ -37,8 +37,8 @@ CREATE TABLE player_sessions
                           INT8RANGE("join", "leave", '[]')
                       END
                   ) STORED,
-    legacy    BOOLEAN NOT NULL DEFAULT FALSE,
-    EXCLUDE USING GiST (server_id WITH =, player_id WITH =, range WITH &&),
+    legacy    BOOLEAN  NOT NULL DEFAULT FALSE,
+
     FOREIGN KEY (player_id) REFERENCES players (id)
         ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (server_id) REFERENCES servers (id)
@@ -50,12 +50,12 @@ CREATE INDEX player_sessions_by_leave ON player_sessions (server_id, player_id, 
 CREATE TABLE hits
 (
     id         BIGSERIAL PRIMARY KEY, -- this could VERY PLAUSIBLY hit 2^31. downright likely
-    created_at BIGINT  NOT NULL,
-    x          INTEGER NOT NULL,
-    z          INTEGER NOT NULL,
-    dimension  INTEGER NOT NULL,
-    server_id  INTEGER NOT NULL,
-    legacy     BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at BIGINT   NOT NULL,
+    x          INTEGER  NOT NULL,
+    z          INTEGER  NOT NULL,
+    dimension  SMALLINT NOT NULL,
+    server_id  SMALLINT NOT NULL,
+    legacy     BOOLEAN  NOT NULL DEFAULT FALSE,
     -- NOTE: AN EXTRA COLUMN IS ADDED LATER. can't be added here due to cyclic references
 
     FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
@@ -68,14 +68,14 @@ CREATE INDEX hits_time_and_place ON hits (server_id, created_at, dimension); -- 
 
 CREATE TABLE tracks
 (
-    id            BIGSERIAL PRIMARY KEY, -- this hitting 2^32 is but a faint possibility, but might as well make it a long
-    first_hit_id  BIGINT  NOT NULL,
-    last_hit_id   BIGINT  NOT NULL,      -- most recent
-    updated_at    BIGINT  NOT NULL,      -- this is a duplicate of the created_at in last_hit_id for indexing purposes
-    prev_track_id BIGINT,                -- for example, if this is an overworld track from the nether when we lost them, this would be the track id in the nether that ended
-    dimension     INTEGER NOT NULL,
-    server_id     INTEGER NOT NULL,
-    legacy        BOOLEAN NOT NULL DEFAULT FALSE,
+    id            SERIAL PRIMARY KEY, -- this hitting 2^32 is but a faint possibility, but might as well make it a long
+    first_hit_id  BIGINT   NOT NULL,
+    last_hit_id   BIGINT   NOT NULL,  -- most recent
+    updated_at    BIGINT   NOT NULL,  -- this is a duplicate of the created_at in last_hit_id for indexing purposes
+    prev_track_id INTEGER,            -- for example, if this is an overworld track from the nether when we lost them, this would be the track id in the nether that ended
+    dimension     SMALLINT NOT NULL,
+    server_id     SMALLINT NOT NULL,
+    legacy        BOOLEAN  NOT NULL DEFAULT FALSE,
 
     FOREIGN KEY (first_hit_id) REFERENCES hits (id)
         ON UPDATE CASCADE ON DELETE CASCADE,
@@ -91,7 +91,7 @@ CREATE TABLE tracks
 
 ALTER TABLE hits
     ADD COLUMN
-        track_id BIGINT -- nullable
+        track_id INTEGER -- nullable
             REFERENCES tracks (id)
                 ON UPDATE CASCADE ON DELETE SET NULL;
 
@@ -105,16 +105,16 @@ CLUSTER tracks;
 CREATE TABLE dbscan
 (
     id             SERIAL PRIMARY KEY,
-    cnt            INTEGER NOT NULL,
-    x              INTEGER NOT NULL,
-    z              INTEGER NOT NULL,
-    dimension      INTEGER NOT NULL,
-    server_id      INTEGER NOT NULL,
-    needs_update   BOOLEAN NOT NULL,
-    is_core        BOOLEAN NOT NULL,
+    cnt            INTEGER  NOT NULL,
+    x              INTEGER  NOT NULL,
+    z              INTEGER  NOT NULL,
+    dimension      SMALLINT NOT NULL,
+    server_id      SMALLINT NOT NULL,
+    needs_update   BOOLEAN  NOT NULL,
+    is_core        BOOLEAN  NOT NULL,
     cluster_parent INTEGER, -- nullable
-    disjoint_rank  INTEGER NOT NULL,
-    disjoint_size  INTEGER NOT NULL,
+    disjoint_rank  INTEGER  NOT NULL,
+    disjoint_size  INTEGER  NOT NULL,
 
     FOREIGN KEY (cluster_parent) REFERENCES dbscan (id)
         ON UPDATE CASCADE ON DELETE SET NULL,
