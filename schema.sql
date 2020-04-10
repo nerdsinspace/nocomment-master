@@ -39,6 +39,15 @@ CREATE TABLE player_sessions
                   ) STORED,
     legacy    BOOLEAN  NOT NULL DEFAULT FALSE,
 
+    -- there USED to be a really based
+
+    -- EXCLUDE USING GiST (server_id WITH =, player_id WITH =, range WITH &&),
+
+    -- right here, but sadly it takes WAY TOO LONG to generate and keep up to date
+    -- talking over an hour to recreate it after I dropped it :(
+    -- also the server guarantees this anyway so
+    -- also it took multiple gigabytes of disk
+
     FOREIGN KEY (player_id) REFERENCES players (id)
         ON UPDATE CASCADE ON DELETE CASCADE,
     FOREIGN KEY (server_id) REFERENCES servers (id)
@@ -64,15 +73,16 @@ CREATE TABLE hits
         ON UPDATE CASCADE ON DELETE CASCADE
 );
 
-CREATE INDEX hits_time_and_place ON hits (server_id, created_at, dimension); -- yes, this ordering is intentional, no, dimension shouldn't be before created_at
+CREATE INDEX hits_by_time ON hits (created_at);
+CREATE INDEX hits_by_time_non_2b ON hits (created_at) WHERE server_id != 1; -- this index is tiny (200 kilobytes) but prevents the server from hanging if you accidentally log into constantiam or something lol
 
 CREATE TABLE tracks
 (
-    id            SERIAL PRIMARY KEY, -- this hitting 2^32 is but a faint possibility, but might as well make it a long
+    id            SERIAL PRIMARY KEY,
     first_hit_id  BIGINT   NOT NULL,
-    last_hit_id   BIGINT   NOT NULL,  -- most recent
-    updated_at    BIGINT   NOT NULL,  -- this is a duplicate of the created_at in last_hit_id for indexing purposes
-    prev_track_id INTEGER,            -- for example, if this is an overworld track from the nether when we lost them, this would be the track id in the nether that ended
+    last_hit_id   BIGINT   NOT NULL, -- most recent
+    updated_at    BIGINT   NOT NULL, -- this is a duplicate of the created_at in last_hit_id for indexing purposes
+    prev_track_id INTEGER,           -- for example, if this is an overworld track from the nether when we lost them, this would be the track id in the nether that ended
     dimension     SMALLINT NOT NULL,
     server_id     SMALLINT NOT NULL,
     legacy        BOOLEAN  NOT NULL DEFAULT FALSE,
@@ -95,7 +105,7 @@ ALTER TABLE hits
             REFERENCES tracks (id)
                 ON UPDATE CASCADE ON DELETE SET NULL;
 
-CREATE INDEX hits_tracks ON hits (track_id);
+CREATE INDEX hits_by_track_id ON hits (track_id) WHERE track_id IS NOT NULL;
 
 CREATE INDEX track_endings ON tracks (server_id, updated_at); -- to query what tracks ended in a server at a particular time
 ALTER TABLE tracks

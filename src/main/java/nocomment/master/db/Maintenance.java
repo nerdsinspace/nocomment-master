@@ -7,8 +7,9 @@ import java.util.concurrent.TimeUnit;
 public class Maintenance {
     static void scheduleMaintenance() {
         onceADay(Database::vacuum, "vacuum");
-        scheduleReindex("hits_time_and_place");
-        scheduleReindex("hits_tracks");
+        scheduleReindex("hits_by_time");
+        scheduleReindex("hits_by_time_non_2b");
+        scheduleReindex("hits_by_track_id");
         scheduleReindex("hits_pkey");
         scheduleReindex("tracks_pkey");
         scheduleReindex("track_endings");
