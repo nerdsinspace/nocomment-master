@@ -62,16 +62,13 @@ public enum DBSCAN {
             return !isCore && clusterParent.isPresent();
         }
 
-        public Datapoint root(Connection connection, Map<Integer, Datapoint> knownEventualRoots) throws SQLException {
+        public Datapoint root(Connection connection, Map<Integer, Datapoint> cache) throws SQLException {
             if (!clusterParent.isPresent()) {
-                knownEventualRoots.put(this.id, this);
                 return this;
             }
             int directParentID = clusterParent.getAsInt();
-            Datapoint root = knownEventualRoots.get(directParentID);
-            if (root == null) {
-                root = getByID(connection, directParentID).root(connection, knownEventualRoots);
-            }
+            Datapoint directParent = getByID(connection, directParentID, cache);
+            Datapoint root = directParent.root(connection, cache);
             if (root.id != directParentID) { // disjoint-set path compression runs even if we could cache the eventual root!
                 clusterParent = OptionalInt.of(root.id);
                 System.out.println("Updating my parent from " + directParentID + " to " + root.id);
@@ -81,14 +78,14 @@ public enum DBSCAN {
                     stmt.execute();
                 }
                 // my previous parent is therefore no longer as big as they used to be
-                try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET disjoint_size = disjoint_size - ? WHERE id = ?")) {
-                    stmt.setInt(1, disjointSize);
+                directParent.disjointSize -= this.disjointSize;
+                try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET disjoint_size = ? WHERE id = ?")) {
+                    stmt.setInt(1, directParent.disjointSize);
                     stmt.setInt(2, directParentID);
                     stmt.execute();
                 }
                 commit = true;
             }
-            knownEventualRoots.put(this.id, root);
             return root;
         }
 
@@ -115,12 +112,17 @@ public enum DBSCAN {
     private static final String DANK_CONDITION = "cnt > 3 AND server_id = ? AND dimension = ? AND CIRCLE(POINT(x, z), 32) @> CIRCLE(POINT(?, ?), 0)";
     private static final String COLS = "id, x, z, dimension, server_id, is_core, cluster_parent, disjoint_rank, disjoint_size";
 
-    private Datapoint getByID(Connection connection, int id) throws SQLException {
+    private Datapoint getByID(Connection connection, int id, Map<Integer, Datapoint> cache) throws SQLException {
+        if (cache.containsKey(id)) {
+            return cache.get(id);
+        }
         try (PreparedStatement stmt = connection.prepareStatement("SELECT " + COLS + " FROM dbscan WHERE id = ?")) {
             stmt.setInt(1, id);
             try (ResultSet rs = stmt.executeQuery()) {
                 rs.next();
-                return new Datapoint(rs);
+                Datapoint ret = new Datapoint(rs);
+                cache.put(id, ret);
+                return ret;
             }
         }
     }
@@ -239,13 +241,17 @@ public enum DBSCAN {
                 // if all direct parents are the same, then we're already all merged and happy
                 if (chkParents.size() > 1) { // otherwise we actually need to figure this shit out!
                     Set<Datapoint> clustersToMerge = new HashSet<>(); // dedupe on id
-                    Map<Integer, Datapoint> knownEventualRoots = new HashMap<>();
+                    Map<Integer, Datapoint> cache = new HashMap<>();
+                    // neighbors will all have distinct IDs
+                    for (Datapoint neighbor : neighbors) {
+                        cache.put(neighbor.id, neighbor);
+                    }
                     for (Datapoint neighbor : neighbors) {
                         if (!neighbor.assignedEdge()) {
-                            clustersToMerge.add(neighbor.root(connection, knownEventualRoots));
+                            clustersToMerge.add(neighbor.root(connection, cache));
                         }
                     }
-                    Datapoint merging = point.root(connection, knownEventualRoots);
+                    Datapoint merging = point.root(connection, cache);
                     System.out.println("Clusters to merge: " + clustersToMerge);
                     if (!clustersToMerge.remove(merging)) {
                         throw new IllegalStateException();
