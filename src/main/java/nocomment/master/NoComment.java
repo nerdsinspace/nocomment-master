@@ -1,5 +1,6 @@
 package nocomment.master;
 
+import nocomment.master.db.Database;
 import nocomment.master.network.NoCommentServer;
 import nocomment.master.util.LoggingExecutor;
 
@@ -12,6 +13,7 @@ public class NoComment {
 
     public static void main(String[] args) throws Exception {
         if (!DRY_RUN) {
+            new Database();
             NoCommentServer.listen();
         }
     }
