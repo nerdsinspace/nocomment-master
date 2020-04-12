@@ -13,7 +13,7 @@ public class Maintenance {
         scheduleReindex("hits_pkey");
         scheduleReindex("tracks_pkey");
         scheduleReindex("track_endings");
-        scheduleReindex("player_sessions_range");
+        //scheduleReindex("player_sessions_range");
         scheduleReindex("player_sessions_by_leave");
         scheduleReindex("dbscan_pkey");
         scheduleReindex("dbscan_cluster_roots");

@@ -242,6 +242,8 @@ public enum DBSCAN {
                 if (chkParents.size() > 1) { // otherwise we actually need to figure this shit out!
                     Set<Datapoint> clustersToMerge = new HashSet<>(); // dedupe on id
                     Map<Integer, Datapoint> cache = new HashMap<>();
+                    neighbors.remove(point);
+                    neighbors.add(point); // fix duplicate entry (two different Datapoint objects for the same id)
                     // neighbors will all have distinct IDs
                     for (Datapoint neighbor : neighbors) {
                         cache.put(neighbor.id, neighbor);
@@ -251,7 +253,7 @@ public enum DBSCAN {
                             clustersToMerge.add(neighbor.root(connection, cache));
                         }
                     }
-                    Datapoint merging = point.root(connection, cache);
+                    Datapoint merging = point.root(connection, cache); // point is guaranteed to be in neighbors now
                     System.out.println("Clusters to merge: " + clustersToMerge);
                     if (!clustersToMerge.remove(merging)) {
                         throw new IllegalStateException();

@@ -48,7 +48,7 @@ enum Aggregator {
                 "                    AND ABS(ABS(x) - ABS(z)) > 100                                  " +
                 "                    AND x::BIGINT * x::BIGINT + z::BIGINT * z::BIGINT > 1000 * 1000 " +
                 "                ORDER BY id                                                         " +
-                "                LIMIT 1000                                                          " +
+                "                LIMIT 10000                                                         " +
                 "             ) tmp                                                                  " +
                 "        GROUP BY                                                                    " +
                 "            server_id, dimension, x, z                                              "
