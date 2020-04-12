@@ -91,4 +91,9 @@ public class SocketConnection extends Connection {
             th.printStackTrace();
         }
     }
+
+    @Override
+    public String toString() {
+        return super.toString() + ", underlying socket " + sock;
+    }
 }

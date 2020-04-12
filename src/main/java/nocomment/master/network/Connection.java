@@ -141,4 +141,9 @@ public abstract class Connection {
      * Never throw exception
      */
     protected abstract void closeUnderlying();
+
+    @Override
+    public String toString() {
+        return tasks.size() + " tasks, " + taskIDSeq + " task ID, " + onlinePlayerSet.size() + " online players reported, " + (System.currentTimeMillis() - mostRecentRead) + "ms since most recent read";
+    }
 }
