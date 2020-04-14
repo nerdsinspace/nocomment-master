@@ -30,6 +30,7 @@ public class Filter {
     private ScheduledFuture<?> updater;
 
     private int iterationsWithoutHits;
+    private int iterationsWithoutAnything;
 
     private List<ChunkPos> hits = new ArrayList<>();
     private List<ChunkPos> misses = new ArrayList<>();
@@ -98,8 +99,14 @@ public class Filter {
         if (hits.isEmpty() && misses.isEmpty()) {
             System.out.println("Maybe offline");
             // maybe we're offline
+            if (iterationsWithoutAnything++ > 120) {
+                System.out.println("Offine for 120 seconds, killing filter");
+                // the bot itself going offline then coming back online will resume the paused filters
+                failed(true);
+            }
             return;
         }
+        iterationsWithoutAnything = 0;
         int numGuesses = 3;
         boolean failed = hits.isEmpty();
         if (failed) {

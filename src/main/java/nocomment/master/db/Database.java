@@ -249,7 +249,7 @@ public class Database {
         }
         try (Connection connection = pool.getConnection()) {
             connection.setAutoCommit(false);
-            try (PreparedStatement stmt = connection.prepareStatement("UPDATE tracks SET last_hit_id = ?, updated_at = ? WHERE id = ?")) {
+            try (PreparedStatement stmt = connection.prepareStatement("UPDATE tracks SET last_hit_id = ?, updated_at = ? WHERE id = ?")) { // TODO maybe add a WHERE last_hit_id < ? or a WHERE updated_at < ? to preserve invariants?
                 stmt.setLong(1, hitID);
                 stmt.setLong(2, hit.createdAt);
                 stmt.setLong(3, trackID);

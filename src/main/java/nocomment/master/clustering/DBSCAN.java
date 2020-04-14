@@ -168,7 +168,7 @@ public enum DBSCAN {
     }
 
     private Datapoint merge(Datapoint xRoot, Datapoint yRoot, Connection connection) throws SQLException {
-        if (xRoot.disjointRank < yRoot.disjointRank || (xRoot.disjointRank == yRoot.disjointRank && yRoot.isCore && !xRoot.isCore)) {
+        if (xRoot.disjointRank < yRoot.disjointRank || (xRoot.disjointRank == yRoot.disjointRank && ((!xRoot.isCore && yRoot.isCore) || (xRoot.isCore == yRoot.isCore && (xRoot.disjointSize < yRoot.disjointSize))))) {
             return merge(yRoot, xRoot, connection); // intentionally swap
         }
         // merge based on disjoint rank, but maintain disjoint size as well
