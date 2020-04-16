@@ -2,10 +2,7 @@ package nocomment.master.tracking;
 
 import nocomment.master.Server;
 import nocomment.master.db.TrackResume;
-import nocomment.master.util.ChunkPos;
-import nocomment.master.util.ClusterRetryScanner;
-import nocomment.master.util.HighwayScanner;
-import nocomment.master.util.RingScanner;
+import nocomment.master.util.*;
 
 import java.util.OptionalLong;
 import java.util.concurrent.Executors;
@@ -23,31 +20,37 @@ public class TrackyTrackyManager {
         this.overworld = new WorldTrackyTracky(server.getWorld((short) 0), this, this::lostTrackingInOverworld);
         this.nether = new WorldTrackyTracky(server.getWorld((short) -1), this, this::lostTrackingInNether);
         highways();
+        clusters();
         spiral();
     }
 
     private void highways() {
         System.out.println("Nether:");
         // scan the entire highway network every four hours
-        new HighwayScanner(nether.world, 10001, 30_000_000 / 8, 14_400_000, nether::ingestGenericNewHit).submitTasks();
+        new HighwayScanner(nether.world, 10000, 30_000_000 / 8, 14_400_000, nether::ingestGenericNewHit).submitTasks();
         // scan up to 250k (2m overworld) every 400 seconds (7 minutes ish)
         new HighwayScanner(nether.world, 1000, 2_000_000 / 8, 400_000, nether::ingestGenericNewHit).submitTasks();
         // scan up to 25k (200k overworld) every 40 seconds
         new HighwayScanner(nether.world, 100, 25_000, 40_000, nether::ingestGenericNewHit).submitTasks();
         // scan the 2k ring road every 4 seconds
-        new RingScanner(nether.world, 99, 2000, 4_000, nether::ingestGenericNewHit).submitTasks();
+        new RingScanner(nether.world, 99, 2000, 16_000, nether::ingestGenericNewHit).submitTasks();
         System.out.println("Overworld:");
         // scan up to 25k overworld every 40 seconds
         new HighwayScanner(overworld.world, 100, 25_000, 40_000, overworld::ingestGenericNewHit).submitTasks();
         // scan the 2k ring road every 4 seconds
-        new RingScanner(overworld.world, 99, 2000, 4_000, overworld::ingestGenericNewHit).submitTasks();
+        new RingScanner(overworld.world, 99, 2000, 16_000, overworld::ingestGenericNewHit).submitTasks();
+    }
 
-        new ClusterRetryScanner(overworld.world, 50, 5, 1000, overworld::ingestGenericNewHit).submitTasks();
+    private void clusters() {
+        new ClusterRetryScanner(overworld.world, 50, 10, 1000, overworld::ingestGenericNewHit).submitTasks();
+
+        new ClusterRetryScanner(nether.world, 50, 2, 1000, nether::ingestGenericNewHit).submitTasks();
     }
 
     private void spiral() {
-        overworld.grid(10000, 9, 250, new ChunkPos(0, 0), overworld::ingestGenericNewHit);
-        nether.grid(10000, 9, 250, new ChunkPos(0, 0), nether::ingestGenericNewHit);
+        new SpiralScanner(overworld.world, 1_000_000, 300_000, overworld::ingestGenericNewHit).submitTasks();
+
+        new SpiralScanner(nether.world, 1_000_000, 150_000, nether::ingestGenericNewHit).submitTasks();
     }
 
     private void lostTrackingInOverworld(Filter lost) {

@@ -3,7 +3,7 @@ package nocomment.master.task;
 import nocomment.master.db.Hit;
 import nocomment.master.util.ChunkPos;
 
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public abstract class Task implements Comparable<Task> {
     public final int priority;
@@ -14,8 +14,8 @@ public abstract class Task implements Comparable<Task> {
 
     private boolean canceled;
 
-    private static final AtomicInteger globalSeq = new AtomicInteger();
-    private final int seq = globalSeq.incrementAndGet();
+    private static final AtomicLong globalSeq = new AtomicLong();
+    private final long seq = globalSeq.incrementAndGet(); // int would overflow after like a month
 
     public Task(int priority, ChunkPos start, int directionX, int directionZ, int count) {
         if (count == 0) {
@@ -40,7 +40,7 @@ public abstract class Task implements Comparable<Task> {
         if (priority != t.priority) {
             return Integer.compare(priority, t.priority);
         }
-        return Integer.compare(seq, t.seq);
+        return Long.compare(seq, t.seq);
     }
 
     public boolean interchangable(Task other) {

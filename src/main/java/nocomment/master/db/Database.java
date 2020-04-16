@@ -25,6 +25,7 @@ public class Database {
         pool.setAutoCommitOnReturn(true); // make absolutely sure
         pool.setDefaultTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
         pool.setRollbackOnReturn(true);
+        pool.setDefaultReadOnly(NoComment.DRY_RUN);
         System.out.println("Connected.");
         if (!NoComment.DRY_RUN) {
             Maintenance.scheduleMaintenance();

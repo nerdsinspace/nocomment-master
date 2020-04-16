@@ -31,10 +31,10 @@ public class RingScanner {
 
     public void submitTasks() {
         int pos = radius * INTERVAL;
-        submitTask(-pos, -pos, INTERVAL, 0, 2 * radius + 1);
-        submitTask(-pos, -pos, 0, INTERVAL, 2 * radius + 1);
-        submitTask(pos, pos, -INTERVAL, 0, 2 * radius + 1);
-        submitTask(pos, pos, 0, -INTERVAL, 2 * radius + 1);
+        submitTask(-pos, -pos, INTERVAL, 0, 2 * radius);
+        submitTask(pos, -pos, 0, INTERVAL, 2 * radius);
+        submitTask(pos, pos, -INTERVAL, 0, 2 * radius);
+        submitTask(-pos, pos, 0, -INTERVAL, 2 * radius);
     }
 
     private void submitTask(int startX, int startZ, int directionX, int directionZ, int count) {

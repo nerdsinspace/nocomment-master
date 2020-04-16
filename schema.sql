@@ -53,7 +53,7 @@ CREATE TABLE player_sessions
     FOREIGN KEY (server_id) REFERENCES servers (id)
         ON UPDATE CASCADE ON DELETE CASCADE
 );
-CREATE INDEX player_sessions_range ON player_sessions USING GiST (server_id, range);
+CREATE INDEX player_sessions_range ON player_sessions USING GiST (range);
 CREATE INDEX player_sessions_by_leave ON player_sessions (server_id, player_id, UPPER(range));
 
 CREATE TABLE hits
@@ -98,6 +98,8 @@ CREATE TABLE tracks
     FOREIGN KEY (server_id) REFERENCES servers (id)
         ON UPDATE CASCADE ON DELETE CASCADE
 );
+
+CREATE INDEX tracks_legacy ON tracks (last_hit_id) WHERE legacy;
 
 ALTER TABLE hits
     ADD COLUMN

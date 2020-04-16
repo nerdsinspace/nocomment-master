@@ -33,27 +33,22 @@ public class WorldTrackyTracky {
         synchronized (this) {
             copy = new ArrayList<>(activeFilters);
         }
-        for (Filter earlier : copy) {
-            ChunkPos earlierHit = earlier.getMostRecentHit();
-            if (Math.abs(earlierHit.x) < 30 && Math.abs(earlierHit.z) < 30) {
+        for (Filter A : copy) {
+            ChunkPos Ahit = A.getMostRecentHit();
+            if (Math.abs(Ahit.x) < 30 && Math.abs(Ahit.z) < 30) {
                 System.out.println("Too close to spawn");
                 // too close to spawn and the permaloaded area
-                fail(earlier);
+                fail(A);
                 return;
             }
-            for (Filter later : copy) {
-                if (earlier == later) {
+            for (Filter B : copy) {
+                if (A == B) {
                     continue;
                 }
-                if (earlierHit.distSq(later.getMostRecentHit()) < 6L * 6L) {
-                    if (earlier.includes(later.getMostRecentHit())) {
+                if (Ahit.distSq(B.getMostRecentHit()) < 6L * 6L) {
+                    if (A.includes(B.getMostRecentHit()) || B.includes(Ahit)) {
                         System.out.println("Too close to another filter");
-                        fail(later);
-                        return;
-                    }
-                    if (later.includes(earlierHit)) {
-                        System.out.println("Too close to another filter");
-                        fail(earlier);
+                        fail(A.getTrackID() < B.getTrackID() ? B : A);
                         return;
                     }
                 }
