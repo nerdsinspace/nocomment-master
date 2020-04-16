@@ -10,11 +10,21 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 public class NoCommentServer {
+    private static final String PASSWORD = "0d7119c0a25e82e5c36d5188dcce4090d5ff9813a36a6fef6a0b3aca051b253a1b3c345452f23f2564403012abe98e20d3eb5f4191d3f8907e9ceb505ba0c2ba";
+    private static final String VERSION = ""; // change to " v2" when it's time
+    private static final String EXPECTED_FULL = PASSWORD + VERSION;
+
     private static void handleNewSocket(Socket s) {
         try {
             DataInputStream in = new DataInputStream(s.getInputStream());
-            String password = in.readUTF();
-            if (!password.equals("0d7119c0a25e82e5c36d5188dcce4090d5ff9813a36a6fef6a0b3aca051b253a1b3c345452f23f2564403012abe98e20d3eb5f4191d3f8907e9ceb505ba0c2ba")) {
+            String recv = in.readUTF();
+            if (!recv.startsWith(PASSWORD)) {
+                s.close();
+                return;
+            }
+            if (!recv.equals(EXPECTED_FULL)) {
+                String remain = recv.substring(PASSWORD.length());
+                System.out.println("Received a connection with version \"" + remain + "\" while we expected \"" + VERSION + "\". Dropping");
                 s.close();
                 return;
             }
