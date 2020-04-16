@@ -2,6 +2,7 @@ package nocomment.master;
 
 import nocomment.master.db.Database;
 import nocomment.master.network.Connection;
+import nocomment.master.task.Task;
 import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.LoggingExecutor;
 import nocomment.master.util.OnlinePlayerTracker;
@@ -36,15 +37,21 @@ public class Server {
         this.tracking = new TrackyTrackyManager(this);
         System.out.println("Constructed server " + hostname + " ID " + serverID);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(() -> {
-            String resp = "\nStatus of server " + hostname + " ID " + serverID + ":";
+            StringBuilder resp = new StringBuilder("\nStatus of server " + hostname + " ID " + serverID + ":");
             for (World world : getLoadedWorlds()) {
-                resp += "\nDimension " + world.dimension + " connections: ";
+                resp.append("\nDimension ").append(world.dimension);
+                resp.append(", pending tasks ");
+                Collection<Task> pending = world.getPendingTasks();
+                resp.append(pending.size());
+                resp.append(", total checks ");
+                resp.append(pending.stream().mapToInt(task -> task.count).sum());
+                resp.append(", connections: ");
                 for (Connection conn : world.getOpenConnections()) {
-                    resp += "\nConnection " + conn;
+                    resp.append("\nConnection ").append(conn);
                 }
             }
-            resp += "\nEnd status";
-            System.out.println(resp.replace("\n", "\n>  "));
+            resp.append("\nEnd status");
+            System.out.println(resp.toString().replace("\n", "\n>  "));
         }), 0, 30, TimeUnit.SECONDS);
     }
 

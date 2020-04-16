@@ -34,7 +34,7 @@ public class World {
         // due to the read loop structure, by the time we get here we know for a fact that this connection will read no further data, since its read loop is done
         // so, shuffling the tasks elsewhere is safe, and doesn't risk "completed" being called twice or anything like that
         connections.remove(conn);
-        conn.forEachTask(this::submitTask);
+        conn.forEachTask(pendingTasks::add);
         worldUpdate();
         serverUpdate(); // only for connection status change
     }
@@ -68,7 +68,6 @@ public class World {
                 pendingTasks.poll();
                 continue;
             }
-            // create a map from a connection to the number of checks that connection still has to run through before it could get to this task in question
             Connection min = connections.get(0);
             int burden = min.sumHigherPriority(task.priority);
             for (int i = 1; i < connections.size(); i++) {
@@ -79,20 +78,17 @@ public class World {
                     min = conn;
                 }
             }
-
             if (burden > MAX_BURDEN) {
                 // can't send anything rn
-                //System.out.println("Too many tasks on this connection " + burden + " lower than " + task.priority);
                 break;
             }
-            pendingTasks.poll();
-            int sum = 0;
-            for (Object o : pendingTasks.toArray()) {
-                sum += ((Task) o).count;
-            }
-            //System.out.println("Selected connection with burden " + burden + " for task with priority " + task.priority + " and size " + task.count + " from " + task.start + ". Total sum pending is " + sum);
+            pendingTasks.poll(); // actually take it
             min.acceptTask(task);
         }
+    }
+
+    public synchronized Collection<Task> getPendingTasks() {
+        return new ArrayList<>(pendingTasks);
     }
 
     public synchronized Collection<Connection> getOpenConnections() {
