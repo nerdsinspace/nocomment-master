@@ -296,7 +296,7 @@ public class Filter {
 
     private void runCheck(ChunkPos pos) {
         NoComment.executor.execute(() ->
-                context.world.submitTask(new SingleChunkTask(0, pos, this::insertHit, () -> {
+                context.world.submit(new SingleChunkTask(0, pos, this::insertHit, () -> {
                     synchronized (Filter.this) {
                         misses.add(pos);
                     }

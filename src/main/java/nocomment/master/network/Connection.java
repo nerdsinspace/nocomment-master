@@ -3,8 +3,11 @@ package nocomment.master.network;
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.db.Hit;
+import nocomment.master.task.BlockCheckManager;
+import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.task.Task;
 import nocomment.master.tracking.TrackyTrackyManager;
+import nocomment.master.util.BlockPos;
 import nocomment.master.util.ChunkPos;
 import nocomment.master.util.LoggingExecutor;
 import nocomment.master.util.OnlinePlayer;
@@ -29,6 +32,7 @@ public abstract class Connection {
 
     private final World world;
     private final Map<Integer, Task> tasks = new HashMap<>();
+    private final Map<BlockPos, BlockCheckManager.BlockCheck> checks = new HashMap<>();
     private int taskIDSeq = 0;
     private final Set<OnlinePlayer> onlinePlayerSet = new HashSet<>();
     private final Map<OnlinePlayer, Long> removalTimestamps = new HashMap<>();
@@ -54,6 +58,20 @@ public abstract class Connection {
                 break;
             }
         }
+    }
+
+    public void requestServerDisconnect() {
+        NoComment.executor.execute(this::dispatchDisconnectRequest);
+    }
+
+    public synchronized void acceptBlockCheck(BlockCheckManager.BlockCheck check) {
+        BlockCheckManager.BlockCheck curr = checks.get(check.pos);
+        if (curr != null && check.priority >= curr.priority) {
+            // if this check is higher (worse) priority than what we currently have, don't spam them with another copy
+            return;
+        }
+        checks.put(check.pos, check);
+        NoComment.executor.execute(() -> dispatchBlockCheck(check));
     }
 
     public synchronized void acceptTask(Task task) {
@@ -95,6 +113,19 @@ public abstract class Connection {
         world.serverUpdate(); // prevent two-way deadlock with the subsequent two functions
     }
 
+    protected void checkCompleted(BlockPos pos, OptionalInt blockState) {
+        BlockCheckManager.BlockCheck check;
+        synchronized (this) {
+            check = checks.remove(pos);
+        }
+        if (check != null) {
+            // check can be null if we are asked for the same pos twice in a row with increasing priority, and we get two responses with a time delay
+            // in that case, the second response would have check is null
+            NoComment.executor.execute(() -> check.onCompleted(blockState));
+        }
+        world.worldUpdate();
+    }
+
     public synchronized void addOnlinePlayers(Collection<OnlinePlayer> collection) {
         collection.removeAll(onlinePlayerSet);
         collection.addAll(onlinePlayerSet);
@@ -120,17 +151,35 @@ public abstract class Connection {
                 sum += task.count;
             }
         }
+        for (BlockCheckManager.BlockCheck check : checks.values()) {
+            if (check.priority <= priority) {
+                sum++;
+            }
+        }
         return sum;
     }
 
-    public synchronized void forEachTask(Consumer<Task> consumer) {
+    public synchronized void forEachDispatch(Consumer<PriorityDispatchable> consumer) {
         tasks.values().forEach(consumer);
+        checks.values().forEach(consumer);
     }
+
+    protected abstract String getUUID();
 
     /**
      * Never throw exception. Just close the socket and let read fail gracefully.
      */
     protected abstract void dispatchTask(Task task, int taskID);
+
+    /**
+     * Never throw exception. Just close the socket and let read fail gracefully.
+     */
+    protected abstract void dispatchBlockCheck(BlockCheckManager.BlockCheck check);
+
+    /**
+     * Never throw exception. Just close the socket and let read fail gracefully.
+     */
+    protected abstract void dispatchDisconnectRequest();
 
     /**
      * Read (looped). Throw exception on any failure.

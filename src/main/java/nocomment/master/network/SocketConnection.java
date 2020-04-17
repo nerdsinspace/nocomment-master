@@ -1,7 +1,9 @@
 package nocomment.master.network;
 
 import nocomment.master.World;
+import nocomment.master.task.BlockCheckManager;
 import nocomment.master.task.Task;
+import nocomment.master.util.BlockPos;
 import nocomment.master.util.ChunkPos;
 import nocomment.master.util.OnlinePlayer;
 
@@ -10,16 +12,24 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.util.OptionalInt;
 
 public class SocketConnection extends Connection {
     private final Socket sock;
     private final DataOutputStream out;
     private final Object sockWriteLock = new Object();
+    private final String uuid;
 
     public SocketConnection(World world, Socket sock) throws IOException {
         super(world);
         this.sock = sock;
+        this.uuid = new DataInputStream(sock.getInputStream()).readUTF();
         this.out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()));
+    }
+
+    @Override
+    protected String getUUID() {
+        return uuid;
     }
 
     @Override
@@ -34,6 +44,34 @@ public class SocketConnection extends Connection {
                 out.writeInt(task.directionX);
                 out.writeInt(task.directionZ);
                 out.writeInt(task.count);
+                out.flush();
+            } catch (IOException ex) {
+                closeUnderlying();
+            }
+        }
+    }
+
+    @Override
+    protected void dispatchBlockCheck(BlockCheckManager.BlockCheck check) {
+        synchronized (sockWriteLock) {
+            try {
+                out.writeByte(1);
+                out.writeInt(check.pos.x);
+                out.writeInt(check.pos.y);
+                out.writeInt(check.pos.z);
+                out.writeInt(check.priority);
+                out.flush();
+            } catch (IOException ex) {
+                closeUnderlying();
+            }
+        }
+    }
+
+    @Override
+    protected void dispatchDisconnectRequest() {
+        synchronized (sockWriteLock) {
+            try {
+                out.writeByte(2);
                 out.flush();
             } catch (IOException ex) {
                 closeUnderlying();
@@ -63,6 +101,14 @@ public class SocketConnection extends Connection {
                 boolean join = in.readBoolean();
                 OnlinePlayer player = new OnlinePlayer(in);
                 playerJoinLeave(join, player);
+                break;
+            }
+            case 3: {
+                int x = in.readInt();
+                int y = in.readInt();
+                int z = in.readInt();
+                OptionalInt blockState = in.readBoolean() ? OptionalInt.of(in.readInt()) : OptionalInt.empty();
+                checkCompleted(new BlockPos(x, y, z), blockState);
                 break;
             }
             case 69: { // ping

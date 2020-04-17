@@ -44,7 +44,7 @@ public class ClusterRetryScanner {
             System.out.println("Cancelling cluster retry scanner since there are no clusters to retry!");
             return;
         }
-        world.submitTask(new Task(priority, pos, 0, 0, 1) {
+        world.submit(new Task(priority, pos, 0, 0, 1) {
             @Override
             public void hitReceived(Hit hit) {
                 System.out.println("Cluster retry hit " + hit.pos + " in dimension " + world.dimension);

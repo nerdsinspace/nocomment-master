@@ -31,7 +31,7 @@ public class SpiralScanner {
         for (int i = 0; i < 10; i++) {
             // honestly this could be Literally Any Number
             // picked 10 out of a hat
-            world.submitTask(getTask());
+            world.submit(getTask());
         }
     }
 
@@ -65,7 +65,7 @@ public class SpiralScanner {
 
             @Override
             public void completed() {
-                world.submitTask(getTask());
+                world.submit(getTask());
             }
         });
     }

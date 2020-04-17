@@ -2,6 +2,7 @@ package nocomment.master;
 
 import nocomment.master.db.Database;
 import nocomment.master.network.Connection;
+import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.task.Task;
 import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.LoggingExecutor;
@@ -40,11 +41,11 @@ public class Server {
             StringBuilder resp = new StringBuilder("\nStatus of server " + hostname + " ID " + serverID + ":");
             for (World world : getLoadedWorlds()) {
                 resp.append("\nDimension ").append(world.dimension);
-                resp.append(", pending tasks ");
-                Collection<Task> pending = world.getPendingTasks();
+                resp.append(", pending ");
+                Collection<PriorityDispatchable> pending = world.getPending();
                 resp.append(pending.size());
                 resp.append(", total checks ");
-                resp.append(pending.stream().mapToInt(task -> task.count).sum());
+                resp.append(pending.stream().mapToInt(d -> d instanceof Task ? ((Task) d).count : 1).sum());
                 resp.append(", connections: ");
                 for (Connection conn : world.getOpenConnections()) {
                     resp.append("\nConnection ").append(conn);

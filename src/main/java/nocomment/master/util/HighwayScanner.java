@@ -72,7 +72,7 @@ public class HighwayScanner {
     }
 
     private void submitTask(int startX, int startZ, int directionX, int directionZ, int count) {
-        world.submitTask(new Task(priority, new ChunkPos(startX, startZ), directionX, directionZ, count) {
+        world.submit(new Task(priority, new ChunkPos(startX, startZ), directionX, directionZ, count) {
 
             private void resubmit() {
                 // we cannot just call submitTask(this) because our task seq is low, which would make highway scanning stay on one highway since it's always the lowest seq
