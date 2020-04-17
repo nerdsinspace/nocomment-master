@@ -23,6 +23,7 @@ public class BlockCheckManager {
             fireCheck(priority, pos);
             return;
         }
+        status.listeners.add(onCompleted);
         if (status.highestSubmittedPriority <= priority) { // remember priority queues are lowest first
             return;
         }
