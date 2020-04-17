@@ -28,7 +28,7 @@ public class SocketConnection extends Connection {
     }
 
     @Override
-    protected String getUUID() {
+    public String getUUID() {
         return uuid;
     }
 

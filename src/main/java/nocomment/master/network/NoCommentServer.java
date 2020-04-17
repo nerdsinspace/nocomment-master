@@ -35,7 +35,9 @@ public class NoCommentServer {
             int dim = in.readInt();
             System.out.println("Connection! " + serverName + " " + dim);
             World world = Server.getServer(serverName).getWorld((short) dim);
-            world.incomingConnection(new SocketConnection(world, s));
+            Connection conn = new SocketConnection(world, s);
+            System.out.println("Connection identified as UUID " + conn.getUUID() + " which is player database ID " + conn.getIdentity());
+            world.incomingConnection(conn);
         } catch (IOException ex) {
         }
     }

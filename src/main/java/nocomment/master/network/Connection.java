@@ -2,6 +2,7 @@ package nocomment.master.network;
 
 import nocomment.master.NoComment;
 import nocomment.master.World;
+import nocomment.master.db.Database;
 import nocomment.master.db.Hit;
 import nocomment.master.task.BlockCheckManager;
 import nocomment.master.task.PriorityDispatchable;
@@ -164,7 +165,11 @@ public abstract class Connection {
         checks.values().forEach(consumer);
     }
 
-    protected abstract String getUUID();
+    public int getIdentity() {
+        return Database.idForPlayer(new OnlinePlayer(getUUID()));
+    }
+
+    public abstract String getUUID();
 
     /**
      * Never throw exception. Just close the socket and let read fail gracefully.

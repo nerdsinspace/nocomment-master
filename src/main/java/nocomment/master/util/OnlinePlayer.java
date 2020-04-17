@@ -14,6 +14,11 @@ public class OnlinePlayer {
         this.username = usr.equals("") ? null : usr;
     }
 
+    public OnlinePlayer(String uuid) {
+        this.uuid = UUID.fromString(uuid);
+        this.username = null;
+    }
+
     @Override
     public boolean equals(Object o) {
         return o instanceof OnlinePlayer && ((OnlinePlayer) o).uuid.equals(uuid);

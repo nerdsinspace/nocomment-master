@@ -17,12 +17,14 @@ public class World {
     private final List<Connection> connections;
     private final PriorityQueue<PriorityDispatchable> pending;
     public final short dimension;
+    public final BlockCheckManager blockCheckManager;
 
     public World(Server server, short dimension) {
         this.server = server;
         this.connections = new ArrayList<>();
         this.pending = new PriorityQueue<>();
         this.dimension = dimension;
+        this.blockCheckManager = new BlockCheckManager(this);
 
         // TODO schedule a task to grab the connections and kick the oldest one when it's time
     }
