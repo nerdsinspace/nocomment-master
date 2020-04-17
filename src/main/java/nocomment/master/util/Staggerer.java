@@ -39,7 +39,7 @@ public class Staggerer {
         long age = System.currentTimeMillis() - joinedAt;
         System.out.println("Oldest account is " + oldest + " which has been on for " + age + "ms");
         if (age > MAX_AGE) {
-            System.out.println("KICKING " + oldest);
+            System.out.println("KICKING " + System.currentTimeMillis() + " " + oldest);
             oldest.requestServerDisconnect();
         }
     }
