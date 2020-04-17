@@ -331,6 +331,25 @@ public class Database {
         }
     }
 
+    public static OptionalLong currentSessionJoinedAt(int playerID, short serverID) {
+        try (Connection connection = pool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("SELECT \"join\" FROM player_sessions WHERE range @> ? AND player_id = ? AND server_id = ?")) {
+            stmt.setLong(1, Long.MAX_VALUE - 1); // must be -1 since postgres ranges are exclusive on the upper end
+            stmt.setInt(2, playerID);
+            stmt.setShort(3, serverID);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return OptionalLong.of(rs.getLong("join"));
+                } else {
+                    return OptionalLong.empty();
+                }
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
     static void vacuum() {
         try (Connection connection = pool.getConnection(); PreparedStatement stmt = connection.prepareStatement("VACUUM ANALYZE")) {
             stmt.execute();

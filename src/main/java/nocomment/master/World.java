@@ -5,6 +5,7 @@ import nocomment.master.task.BlockCheckManager;
 import nocomment.master.task.CombinedTask;
 import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.task.Task;
+import nocomment.master.util.Staggerer;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -25,8 +26,7 @@ public class World {
         this.pending = new PriorityQueue<>();
         this.dimension = dimension;
         this.blockCheckManager = new BlockCheckManager(this);
-
-        // TODO schedule a task to grab the connections and kick the oldest one when it's time
+        new Staggerer(this).start();
     }
 
     public synchronized void incomingConnection(Connection connection) {

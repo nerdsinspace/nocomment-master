@@ -1,12 +1,13 @@
 package nocomment.master.db;
 
 import nocomment.master.tracking.TrackyTrackyManager;
+import nocomment.master.util.LoggingExecutor;
 
 import java.util.concurrent.TimeUnit;
 
 public class Maintenance {
     static void scheduleMaintenance() {
-        onceADay(Database::vacuum, "vacuum");
+        schedule(Database::vacuum, "vacuum", 86400);
         scheduleReindex("hits_by_time");
         scheduleReindex("hits_by_time_non_2b");
         scheduleReindex("hits_by_track_id");
@@ -19,25 +20,28 @@ public class Maintenance {
         scheduleReindex("dbscan_cluster_roots");
         scheduleReindex("dbscan_ingest");
         scheduleReindex("dbscan_process");
-        scheduleReindex("dbscan_to_update");
+        scheduleReindex("dbscan_to_update", 3600); // hourly since this index fucks itself incredibly quickly. after just a few hours, performance degrades more than 100x. not exaggerating.
         scheduleReindex("dbscan_disjoint_traversal");
     }
 
     private static void scheduleReindex(String indexName) {
-        onceADay(() -> Database.reindex(indexName), "reindex " + indexName);
+        scheduleReindex(indexName, 86400);
+    }
+
+    private static void scheduleReindex(String indexName, int period) {
+        schedule(() -> Database.reindex(indexName), "reindex " + indexName, period);
     }
 
     // a reindex on hits_time_and_place cut it down from 300mb to 120mb, so this is actually useful and not just a meme
-    private static void onceADay(Runnable runnable, String name) {
-        int period = 86400;
+    private static void schedule(Runnable runnable, String name, int period) {
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(() ->
-                new Thread(() -> { // dont clog up scheduler's fixed thread pool
+                new Thread(LoggingExecutor.wrap(() -> { // dont clog up scheduler's fixed thread pool
                     synchronized (Maintenance.class) { // dont run more than one maintenance at a time, even at random. it causes database deadlock
                         long start = System.currentTimeMillis();
                         runnable.run();
                         long end = System.currentTimeMillis();
                         System.out.println("Took " + (end - start) + "ms to run maintenance task " + name);
                     }
-                }).start(), (long) (period * Math.random()), period, TimeUnit.SECONDS);
+                })).start(), (long) (period * Math.random()), period, TimeUnit.SECONDS);
     }
 }

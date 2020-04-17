@@ -20,6 +20,7 @@ public class LoggingExecutor implements Executor {
                 runnable.run();
             } catch (Throwable th) {
                 th.printStackTrace();
+                throw th;
             }
         };
     }
