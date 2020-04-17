@@ -77,8 +77,8 @@ public class WorldTrackyTracky {
                 return;
             }
         }
-        System.out.println("Success. Starting new filter from confirmed hit at " + hit.pos + " dimension " + world.dimension);
         Filter filter = new Filter(hit, this, prevTrack);
+        System.out.println("Success. Starting new filter from confirmed hit at " + hit.pos + " dimension " + world.dimension + " track id " + filter.getTrackID());
         activeFilters.add(filter);
         filter.start();
     }
