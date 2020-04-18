@@ -1,10 +1,10 @@
 package nocomment.master;
 
 import nocomment.master.network.Connection;
-import nocomment.master.task.BlockCheckManager;
 import nocomment.master.task.CombinedTask;
 import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.task.Task;
+import nocomment.master.util.BlockCheckManager;
 import nocomment.master.util.Staggerer;
 
 import java.util.ArrayList;

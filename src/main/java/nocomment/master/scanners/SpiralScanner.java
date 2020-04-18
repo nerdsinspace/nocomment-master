@@ -1,8 +1,9 @@
-package nocomment.master.util;
+package nocomment.master.scanners;
 
 import nocomment.master.World;
 import nocomment.master.db.Hit;
 import nocomment.master.task.Task;
+import nocomment.master.util.ChunkPos;
 
 import java.util.ArrayList;
 import java.util.List;

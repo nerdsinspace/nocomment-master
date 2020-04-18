@@ -1,9 +1,10 @@
-package nocomment.master.util;
+package nocomment.master.tracking;
 
 import nocomment.master.NoComment;
 import nocomment.master.Server;
 import nocomment.master.db.Database;
 import nocomment.master.network.Connection;
+import nocomment.master.util.OnlinePlayer;
 
 import java.util.*;
 

@@ -1,9 +1,9 @@
-package nocomment.master.task;
+package nocomment.master.util;
 
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.network.Connection;
-import nocomment.master.util.BlockPos;
+import nocomment.master.task.PriorityDispatchable;
 
 import java.util.*;
 import java.util.function.Consumer;

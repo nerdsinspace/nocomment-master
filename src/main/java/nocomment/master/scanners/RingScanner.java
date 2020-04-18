@@ -1,9 +1,11 @@
-package nocomment.master.util;
+package nocomment.master.scanners;
 
 import nocomment.master.World;
 import nocomment.master.db.Hit;
 import nocomment.master.task.Task;
 import nocomment.master.tracking.TrackyTrackyManager;
+import nocomment.master.util.ChunkPos;
+import nocomment.master.util.LoggingExecutor;
 
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
