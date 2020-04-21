@@ -29,7 +29,7 @@ public abstract class Connection {
 
     private final World world;
     private final Map<Integer, Task> tasks = new HashMap<>();
-    private final Map<BlockPos, BlockCheckManager.BlockCheck> checks = new HashMap<>();
+    private final Map<BlockPos, BlockCheck> checks = new HashMap<>();
     private final Map<BlockPos, Long> recentCheckTimestamps = new HashMap<>();
     private int taskIDSeq = 0;
     private final Set<OnlinePlayer> onlinePlayerSet = new HashSet<>();
@@ -71,8 +71,8 @@ public abstract class Connection {
         return checks.containsKey(pos) || recentCheckTimestamps.containsKey(pos);
     }
 
-    public synchronized void acceptBlockCheck(BlockCheckManager.BlockCheck check) {
-        BlockCheckManager.BlockCheck curr = checks.get(check.pos);
+    public synchronized void acceptBlockCheck(BlockCheck check) {
+        BlockCheck curr = checks.get(check.pos);
         if (curr != null && check.priority >= curr.priority) {
             // if this check is higher (worse) priority than what we currently have, don't spam them with another copy
             return;
@@ -121,7 +121,7 @@ public abstract class Connection {
     }
 
     protected void checkCompleted(BlockPos pos, OptionalInt blockState) {
-        BlockCheckManager.BlockCheck check;
+        BlockCheck check;
         synchronized (this) {
             check = checks.remove(pos);
             recentCheckTimestamps.put(pos, System.currentTimeMillis());
@@ -159,7 +159,7 @@ public abstract class Connection {
                 sum += task.count;
             }
         }
-        for (BlockCheckManager.BlockCheck check : checks.values()) {
+        for (BlockCheck check : checks.values()) {
             if (check.priority <= priority) {
                 sum++;
             }
@@ -186,7 +186,7 @@ public abstract class Connection {
     /**
      * Never throw exception. Just close the socket and let read fail gracefully.
      */
-    protected abstract void dispatchBlockCheck(BlockCheckManager.BlockCheck check);
+    protected abstract void dispatchBlockCheck(BlockCheck check);
 
     /**
      * Never throw exception. Just close the socket and let read fail gracefully.

@@ -46,27 +46,9 @@ public class World {
     }
 
     public synchronized void submit(PriorityDispatchable dispatch) {
-        if (dispatch instanceof BlockCheckManager.BlockCheck && recheck((BlockCheckManager.BlockCheck) dispatch)) {
-            return;
-        }
         pending.add(dispatch);
         worldUpdate();
         // don't server update per-task!
-    }
-
-    private boolean recheck(BlockCheckManager.BlockCheck chk) {
-        for (PriorityDispatchable dup0 : pending) {
-            if (dup0 instanceof BlockCheckManager.BlockCheck) {
-                BlockCheckManager.BlockCheck dup = (BlockCheckManager.BlockCheck) dup0;
-                if (dup.pos.equals(chk.pos)) {
-                    pending.remove(dup0);
-                    pending.add(chk.priority < dup.priority ? chk : dup);
-                    worldUpdate();
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     public synchronized Task submitTaskUnlessAlreadyPending(Task task) {

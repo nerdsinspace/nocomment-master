@@ -2,84 +2,72 @@ package nocomment.master.util;
 
 import nocomment.master.NoComment;
 import nocomment.master.World;
-import nocomment.master.network.Connection;
 import nocomment.master.task.PriorityDispatchable;
 
 import java.util.*;
 import java.util.function.Consumer;
 
 public class BlockCheckManager {
-    private final World world;
+    public final World world;
     private final Map<BlockPos, BlockCheckStatus> statuses = new HashMap<>();
 
     public BlockCheckManager(World world) {
         this.world = world;
     }
 
-    public synchronized void requestBlockState(BlockPos pos, int priority, Consumer<OptionalInt> onCompleted) {
-        BlockCheckStatus status = statuses.get(pos);
-        if (status == null) {
-            statuses.put(pos, new BlockCheckStatus(priority, onCompleted));
-            fireCheck(priority, pos);
-            return;
-        }
-        status.listeners.add(onCompleted);
-        if (status.highestSubmittedPriority <= priority) { // remember priority queues are lowest first
-            return;
-        }
-        status.highestSubmittedPriority = priority;
-        fireCheck(priority, pos);
+    private synchronized BlockCheckStatus get(BlockPos pos) {
+        return statuses.computeIfAbsent(pos, BlockCheckStatus::new);
     }
 
-    private void fireCheck(int priority, BlockPos pos) {
-        NoComment.executor.execute(() -> world.submit(new BlockCheck(priority, pos)));
+    public void requestBlockState(long mustBeNewerThan, BlockPos pos, int priority, Consumer<OptionalInt> onCompleted) {
+        get(pos).requested(mustBeNewerThan, priority, onCompleted);
     }
 
-    private void fireListeners(BlockPos pos, OptionalInt blockState) {
-        for (Consumer<OptionalInt> consumer : onCompletion(pos)) {
-            consumer.accept(blockState);
-        }
+    public void requestBlockState(BlockPos pos, int priority, Consumer<OptionalInt> onCompleted) {
+        requestBlockState(0, pos, priority, onCompleted);
     }
 
-    private synchronized List<Consumer<OptionalInt>> onCompletion(BlockPos pos) {
-        BlockCheckStatus status = statuses.remove(pos);
-        if (status == null) {
-            return Collections.emptyList();
-        }
-        return status.listeners;
-    }
-
-    private class BlockCheckStatus {
-        private int highestSubmittedPriority;
-        private final List<Consumer<OptionalInt>> listeners;
-
-        private BlockCheckStatus(int initialPriority, Consumer<OptionalInt> initial) {
-            this.listeners = new ArrayList<>();
-            listeners.add(initial);
-            this.highestSubmittedPriority = initialPriority;
-        }
-    }
-
-    public class BlockCheck extends PriorityDispatchable {
+    public class BlockCheckStatus {
         public final BlockPos pos;
+        private int highestSubmittedPriority = Integer.MAX_VALUE;
+        private final List<Consumer<OptionalInt>> listeners;
+        private final List<BlockCheck> inFlight;
+        private Optional<OptionalInt> reply;
+        private long responseAt;
 
-        private BlockCheck(int priority, BlockPos pos) {
-            super(priority);
+        private BlockCheckStatus(BlockPos pos) {
+            this.listeners = new ArrayList<>();
             this.pos = pos;
+            this.inFlight = new ArrayList<>();
+            this.reply = Optional.empty();
         }
 
-        public void onCompleted(OptionalInt blockState) {
-            fireListeners(pos, blockState);
+        public synchronized void requested(long mustBeNewerThan, int priority, Consumer<OptionalInt> listener) {
+            if (reply.isPresent() && responseAt > mustBeNewerThan) {
+                OptionalInt state = reply.get();
+                NoComment.executor.execute(() -> listener.accept(state));
+                return;
+            }
+            listeners.add(listener);
+            if (priority < highestSubmittedPriority) {
+                highestSubmittedPriority = priority;
+
+                BlockCheck check = new BlockCheck(priority, this);
+                inFlight.add(check);
+                NoComment.executor.execute(() -> world.submit(check));
+            }
         }
 
-        @Override
-        public void dispatch(Connection onto) {
-            onto.acceptBlockCheck(this);
-        }
-
-        @Override
-        public boolean hasAffinity(Connection connection) {
-            return connection.blockAffinity(pos);
+        public synchronized void onResponse(OptionalInt state) {
+            responseAt = System.currentTimeMillis();
+            reply = Optional.of(state);
+            highestSubmittedPriority = Integer.MAX_VALUE; // reset
+            inFlight.forEach(PriorityDispatchable::cancel); // unneeded
+            inFlight.clear();
+            for (Consumer<OptionalInt> listener : listeners) {
+                NoComment.executor.execute(() -> listener.accept(state));
+            }
+            listeners.clear();
         }
     }
 }

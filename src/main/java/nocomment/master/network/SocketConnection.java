@@ -2,10 +2,7 @@ package nocomment.master.network;
 
 import nocomment.master.World;
 import nocomment.master.task.Task;
-import nocomment.master.util.BlockCheckManager;
-import nocomment.master.util.BlockPos;
-import nocomment.master.util.ChunkPos;
-import nocomment.master.util.OnlinePlayer;
+import nocomment.master.util.*;
 
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
@@ -52,7 +49,7 @@ public class SocketConnection extends Connection {
     }
 
     @Override
-    protected void dispatchBlockCheck(BlockCheckManager.BlockCheck check) {
+    protected void dispatchBlockCheck(BlockCheck check) {
         synchronized (sockWriteLock) {
             try {
                 out.writeByte(1);
