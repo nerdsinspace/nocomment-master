@@ -75,6 +75,8 @@ CREATE TABLE hits
 
 CREATE INDEX hits_by_time ON hits (created_at);
 CREATE INDEX hits_by_time_non_2b ON hits (created_at) WHERE server_id != 1; -- this index is tiny (200 kilobytes) but prevents the server from hanging if you accidentally log into constantiam or something lol
+CREATE INDEX hits_loc_interesting ON hits (x, z) WHERE ABS(x) > 100 AND ABS(z) > 100 AND ABS(ABS(x) - ABS(z)) > 100 AND
+                                                       x::bigint * x::bigint + z::bigint * z::bigint > 1000 * 1000;
 
 CREATE TABLE tracks
 (
@@ -109,7 +111,7 @@ ALTER TABLE hits
 
 CREATE INDEX hits_by_track_id ON hits (track_id) WHERE track_id IS NOT NULL;
 
-CREATE INDEX track_endings ON tracks (server_id, updated_at); -- to query what tracks ended in a server at a particular time
+CREATE INDEX track_endings ON tracks (updated_at);
 ALTER TABLE tracks
     CLUSTER ON track_endings;
 CLUSTER tracks;
@@ -148,4 +150,29 @@ CREATE TABLE dbscan_progress
 );
 
 INSERT INTO dbscan_progress(last_processed_hit_id)
+VALUES (0);
+
+CREATE TABLE associations
+(
+    cluster_id  INTEGER          NOT NULL,
+    player_id   INTEGER          NOT NULL,
+    association DOUBLE PRECISION NOT NULL,
+
+    UNIQUE (cluster_id, player_id),
+
+    FOREIGN KEY (player_id) REFERENCES players (id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (cluster_id) REFERENCES dbscan (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX associations_player_id ON associations (player_id);
+CREATE INDEX associations_cluster_id ON associations (cluster_id);
+
+CREATE TABLE track_associator_progress
+(
+    max_updated_at_processed BIGINT NOT NULL
+);
+
+INSERT INTO track_associator_progress
 VALUES (0);

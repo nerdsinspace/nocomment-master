@@ -2,6 +2,7 @@ package nocomment.master.db;
 
 import nocomment.master.NoComment;
 import nocomment.master.clustering.DBSCAN;
+import nocomment.master.util.Associator;
 import nocomment.master.util.OnlinePlayer;
 import org.apache.commons.dbcp2.BasicDataSource;
 
@@ -30,6 +31,7 @@ public class Database {
         if (!NoComment.DRY_RUN) {
             Maintenance.scheduleMaintenance();
             DBSCAN.INSTANCE.beginIncrementalDBSCANThread();
+            Associator.INSTANCE.beginIncrementalAssociatorThread();
         }
     }
 
@@ -347,6 +349,23 @@ public class Database {
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
+        }
+    }
+
+    public static Set<Integer> allPlayerIDsThatLeftBetween(long rangeStart, long rangeEnd, short serverID, Connection connection) throws SQLException {
+        try (PreparedStatement stmt = connection.prepareStatement("SELECT player_id FROM player_sessions WHERE range && INT8RANGE(?, ?, '[]') AND server_id = ? AND leave IS NOT NULL AND leave >= ? AND leave <= ?")) {
+            stmt.setLong(1, rangeStart);
+            stmt.setLong(2, rangeEnd);
+            stmt.setShort(3, serverID);
+            stmt.setLong(4, rangeStart);
+            stmt.setLong(5, rangeEnd);
+            try (ResultSet rs = stmt.executeQuery()) {
+                Set<Integer> ret = new HashSet<>();
+                while (rs.next()) {
+                    ret.add(rs.getInt("player_id"));
+                }
+                return ret;
+            }
         }
     }
 

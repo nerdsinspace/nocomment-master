@@ -89,6 +89,13 @@ public enum DBSCAN {
             return root;
         }
 
+        public Datapoint fetchRootReadOnly(Connection connection, Map<Integer, Datapoint> cache) throws SQLException { // fetch root without performing disjoint-set path compression
+            if (!clusterParent.isPresent()) {
+                return this;
+            }
+            return getByID(connection, clusterParent.getAsInt(), cache).fetchRootReadOnly(connection, cache);
+        }
+
         public int directClusterParent() {
             return clusterParent.orElse(id);
         }
@@ -152,11 +159,15 @@ public enum DBSCAN {
     }
 
     private List<Datapoint> getWithinRange(Datapoint source, Connection connection) throws SQLException {
+        return getWithinRange(source.serverID, source.dimension, source.x, source.z, connection);
+    }
+
+    private List<Datapoint> getWithinRange(short serverID, short dimension, int x, int z, Connection connection) throws SQLException {
         try (PreparedStatement stmt = connection.prepareStatement("SELECT " + COLS + " FROM dbscan WHERE " + DANK_CONDITION)) {
-            stmt.setShort(1, source.serverID);
-            stmt.setShort(2, source.dimension);
-            stmt.setInt(3, source.x);
-            stmt.setInt(4, source.z);
+            stmt.setShort(1, serverID);
+            stmt.setShort(2, dimension);
+            stmt.setInt(3, x);
+            stmt.setInt(4, z);
             try (ResultSet rs = stmt.executeQuery()) {
                 List<Datapoint> ret = new ArrayList<>();
                 while (rs.next()) {
@@ -273,5 +284,36 @@ public enum DBSCAN {
         }
         connection.commit();
         System.out.println("DBSCAN merger committing");
+    }
+
+    public Optional<Datapoint> fetch(short serverID, short dimension, int x, int z, Connection connection) throws SQLException {
+        try (PreparedStatement stmt = connection.prepareStatement("SELECT " + COLS + " FROM dbscan WHERE server_id = ? AND dimension = ? AND x = ? AND z = ? AND (is_core OR cluster_parent IS NOT NULL)")) {
+            stmt.setShort(1, serverID);
+            stmt.setShort(2, dimension);
+            stmt.setInt(3, x);
+            stmt.setInt(4, z);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return Optional.of(new Datapoint(rs));
+                } else {
+                    return Optional.empty();
+                }
+            }
+        }
+    }
+
+    public OptionalInt broadlyFetchAReasonablyCloseClusterIDFor(short serverID, short dimension, int x, int z, Connection connection) throws SQLException {
+        // grab it directly. this is pretty plausible since interesting track endings will be disproportionately clustered
+        Map<Integer, Datapoint> cache = new HashMap<>();
+        Optional<Datapoint> directMember = fetch(serverID, dimension, x, z, connection);
+        if (directMember.isPresent()) {
+            return OptionalInt.of(directMember.get().fetchRootReadOnly(connection, cache).id);
+        }
+        List<Datapoint> neighbors = getWithinRange(serverID, dimension, x, z, connection);
+        neighbors.removeIf(dp -> !dp.isCore && !dp.clusterParent.isPresent()); // remove non core points with no parent
+        if (neighbors.isEmpty()) {
+            return OptionalInt.empty();
+        }
+        return OptionalInt.of(neighbors.stream().min(Comparator.comparingDouble(dp -> Math.sqrt((dp.x - x) * (dp.x - x) + (dp.z - z) * (dp.z - z)) * 1.0d / dp.disjointSize)).get().fetchRootReadOnly(connection, cache).id);
     }
 }
