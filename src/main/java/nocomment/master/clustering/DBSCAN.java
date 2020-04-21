@@ -228,7 +228,7 @@ public enum DBSCAN {
                 throw new IllegalStateException();
             }
             long e = System.currentTimeMillis();
-            commit = i++ % 100 == 0;
+            commit = i++ % 20 == 0;
             if (neighbors.size() > MIN_PTS && !point.isCore) {
                 System.out.println("DBSCAN promoting " + point + " to core point");
                 point.isCore = true;
