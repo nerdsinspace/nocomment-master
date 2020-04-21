@@ -30,6 +30,7 @@ public abstract class Connection {
     private final World world;
     private final Map<Integer, Task> tasks = new HashMap<>();
     private final Map<BlockPos, BlockCheckManager.BlockCheck> checks = new HashMap<>();
+    private final Map<BlockPos, Long> recentCheckTimestamps = new HashMap<>();
     private int taskIDSeq = 0;
     private final Set<OnlinePlayer> onlinePlayerSet = new HashSet<>();
     private final Map<OnlinePlayer, Long> removalTimestamps = new HashMap<>();
@@ -42,6 +43,7 @@ public abstract class Connection {
                 System.out.println("NO DATA!");
                 closeUnderlying();
             }
+            clearRecentChecks();
         }), 0, 1, TimeUnit.SECONDS);
         while (true) {
             try {
@@ -57,8 +59,16 @@ public abstract class Connection {
         }
     }
 
+    private synchronized void clearRecentChecks() {
+        recentCheckTimestamps.values().removeIf(ts -> ts < System.currentTimeMillis() - 1000);
+    }
+
     public void requestServerDisconnect() {
         NoComment.executor.execute(this::dispatchDisconnectRequest);
+    }
+
+    public synchronized boolean blockAffinity(BlockPos pos) {
+        return checks.containsKey(pos) || recentCheckTimestamps.containsKey(pos);
     }
 
     public synchronized void acceptBlockCheck(BlockCheckManager.BlockCheck check) {
@@ -114,6 +124,7 @@ public abstract class Connection {
         BlockCheckManager.BlockCheck check;
         synchronized (this) {
             check = checks.remove(pos);
+            recentCheckTimestamps.put(pos, System.currentTimeMillis());
         }
         if (check != null) {
             // check can be null if we are asked for the same pos twice in a row with increasing priority, and we get two responses with a time delay

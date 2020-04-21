@@ -36,4 +36,8 @@ public abstract class PriorityDispatchable implements Comparable<PriorityDispatc
     public boolean isCanceled() {
         return canceled;
     }
+
+    public boolean hasAffinity(Connection connection) {
+        return false;
+    }
 }

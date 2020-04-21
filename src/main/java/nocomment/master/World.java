@@ -92,23 +92,33 @@ public class World {
                 pending.poll();
                 continue;
             }
-            Connection min = connections.get(0);
-            int burden = min.sumHigherPriority(toDispatch.priority);
-            for (int i = 1; i < connections.size(); i++) {
-                Connection conn = connections.get(i);
-                int connBurden = conn.sumHigherPriority(toDispatch.priority);
-                if (connBurden < burden) {
-                    burden = connBurden;
-                    min = conn;
-                }
+            Connection conn = selectConnectionFor(toDispatch);
+            if (conn == null) {
+                break; // can't send anything rn, burden too high on all conns. backpressure time!
             }
-            if (burden > MAX_BURDEN) {
-                // can't send anything rn
-                break;
-            }
-            pending.poll(); // actually take it
-            toDispatch.dispatch(min);
+            pending.poll(); // actually take toDispatch off the heap
+            toDispatch.dispatch(conn);
         }
+    }
+
+    private Connection selectConnectionFor(PriorityDispatchable toDispatch) {
+        Connection bestConn = null;
+        int minBurden = Integer.MAX_VALUE;
+        for (Connection conn : connections) {
+            int burden = conn.sumHigherPriority(toDispatch.priority);
+            if (burden > MAX_BURDEN) {
+                continue;
+            }
+            if (toDispatch.hasAffinity(conn)) {
+                // affinity = send on this conn if possible, EVEN IF it isn't the lowest burden connection
+                return conn;
+            }
+            if (burden < minBurden) {
+                minBurden = burden;
+                bestConn = conn;
+            }
+        }
+        return bestConn;
     }
 
     public synchronized Collection<PriorityDispatchable> getPending() {

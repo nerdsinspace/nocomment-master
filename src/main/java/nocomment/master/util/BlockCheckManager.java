@@ -76,5 +76,10 @@ public class BlockCheckManager {
         public void dispatch(Connection onto) {
             onto.acceptBlockCheck(this);
         }
+
+        @Override
+        public boolean hasAffinity(Connection connection) {
+            return connection.blockAffinity(pos);
+        }
     }
 }
