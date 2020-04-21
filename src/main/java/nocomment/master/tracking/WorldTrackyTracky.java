@@ -45,8 +45,8 @@ public class WorldTrackyTracky {
                 if (A == B) {
                     continue;
                 }
-                if (Ahit.distSq(B.getMostRecentHit()) < 6L * 6L) {
-                    if (A.includes(B.getMostRecentHit()) || B.includes(Ahit)) {
+                if (Ahit.distSq(B.getMostRecentHit()) < 20L * 20L) {
+                    if (A.includesBroadly(B.getMostRecentHit()) || B.includesBroadly(Ahit)) {
                         System.out.println("Too close to another filter");
                         fail(A.getTrackID() < B.getTrackID() ? B : A);
                         return;
@@ -72,7 +72,7 @@ public class WorldTrackyTracky {
             return;
         }
         for (Filter filter : activeFilters) {
-            if (filter.includes(hit.pos)) {
+            if (hit.pos.distSq(filter.getMostRecentHit()) < 20L * 20L && filter.includesBroadly(hit.pos)) {
                 filter.insertHit(hit);
                 return;
             }

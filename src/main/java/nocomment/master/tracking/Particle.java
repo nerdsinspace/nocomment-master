@@ -34,6 +34,15 @@ public class Particle {
         return 0.9;
     }
 
+    public boolean wouldLoadWithTripleBackprojection(ChunkPos pos) {
+        for (int i = 0; i < 3; i++) {
+            if (wouldLoad(x - i * dx * BACKPROJECTION, z - i * dz * BACKPROJECTION, pos)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static boolean wouldLoad(double x, double z, ChunkPos pos) {
         return Math.abs((int) Math.floor(x) - pos.x) <= 4 && Math.abs((int) Math.floor(z) - pos.z) <= 4;
     }

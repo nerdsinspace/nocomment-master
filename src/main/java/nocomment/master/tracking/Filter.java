@@ -285,9 +285,9 @@ public class Filter {
         return trackID;
     }
 
-    public synchronized boolean includes(ChunkPos pos) {
+    public synchronized boolean includesBroadly(ChunkPos pos) {
         for (Particle p : particles) {
-            if (Particle.wouldLoad(p.x, p.z, pos)) {
+            if (p.wouldLoadWithTripleBackprojection(pos)) {
                 return true;
             }
         }
