@@ -18,17 +18,17 @@ public class Particle {
     }
 
     public double wouldLoad(ChunkPos pos) {
-        if (wouldLoad(x, z, pos)) {
+        if (wouldLoad(x, z, pos, 4)) {
             return 0.95;
         }
-        if (wouldLoad(x - dx * BACKPROJECTION, z - dz * BACKPROJECTION, pos)) {
+        if (wouldLoad(x - dx * BACKPROJECTION, z - dz * BACKPROJECTION, pos, 4)) {
             return 0.25;
         }
         return 0.05;
     }
 
     public double wouldUnload(ChunkPos pos) {
-        if (wouldLoad(x, z, pos)) {
+        if (wouldLoad(x, z, pos, 4)) {
             return 0.1;
         }
         return 0.9;
@@ -36,15 +36,15 @@ public class Particle {
 
     public boolean wouldLoadWithTripleBackprojection(ChunkPos pos) {
         for (int i = 0; i < 3; i++) {
-            if (wouldLoad(x - i * dx * BACKPROJECTION, z - i * dz * BACKPROJECTION, pos)) {
+            if (wouldLoad(x - i * dx * BACKPROJECTION, z - i * dz * BACKPROJECTION, pos, 7)) {
                 return true;
             }
         }
         return false;
     }
 
-    public static boolean wouldLoad(double x, double z, ChunkPos pos) {
-        return Math.abs((int) Math.floor(x) - pos.x) <= 4 && Math.abs((int) Math.floor(z) - pos.z) <= 4;
+    public static boolean wouldLoad(double x, double z, ChunkPos pos, int renderDistance) {
+        return Math.abs((int) Math.floor(x) - pos.x) <= renderDistance && Math.abs((int) Math.floor(z) - pos.z) <= renderDistance;
     }
 
     public ChunkPos toChunkPos() {

@@ -72,7 +72,7 @@ public class WorldTrackyTracky {
             return;
         }
         for (Filter filter : activeFilters) {
-            if (hit.pos.distSq(filter.getMostRecentHit()) < 20L * 20L && filter.includesBroadly(hit.pos)) {
+            if (hit.pos.distSq(filter.getMostRecentHit()) < 50L * 50L && filter.includesBroadly(hit.pos)) {
                 filter.insertHit(hit);
                 return;
             }
