@@ -214,7 +214,7 @@ public enum DBSCAN {
             long c = System.currentTimeMillis();
             Datapoint point = getDatapoint(connection);
             long d = System.currentTimeMillis();
-            if (d - c > 5)
+            if (d - c > 15)
                 System.out.println("Took " + (d - c) + "ms to get a point");
             if (point == null) {
                 break;
