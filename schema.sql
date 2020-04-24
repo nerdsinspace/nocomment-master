@@ -124,7 +124,6 @@ CREATE TABLE dbscan
     z              INTEGER  NOT NULL,
     dimension      SMALLINT NOT NULL,
     server_id      SMALLINT NOT NULL,
-    needs_update   BOOLEAN  NOT NULL,
     is_core        BOOLEAN  NOT NULL,
     cluster_parent INTEGER, -- nullable
     disjoint_rank  INTEGER  NOT NULL,
@@ -141,7 +140,6 @@ CREATE TABLE dbscan
 CREATE INDEX dbscan_cluster_roots ON dbscan (server_id, dimension, id) WHERE cluster_parent IS NULL AND disjoint_rank > 0;
 CREATE UNIQUE INDEX dbscan_ingest ON dbscan (server_id, dimension, x, z);
 CREATE INDEX dbscan_process ON dbscan USING GiST (server_id, dimension, CIRCLE(POINT(x, z), 32)) WHERE cnt > 3;
-CREATE INDEX dbscan_to_update ON dbscan (is_core, id) WHERE needs_update;
 CREATE INDEX dbscan_disjoint_traversal ON dbscan (cluster_parent) WHERE cluster_parent IS NOT NULL;
 
 CREATE TABLE dbscan_progress
@@ -151,6 +149,14 @@ CREATE TABLE dbscan_progress
 
 INSERT INTO dbscan_progress(last_processed_hit_id)
 VALUES (0);
+
+CREATE TABLE dbscan_to_update
+(
+    dbscan_id INTEGER PRIMARY KEY,
+
+    FOREIGN KEY (dbscan_id) REFERENCES dbscan (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
 
 CREATE TABLE associations
 (

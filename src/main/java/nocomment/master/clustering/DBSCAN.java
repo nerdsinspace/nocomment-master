@@ -21,7 +21,7 @@ public enum DBSCAN {
     }
 
     private synchronized void incrementalRun() {
-        //while (Aggregator.INSTANCE.aggregateHits()) ;
+        while (Aggregator.INSTANCE.aggregateHits()) ;
         try (Connection connection = Database.getConnection()) {
             dbscan(connection);
         } catch (SQLException ex) {
@@ -135,7 +135,7 @@ public enum DBSCAN {
     }
 
     public static void markForUpdateAllWithinRadius(short serverID, short dimension, int x, int z, Connection connection) throws SQLException {
-        try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET needs_update = TRUE WHERE " + DANK_CONDITION)) {
+        try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO dbscan_to_update (dbscan_id) SELECT id FROM dbscan WHERE " + DANK_CONDITION + " ON CONFLICT DO NOTHING")) {
             stmt.setShort(1, serverID);
             stmt.setShort(2, dimension);
             stmt.setInt(3, x);
@@ -145,15 +145,20 @@ public enum DBSCAN {
     }
 
     private Datapoint getDatapoint(Connection connection) throws SQLException {
-        try (PreparedStatement stmt = connection.prepareStatement("" +
-                "UPDATE dbscan SET needs_update = FALSE WHERE id = (" +
-                "    SELECT id FROM dbscan WHERE needs_update ORDER BY is_core ASC LIMIT 1 FOR UPDATE SKIP LOCKED" +
-                ") RETURNING " + COLS);
+        int id;
+        try (PreparedStatement stmt = connection.prepareStatement("DELETE FROM dbscan_to_update WHERE dbscan_id = (SELECT MAX(dbscan_id) FROM dbscan_to_update) RETURNING dbscan_id");
              ResultSet rs = stmt.executeQuery()) {
             if (rs.next()) {
-                return new Datapoint(rs);
+                id = rs.getInt("dbscan_id");
             } else {
                 return null;
+            }
+        }
+        try (PreparedStatement stmt = connection.prepareStatement("SELECT " + COLS + " FROM dbscan WHERE id = ?")) {
+            stmt.setInt(1, id);
+            try (ResultSet rs = stmt.executeQuery()) {
+                rs.next();
+                return new Datapoint(rs);
             }
         }
     }
@@ -214,7 +219,7 @@ public enum DBSCAN {
             long c = System.currentTimeMillis();
             Datapoint point = getDatapoint(connection);
             long d = System.currentTimeMillis();
-            if (d - c > 15)
+            if (d - c > 5)
                 System.out.println("Took " + (d - c) + "ms to get a point");
             if (point == null) {
                 break;
@@ -223,7 +228,7 @@ public enum DBSCAN {
             List<Datapoint> neighbors = getWithinRange(point, connection); // IMPORTANT: THIS INCLUDES THE POINT ITSELF!
             long b = System.currentTimeMillis();
             if (b - a > 30)
-                System.out.println("Took " + (b - a) + "ms to get " + neighbors.size() + " neighbors");
+                System.out.println("Took " + (b - a) + "ms to get " + neighbors.size() + " neighbors of " + point);
             if (!neighbors.contains(point)) {
                 throw new IllegalStateException();
             }

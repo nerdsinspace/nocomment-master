@@ -134,15 +134,14 @@ enum Aggregator {
                 boolean needsRangedUpdate = false;
                 if (!wasInDB) {
                     try (PreparedStatement stmt = connection.prepareStatement("" +
-                            "INSERT INTO dbscan (cnt, server_id, dimension, x, z, needs_update, is_core, cluster_parent, disjoint_rank, disjoint_size) VALUES" +
-                            "                   (?,   ?,         ?,         ?, ?, ?,            ?,       NULL,           0,             1)")) {
+                            "INSERT INTO dbscan (cnt, server_id, dimension, x, z, is_core, cluster_parent, disjoint_rank, disjoint_size) VALUES" +
+                            "                   (?,   ?,         ?,         ?, ?, ?,       NULL,           0,             1)")) {
                         stmt.setInt(1, syntheticCount);
                         stmt.setShort(2, aggr.serverID);
                         stmt.setShort(3, aggr.dimension);
                         stmt.setInt(4, aggr.x);
                         stmt.setInt(5, aggr.z);
-                        stmt.setBoolean(6, syntheticCount > THRESHOLD || aggr.anyLegacy);
-                        stmt.setBoolean(7, aggr.anyLegacy);
+                        stmt.setBoolean(6, aggr.anyLegacy);
                         stmt.execute();
                     }
                     needsRangedUpdate = true;

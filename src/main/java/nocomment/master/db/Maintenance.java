@@ -20,7 +20,6 @@ public class Maintenance {
         scheduleReindex("dbscan_cluster_roots");
         scheduleReindex("dbscan_ingest");
         scheduleReindex("dbscan_process");
-        scheduleReindex("dbscan_to_update", 3600); // hourly since this index fucks itself incredibly quickly. after just a few hours, performance degrades more than 100x. not exaggerating.
         scheduleReindex("dbscan_disjoint_traversal");
     }
 
