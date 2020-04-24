@@ -24,6 +24,8 @@ public class Hit {
         this.serverID = world.server.serverID;
         this.dimension = world.dimension;
         this.createdAt = System.currentTimeMillis();
+        this.hitID = OptionalLong.empty();
+        this.trackID = OptionalInt.empty();
     }
 
     public synchronized void associateWithTrack(int trackID) {
@@ -68,8 +70,8 @@ public class Hit {
         return trackID;
     }
 
-    long getHitID() {
-        if (!Thread.holdsLock(this) || !hitID.isPresent()) {
+    synchronized long getHitID() {
+        if (!hitID.isPresent()) {
             throw new IllegalStateException();
         }
         return hitID.getAsLong();

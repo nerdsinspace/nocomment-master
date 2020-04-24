@@ -1,7 +1,6 @@
 package nocomment.master;
 
 import nocomment.master.network.Connection;
-import nocomment.master.task.CombinedTask;
 import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.task.Task;
 import nocomment.master.util.BlockCheckManager;
@@ -55,9 +54,10 @@ public class World {
         for (PriorityDispatchable dup : pending) {
             if (dup instanceof Task && ((Task) dup).interchangable(task)) {
                 System.out.println("Already queued. Not adding duplicate task. Queue size is " + pending.size());
-                pending.remove(dup);
-                pending.add(new CombinedTask(task, (Task) dup));
-                return task;
+                //pending.remove(dup);
+                //pending.add(new CombinedTask(task, (Task) dup));
+                //return task;
+                return (Task) dup;
             }
         }
         submit(task);
