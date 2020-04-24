@@ -90,7 +90,7 @@ public abstract class Connection {
 
     protected void hitReceived(int taskID, ChunkPos pos) {
         Hit hit = new Hit(world, pos);
-        hit.saveToDBAsync();
+        hit.saveToDBSoon();
         Task task;
         synchronized (this) {
             task = tasks.get(taskID);

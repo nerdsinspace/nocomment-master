@@ -8,8 +8,6 @@ import org.apache.commons.dbcp2.BasicDataSource;
 
 import java.sql.*;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 
 public class Database {
     private static BasicDataSource pool;
@@ -35,25 +33,35 @@ public class Database {
         }
     }
 
-    static void saveHit(Hit hit, CompletableFuture<Long> hitID) {
-        long id;
-        try (Connection connection = pool.getConnection();
-             PreparedStatement stmt = connection.prepareStatement("INSERT INTO hits (created_at, x, z, dimension, server_id) VALUES (?, ?, ?, ?, ?) RETURNING id")) {
-            stmt.setLong(1, hit.createdAt);
-            stmt.setInt(2, hit.pos.x);
-            stmt.setInt(3, hit.pos.z);
-            stmt.setShort(4, hit.dimension);
-            stmt.setShort(5, hit.serverID);
-            try (ResultSet rs = stmt.executeQuery()) {
-                rs.next();
-                id = rs.getLong("id");
+    static void saveHit(Hit hit) {
+        if (NoComment.DRY_RUN) {
+            throw new IllegalStateException();
+        }
+        try (Connection connection = pool.getConnection()) {
+            connection.setAutoCommit(false);
+            try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO hits (created_at, x, z, dimension, server_id, track_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id")) {
+                stmt.setLong(1, hit.createdAt);
+                stmt.setInt(2, hit.pos.x);
+                stmt.setInt(3, hit.pos.z);
+                stmt.setShort(4, hit.dimension);
+                stmt.setShort(5, hit.serverID);
+                if (hit.getTrackID().isPresent()) {
+                    stmt.setInt(6, hit.getTrackID().getAsInt());
+                } else {
+                    stmt.setNull(6, Types.INTEGER);
+                }
+                try (ResultSet rs = stmt.executeQuery()) {
+                    rs.next();
+                    hit.setHitID(rs.getLong("id"));
+                }
+            }
+            if (hit.getTrackID().isPresent()) {
+                updateTrackWithMostRecentHit(hit, connection);
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
-            hitID.completeExceptionally(ex);
             throw new RuntimeException(ex);
         }
-        hitID.complete(id); // only complete the future outside the try, when the connection is closed and the statement is committed!
     }
 
     public static void clearSessions(short serverID) {
@@ -218,49 +226,38 @@ public class Database {
         }
     }
 
-    public static long createTrack(Hit initialHit, OptionalLong prevTrackID) {
+    public static int createTrack(Hit initialHit, OptionalInt prevTrackID) {
+        // make sure that the initialHit has an assigned hit ID
+        initialHit.saveToDB();
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("INSERT INTO tracks (first_hit_id, last_hit_id, updated_at, prev_track_id, dimension, server_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id")) {
-            long hitID = initialHit.getHitID().get();
-            stmt.setLong(1, hitID);
-            stmt.setLong(2, hitID);
+            stmt.setLong(1, initialHit.getHitID());
+            stmt.setLong(2, initialHit.getHitID());
             stmt.setLong(3, initialHit.createdAt);
             if (prevTrackID.isPresent()) {
-                stmt.setLong(4, prevTrackID.getAsLong());
+                stmt.setInt(4, prevTrackID.getAsInt());
             } else {
-                stmt.setNull(4, Types.BIGINT);
+                stmt.setNull(4, Types.INTEGER);
             }
             stmt.setShort(5, initialHit.dimension);
             stmt.setShort(6, initialHit.serverID);
             try (ResultSet rs = stmt.executeQuery()) {
                 rs.next();
-                return rs.getLong("id");
+                return rs.getInt("id");
             }
-        } catch (SQLException | InterruptedException | ExecutionException ex) {
+        } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
         }
     }
 
-    public static void addHitToTrack(Hit hit, long trackID) {
-        long hitID;
-        try {
-            hitID = hit.getHitID().get(); // do NOT block on this with a connection
-        } catch (InterruptedException | ExecutionException ex) {
-            ex.printStackTrace();
-            throw new RuntimeException(ex);
-        }
+    static void addHitToTrack(Hit hit) {
         try (Connection connection = pool.getConnection()) {
             connection.setAutoCommit(false);
-            try (PreparedStatement stmt = connection.prepareStatement("UPDATE tracks SET last_hit_id = ?, updated_at = ? WHERE id = ?")) { // TODO maybe add a WHERE last_hit_id < ? or a WHERE updated_at < ? to preserve invariants?
-                stmt.setLong(1, hitID);
-                stmt.setLong(2, hit.createdAt);
-                stmt.setLong(3, trackID);
-                stmt.executeUpdate();
-            }
+            updateTrackWithMostRecentHit(hit, connection);
             try (PreparedStatement stmt = connection.prepareStatement("UPDATE hits SET track_id = ? WHERE id = ?")) {
-                stmt.setLong(1, trackID);
-                stmt.setLong(2, hitID);
+                stmt.setInt(1, hit.getTrackID().getAsInt());
+                stmt.setLong(2, hit.getHitID());
                 stmt.execute();
             }
             connection.commit();
@@ -270,7 +267,18 @@ public class Database {
         }
     }
 
-    public static Set<Long> trackIDsToResume(Collection<Integer> playerIDs, short serverID) {
+    private static void updateTrackWithMostRecentHit(Hit hit, Connection connection) throws SQLException {
+        // preserve invariant of the last hit in the track having the highest updated_at
+        try (PreparedStatement stmt = connection.prepareStatement("UPDATE tracks SET last_hit_id = ?, updated_at = ? WHERE id = ? AND updated_at <= ?")) {
+            stmt.setLong(1, hit.getHitID());
+            stmt.setLong(2, hit.createdAt);
+            stmt.setInt(3, hit.getTrackID().getAsInt());
+            stmt.setLong(4, hit.createdAt);
+            stmt.executeUpdate();
+        }
+    }
+
+    public static Set<Integer> trackIDsToResume(Collection<Integer> playerIDs, short serverID) {
         try (Connection connection = pool.getConnection()) {
 
             Set<Long> logoutTimestamps = new HashSet<>(); // set because there will be many duplicates
@@ -289,7 +297,7 @@ public class Database {
                 }
             }
 
-            Set<Long> trackIDsToResume = new HashSet<>(); // set because there will be many duplicates
+            Set<Integer> trackIDsToResume = new HashSet<>(); // set because there will be many duplicates
 
             if (logoutTimestamps.isEmpty()) {
                 return trackIDsToResume;
@@ -302,7 +310,7 @@ public class Database {
                     stmt.setShort(3, serverID);
                     try (ResultSet rs = stmt.executeQuery()) {
                         while (rs.next()) {
-                            trackIDsToResume.add(rs.getLong(1));
+                            trackIDsToResume.add(rs.getInt(1));
                         }
                     }
                 }
@@ -315,12 +323,12 @@ public class Database {
         }
     }
 
-    public static List<TrackResume> resumeTracks(Collection<Long> trackIDs) {
+    public static List<TrackResume> resumeTracks(Collection<Integer> trackIDs) {
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT hits.x, hits.z, hits.dimension FROM tracks INNER JOIN hits ON hits.id = tracks.last_hit_id WHERE tracks.id = ?")) {
             List<TrackResume> ret = new ArrayList<>();
-            for (long trackID : trackIDs) {
-                stmt.setLong(1, trackID);
+            for (int trackID : trackIDs) {
+                stmt.setInt(1, trackID);
                 try (ResultSet rs = stmt.executeQuery()) {
                     rs.next();
                     ret.add(new TrackResume(rs.getInt("x"), rs.getInt("z"), rs.getShort("dimension"), trackID));

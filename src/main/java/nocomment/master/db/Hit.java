@@ -1,18 +1,23 @@
 package nocomment.master.db;
 
-import nocomment.master.NoComment;
 import nocomment.master.World;
+import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.ChunkPos;
+import nocomment.master.util.LoggingExecutor;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
+import java.util.concurrent.TimeUnit;
 
 public class Hit {
     public final ChunkPos pos;
     public final short serverID;
     public final short dimension;
     public final long createdAt;
-    private Future<Long> hitID;
+    private OptionalLong hitID;
+    private OptionalInt trackID;
+
+    private boolean savedToHitsTable;
 
     public Hit(World world, ChunkPos pos) {
         this.pos = pos;
@@ -21,16 +26,52 @@ public class Hit {
         this.createdAt = System.currentTimeMillis();
     }
 
-    public synchronized void saveToDBAsync() {
-        if (hitID != null) {
-            throw new IllegalStateException();
+    public synchronized void associateWithTrack(int trackID) {
+        if (this.trackID.isPresent()) {
+            throw new IllegalStateException(this.trackID + " " + trackID);
         }
-        CompletableFuture<Long> future = new CompletableFuture<>();
-        hitID = future;
-        NoComment.executor.execute(() -> Database.saveHit(this, future));
+        this.trackID = OptionalInt.of(trackID);
+        if (savedToHitsTable) {
+            System.out.println("Adding a hit to a track after the fact");
+            Database.addHitToTrack(this);
+        } else {
+            saveToDB();
+        }
     }
 
-    public Future<Long> getHitID() {
-        return hitID;
+    public void saveToDBSoon() {
+        TrackyTrackyManager.scheduler.schedule(LoggingExecutor.wrap(this::saveToDB), 1, TimeUnit.SECONDS);
+    }
+
+    synchronized void saveToDB() { // call this to ensure we have a hitID
+        if (savedToHitsTable) {
+            return; // already done
+        }
+        savedToHitsTable = true;
+        Database.saveHit(this);
+    }
+
+    void setHitID(long hitID) {
+        if (!Thread.holdsLock(this)) {
+            throw new IllegalStateException();
+        }
+        if (this.hitID.isPresent()) {
+            throw new IllegalStateException(this.hitID + " " + hitID);
+        }
+        this.hitID = OptionalLong.of(hitID);
+    }
+
+    OptionalInt getTrackID() {
+        if (!Thread.holdsLock(this)) {
+            throw new IllegalStateException();
+        }
+        return trackID;
+    }
+
+    long getHitID() {
+        if (!Thread.holdsLock(this) || !hitID.isPresent()) {
+            throw new IllegalStateException();
+        }
+        return hitID.getAsLong();
     }
 }

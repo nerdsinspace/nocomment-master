@@ -10,7 +10,7 @@ import nocomment.master.util.LoggingExecutor;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.OptionalLong;
+import java.util.OptionalInt;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -64,10 +64,10 @@ public class WorldTrackyTracky {
     }
 
     public void ingestGenericNewHit(Hit hit) { // for example, from a highway scanner
-        ingestGenericKnownHit(hit, OptionalLong.empty());
+        ingestGenericKnownHit(hit, OptionalInt.empty());
     }
 
-    public synchronized void ingestGenericKnownHit(Hit hit, OptionalLong prevTrack) {
+    public synchronized void ingestGenericKnownHit(Hit hit, OptionalInt prevTrack) {
         if (Math.abs(hit.pos.x) < 30 && Math.abs(hit.pos.z) < 30) {
             return;
         }
@@ -83,7 +83,7 @@ public class WorldTrackyTracky {
         filter.start();
     }
 
-    public void ingestApprox(ChunkPos pos, OptionalLong prevTrack, boolean doWeCare) { // for example, if tracking was lost in another dimension
+    public void ingestApprox(ChunkPos pos, OptionalInt prevTrack, boolean doWeCare) { // for example, if tracking was lost in another dimension
         if (doWeCare) {
             // 11 by 11 grid pattern, spacing of 7 between each one
             // so, 121 checks
@@ -109,7 +109,7 @@ public class WorldTrackyTracky {
         ChunkPos last = filter.getMostRecentHit();
         System.out.println("Filter failed. Last hit at " + last + " dimension " + world.dimension);
         onLost.accept(filter);
-        ingestApprox(last, OptionalLong.of(filter.getTrackID()), true); // one last hail mary
+        ingestApprox(last, OptionalInt.of(filter.getTrackID()), true); // one last hail mary
     }
 
     public List<Task> grid(int priority, int gridInterval, int gridRadius, ChunkPos center, Consumer<Hit> onHit) {
@@ -128,7 +128,7 @@ public class WorldTrackyTracky {
         return world.submitTaskUnlessAlreadyPending(new TaskHelper(priority, center, directionX, directionZ, count, onHit, i -> {}));
     }
 
-    public synchronized boolean hasActiveFilter(long trackID) {
+    public synchronized boolean hasActiveFilter(int trackID) {
         return activeFilters.stream().anyMatch(filter -> filter.getTrackID() == trackID);
     }
 }

@@ -8,7 +8,7 @@ import nocomment.master.scanners.RingScanner;
 import nocomment.master.scanners.SpiralScanner;
 import nocomment.master.util.ChunkPos;
 
-import java.util.OptionalLong;
+import java.util.OptionalInt;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -58,14 +58,14 @@ public class TrackyTrackyManager {
     }
 
     private void lostTrackingInOverworld(Filter lost) {
-        nether.ingestApprox(new ChunkPos(lost.getMostRecentHit().x / 8, lost.getMostRecentHit().z / 8), OptionalLong.of(lost.getTrackID()), true);
+        nether.ingestApprox(new ChunkPos(lost.getMostRecentHit().x / 8, lost.getMostRecentHit().z / 8), OptionalInt.of(lost.getTrackID()), true);
     }
 
     private void lostTrackingInNether(Filter lost) {
-        overworld.ingestApprox(new ChunkPos(lost.getMostRecentHit().x * 8, lost.getMostRecentHit().z * 8), OptionalLong.of(lost.getTrackID()), true);
+        overworld.ingestApprox(new ChunkPos(lost.getMostRecentHit().x * 8, lost.getMostRecentHit().z * 8), OptionalInt.of(lost.getTrackID()), true);
     }
 
-    public boolean hasActiveFilter(long trackID) {
+    public boolean hasActiveFilter(int trackID) {
         return overworld.hasActiveFilter(trackID) || nether.hasActiveFilter(trackID);
     }
 
@@ -74,11 +74,11 @@ public class TrackyTrackyManager {
         System.out.println("Attempting to resume tracking at " + resumeData.pos + " in dimension " + resumeData.dimension + " in server " + server.hostname + " from track id " + resumeData.prevTrackID + " interesting " + interesting);
         switch (resumeData.dimension) {
             case 0: {
-                overworld.ingestApprox(resumeData.pos, OptionalLong.of(resumeData.prevTrackID), interesting);
+                overworld.ingestApprox(resumeData.pos, OptionalInt.of(resumeData.prevTrackID), interesting);
                 break;
             }
             case -1: {
-                nether.ingestApprox(resumeData.pos, OptionalLong.of(resumeData.prevTrackID), interesting);
+                nether.ingestApprox(resumeData.pos, OptionalInt.of(resumeData.prevTrackID), interesting);
                 break;
             }
             default: {

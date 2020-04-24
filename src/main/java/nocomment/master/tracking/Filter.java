@@ -21,7 +21,7 @@ public class Filter {
     private static final int M = 1000;
     private final Random random = new Random();
     private final WorldTrackyTracky context;
-    private final long trackID;
+    private final int trackID;
 
     private List<Particle> particles = new ArrayList<>();
 
@@ -38,7 +38,7 @@ public class Filter {
 
     private final JFrame frame;
 
-    public Filter(Hit hit, WorldTrackyTracky context, OptionalLong prevTrackID) {
+    public Filter(Hit hit, WorldTrackyTracky context, OptionalInt prevTrackID) {
         this.context = context;
         deltaT();
         generatePoints(new ChunkPos(0, 0), hit.pos, M, false);
@@ -274,14 +274,14 @@ public class Filter {
     public synchronized void insertHit(Hit hit) {
         hits.add(hit.pos);
         mostRecentHit = hit.pos;
-        NoComment.executor.execute(() -> Database.addHitToTrack(hit, trackID));
+        NoComment.executor.execute(() -> hit.associateWithTrack(trackID));
     }
 
     public ChunkPos getMostRecentHit() {
         return mostRecentHit;
     }
 
-    public long getTrackID() {
+    public int getTrackID() {
         return trackID;
     }
 
