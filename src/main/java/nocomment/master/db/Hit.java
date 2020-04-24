@@ -34,7 +34,6 @@ public class Hit {
         }
         this.trackID = OptionalInt.of(trackID);
         if (savedToHitsTable) {
-            System.out.println("Adding a hit to a track after the fact");
             Database.addHitToTrack(this);
         } else {
             saveToDB();

@@ -145,7 +145,7 @@ public enum DBSCAN {
     }
 
     private Datapoint getDatapoint(Connection connection) throws SQLException {
-        try (PreparedStatement stmt = connection.prepareStatement("WITH removed_id AS (DELETE FROM dbscan_to_update WHERE dbscan_id = (SELECT MAX(dbscan_id) FROM dbscan_to_update) RETURNING dbscan_id) SELECT " + COLS + " FROM dbscan WHERE id = (SELECT dbscan_id FROM dbscan_to_update)");
+        try (PreparedStatement stmt = connection.prepareStatement("WITH removed_id AS (DELETE FROM dbscan_to_update WHERE dbscan_id = (SELECT MAX(dbscan_id) FROM dbscan_to_update) RETURNING dbscan_id) SELECT " + COLS + " FROM dbscan WHERE id = (SELECT dbscan_id FROM removed_id)");
              ResultSet rs = stmt.executeQuery()) {
             if (rs.next()) {
                 return new Datapoint(rs);
