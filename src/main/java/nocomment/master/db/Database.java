@@ -58,6 +58,7 @@ public class Database {
             if (hit.getTrackID().isPresent()) {
                 updateTrackWithMostRecentHit(hit, connection);
             }
+            connection.commit();
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
