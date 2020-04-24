@@ -21,7 +21,7 @@ public enum DBSCAN {
     }
 
     private synchronized void incrementalRun() {
-        while (Aggregator.INSTANCE.aggregateHits()) ;
+        //while (Aggregator.INSTANCE.aggregateHits()) ;
         try (Connection connection = Database.getConnection()) {
             dbscan(connection);
         } catch (SQLException ex) {
