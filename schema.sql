@@ -73,10 +73,36 @@ CREATE TABLE hits
         ON UPDATE CASCADE ON DELETE CASCADE
 );
 
-CREATE INDEX hits_by_time ON hits (created_at);
-CREATE INDEX hits_by_time_non_2b ON hits (created_at) WHERE server_id != 1; -- this index is tiny (200 kilobytes) but prevents the server from hanging if you accidentally log into constantiam or something lol
 CREATE INDEX hits_loc_interesting ON hits (x, z) WHERE ABS(x) > 100 AND ABS(z) > 100 AND ABS(ABS(x) - ABS(z)) > 100 AND
                                                        x::bigint * x::bigint + z::bigint * z::bigint > 1000 * 1000;
+
+CREATE TABLE last_by_server
+(
+    server_id  SMALLINT PRIMARY KEY,
+    created_at BIGINT NOT NULL,
+
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE OR REPLACE FUNCTION new_hit() RETURNS TRIGGER AS
+$$
+DECLARE
+BEGIN
+    INSERT INTO last_by_server (server_id, created_at)
+    VALUES (NEW.server_id, NEW.created_at)
+    ON CONFLICT ON CONSTRAINT last_by_server_pkey
+        DO UPDATE SET created_at = excluded.created_at
+    WHERE excluded.created_at > last_by_server.created_at;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER new_hit_trigger
+    AFTER INSERT OR UPDATE OR DELETE
+    ON hits
+    FOR EACH ROW
+EXECUTE PROCEDURE new_hit();
 
 CREATE TABLE tracks
 (

@@ -91,7 +91,7 @@ public class Database {
     private static long mostRecentEvent(short serverID) {
         try (Connection connection = pool.getConnection()) {
             long mostRecent;
-            try (PreparedStatement stmt = connection.prepareStatement("SELECT MAX(created_at) FROM hits WHERE server_id = ?")) {
+            try (PreparedStatement stmt = connection.prepareStatement("SELECT created_at FROM last_by_server WHERE server_id = ?")) {
                 stmt.setShort(1, serverID);
                 try (ResultSet rs = stmt.executeQuery()) {
                     rs.next();
