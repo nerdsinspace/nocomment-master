@@ -94,7 +94,10 @@ BEGIN
     --ON CONFLICT ON CONSTRAINT last_by_server_pkey
     --    DO UPDATE SET created_at = excluded.created_at
     --WHERE excluded.created_at > last_by_server.created_at;
-    UPDATE last_by_server SET created_at = NEW.created_at WHERE created_at < NEW.created_at AND server_id = NEW.server_id;
+    UPDATE last_by_server
+    SET created_at = NEW.created_at
+    WHERE created_at < NEW.created_at
+      AND server_id = NEW.server_id;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -104,6 +107,23 @@ CREATE TRIGGER new_hit_trigger
     ON hits
     FOR EACH ROW
 EXECUTE PROCEDURE new_hit();
+
+CREATE OR REPLACE FUNCTION new_server() RETURNS TRIGGER AS
+$$
+DECLARE
+BEGIN
+    INSERT INTO last_by_server (server_id, created_at)
+    VALUES (NEW.server_id, 0)
+    ON CONFLICT ON CONSTRAINT last_by_server_pkey DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER new_server_trigger
+    AFTER INSERT OR UPDATE OR DELETE
+    ON servers
+    FOR EACH ROW
+EXECUTE PROCEDURE new_server();
 
 CREATE TABLE tracks
 (
