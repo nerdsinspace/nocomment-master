@@ -89,11 +89,12 @@ CREATE OR REPLACE FUNCTION new_hit() RETURNS TRIGGER AS
 $$
 DECLARE
 BEGIN
-    INSERT INTO last_by_server (server_id, created_at)
-    VALUES (NEW.server_id, NEW.created_at)
-    ON CONFLICT ON CONSTRAINT last_by_server_pkey
-        DO UPDATE SET created_at = excluded.created_at
-    WHERE excluded.created_at > last_by_server.created_at;
+    --INSERT INTO last_by_server (server_id, created_at)
+    --VALUES (NEW.server_id, NEW.created_at)
+    --ON CONFLICT ON CONSTRAINT last_by_server_pkey
+    --    DO UPDATE SET created_at = excluded.created_at
+    --WHERE excluded.created_at > last_by_server.created_at;
+    UPDATE last_by_server SET created_at = NEW.created_at WHERE created_at < NEW.created_at AND server_id = NEW.server_id;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
