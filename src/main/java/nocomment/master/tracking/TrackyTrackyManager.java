@@ -48,7 +48,7 @@ public class TrackyTrackyManager {
     private void clusters() {
         new ClusterRetryScanner(overworld.world, 50, 10, 1000, overworld::ingestGenericNewHit).submitTasks();
 
-        new ClusterRetryScanner(nether.world, 50, 2, 1000, nether::ingestGenericNewHit).submitTasks();
+        //new ClusterRetryScanner(nether.world, 50, 2, 1000, nether::ingestGenericNewHit).submitTasks();
     }
 
     private void spiral() {

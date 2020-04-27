@@ -8,8 +8,6 @@ import java.util.concurrent.TimeUnit;
 public class Maintenance {
     static void scheduleMaintenance() {
         schedule(Database::vacuum, "vacuum", 86400);
-        scheduleReindex("hits_by_time");
-        scheduleReindex("hits_by_time_non_2b");
         scheduleReindex("hits_by_track_id");
         scheduleReindex("hits_pkey");
         scheduleReindex("tracks_pkey");
