@@ -81,14 +81,19 @@ public class BlockAPI {
         }
     }
 
-    public static void listen() throws IOException {
-        int port = 46290;
-        ServerSocket ss = new ServerSocket(port);
-        System.out.println("Server listening on port " + port);
-        while (true) {
-            Socket s = ss.accept();
-            System.out.println("Server accepted a socket");
-            NoComment.executor.execute(() -> handleNewSocket(s));
+    public static void listen() {
+        try {
+            int port = 46290;
+            ServerSocket ss = new ServerSocket(port);
+            System.out.println("Server listening on port " + port);
+            while (true) {
+                Socket s = ss.accept();
+                System.out.println("Server accepted a socket");
+                NoComment.executor.execute(() -> handleNewSocket(s));
+            }
+        } catch (IOException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
         }
     }
 }
