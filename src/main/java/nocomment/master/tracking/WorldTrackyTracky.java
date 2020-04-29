@@ -78,6 +78,7 @@ public class WorldTrackyTracky {
             return;
         }
         if (SelfTrack.tooCloseToCoolLocation(hit.pos.x, hit.pos.z, world.dimension)) {
+            System.out.println("Too close to us " + hit.pos);
             return;
         }
         for (Filter filter : activeFilters) {
