@@ -229,3 +229,21 @@ CREATE TABLE track_associator_progress
 
 INSERT INTO track_associator_progress
 VALUES (0);
+
+CREATE TABLE blocks
+(
+    x           INTEGER  NOT NULL,
+    y           SMALLINT NOT NULL,
+    z           INTEGER  NOT NULL,
+    block_state INTEGER  NOT NULL,
+    created_at  BIGINT   NOT NULL,
+    dimension   SMALLINT NOT NULL,
+    server_id   SMALLINT NOT NULL,
+
+    FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
+        ON UPDATE RESTRICT ON DELETE RESTRICT,
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX blocks_by_loc ON blocks (x, z);
