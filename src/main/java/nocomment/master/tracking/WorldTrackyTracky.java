@@ -7,6 +7,7 @@ import nocomment.master.task.Task;
 import nocomment.master.task.TaskHelper;
 import nocomment.master.util.ChunkPos;
 import nocomment.master.util.LoggingExecutor;
+import nocomment.master.util.SelfTrack;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +42,11 @@ public class WorldTrackyTracky {
                 fail(A);
                 return;
             }
+            if (SelfTrack.tooCloseToCoolLocation(Ahit.x, Ahit.z, world.dimension)) {
+                System.out.println("Too close to us " + Ahit);
+                fail(A);
+                return;
+            }
             for (Filter B : copy) {
                 if (A == B) {
                     continue;
@@ -69,6 +75,9 @@ public class WorldTrackyTracky {
 
     public synchronized void ingestGenericKnownHit(Hit hit, OptionalInt prevTrack) {
         if (Math.abs(hit.pos.x) < 30 && Math.abs(hit.pos.z) < 30) {
+            return;
+        }
+        if (SelfTrack.tooCloseToCoolLocation(hit.pos.x, hit.pos.z, world.dimension)) {
             return;
         }
         for (Filter filter : activeFilters) {
