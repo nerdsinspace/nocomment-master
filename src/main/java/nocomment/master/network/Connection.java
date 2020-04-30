@@ -205,6 +205,11 @@ public abstract class Connection {
 
     @Override
     public String toString() {
-        return getUUID() + " " + tasks.size() + " tasks, " + sumHigherPriority(Integer.MAX_VALUE) + " checks, " + taskIDSeq + " task ID, " + onlinePlayerSet.size() + " online players reported, " + (System.currentTimeMillis() - mostRecentRead) + "ms since most recent read";
+        String ret = getUUID() + " " + tasks.size() + " tasks, " + sumHigherPriority(Integer.MAX_VALUE) + " checks, " + taskIDSeq + " task ID, " + onlinePlayerSet.size() + " online players reported, " + (System.currentTimeMillis() - mostRecentRead) + "ms since most recent read";
+        OptionalLong join = Staggerer.currentSessionJoinedAt(getIdentity(), world.server.serverID);
+        if (join.isPresent()) {
+            ret += ", " + (System.currentTimeMillis() - join.getAsLong()) / 3600_000d + "hours since server join";
+        }
+        return ret;
     }
 }

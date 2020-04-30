@@ -342,10 +342,25 @@ public class Database {
         }
     }
 
-    public static OptionalLong currentSessionJoinedAt(int playerID, short serverID) {
+    public static int numOnlineAt(short serverID, long timestamp) {
+        try (Connection connection = pool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("SELECT COUNT(*) AS cnt FROM player_sessions WHERE range @> ? AND server_id = ?")) {
+            stmt.setLong(1, timestamp);
+            stmt.setShort(2, serverID);
+            try (ResultSet rs = stmt.executeQuery()) {
+                rs.next();
+                return rs.getInt("cnt");
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static OptionalLong sessionJoinedAt(int playerID, short serverID, long wasInAt) {
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT \"join\" FROM player_sessions WHERE range @> ? AND player_id = ? AND server_id = ?")) {
-            stmt.setLong(1, Long.MAX_VALUE - 1); // must be -1 since postgres ranges are exclusive on the upper end
+            stmt.setLong(1, wasInAt);
             stmt.setInt(2, playerID);
             stmt.setShort(3, serverID);
             try (ResultSet rs = stmt.executeQuery()) {

@@ -27,7 +27,7 @@ public class Staggerer {
         }
         Map<Connection, Long> joins = new HashMap<>();
         for (Connection conn : conns) {
-            OptionalLong join = Database.currentSessionJoinedAt(conn.getIdentity(), world.server.serverID);
+            OptionalLong join = currentSessionJoinedAt(conn.getIdentity(), world.server.serverID);
             if (!join.isPresent()) {
                 System.out.println("Exceptional situation (i put that in so it would show up when i grep for Exception in the server logs) where a connection is here but not actually on the server " + System.currentTimeMillis() + " " + conn + " " + conn.getIdentity());
                 return;
@@ -42,5 +42,37 @@ public class Staggerer {
             System.out.println("KICKING " + System.currentTimeMillis() + " " + oldest);
             oldest.requestServerDisconnect();
         }
+    }
+
+    public static OptionalLong currentSessionJoinedAt(int playerID, short serverID) {
+        return currentSessionJoinedAt(playerID, serverID, Long.MAX_VALUE - 1);
+    }
+
+    public static OptionalLong currentSessionJoinedAt(int playerID, short serverID, long ts) {
+        OptionalLong joinedAt = Database.sessionJoinedAt(playerID, serverID, ts);
+        if (!joinedAt.isPresent()) {
+            return joinedAt;
+        }
+        long timestamp = joinedAt.getAsLong();
+        // check if this was a BS server restart
+        if (!anyEmpty(serverID, timestamp - 100, timestamp - 200, timestamp - 300, timestamp - 400, timestamp - 500)) {
+            // nope, server was well populated
+            return joinedAt;
+        }
+        long tentative = timestamp - 20_000;
+        OptionalLong whatWeDoHereIsGoBack = currentSessionJoinedAt(playerID, serverID, tentative);
+        if (whatWeDoHereIsGoBack.isPresent()) {
+            return whatWeDoHereIsGoBack;
+        }
+        return joinedAt;
+    }
+
+    private static boolean anyEmpty(short serverID, long... timestamps) {
+        for (long timestamp : timestamps) {
+            if (Database.numOnlineAt(serverID, timestamp) == 0) {
+                return true;
+            }
+        }
+        return false;
     }
 }

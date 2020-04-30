@@ -27,11 +27,7 @@ public class BlockCheckManager {
     }
 
     public void requestBlockState(long mustBeNewerThan, BlockPos pos, int priority, Consumer<OptionalInt> onCompleted) {
-        get(pos).requested(mustBeNewerThan, priority, onCompleted);
-    }
-
-    public void requestBlockState(BlockPos pos, int priority, Consumer<OptionalInt> onCompleted) {
-        requestBlockState(0, pos, priority, onCompleted);
+        NoComment.executor.execute(() -> get(pos).requested(mustBeNewerThan, priority, onCompleted));
     }
 
     public class BlockCheckStatus {
