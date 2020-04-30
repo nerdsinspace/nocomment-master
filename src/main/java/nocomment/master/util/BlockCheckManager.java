@@ -11,7 +11,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 
 public class BlockCheckManager {
@@ -71,25 +70,22 @@ public class BlockCheckManager {
         }
 
         public void requested(long mustBeNewerThan, int priority, Consumer<OptionalInt> listener) {
-            try {
-                checkedDatabaseYet.get();
-            } catch (InterruptedException | ExecutionException e) {
-                e.printStackTrace();
-            }
-            synchronized (this) {
-                if (reply.isPresent() && responseAt > mustBeNewerThan) {
-                    OptionalInt state = reply.get();
-                    NoComment.executor.execute(() -> listener.accept(state));
-                    return;
-                }
-                listeners.add(listener);
-                if (priority < highestSubmittedPriority) {
-                    highestSubmittedPriority = priority;
+            checkedDatabaseYet.thenAccept(ignored -> requested0(mustBeNewerThan, priority, listener));
+        }
 
-                    BlockCheck check = new BlockCheck(priority, this);
-                    inFlight.add(check);
-                    NoComment.executor.execute(() -> world.submit(check));
-                }
+        public synchronized void requested0(long mustBeNewerThan, int priority, Consumer<OptionalInt> listener) {
+            if (reply.isPresent() && responseAt > mustBeNewerThan) {
+                OptionalInt state = reply.get();
+                NoComment.executor.execute(() -> listener.accept(state));
+                return;
+            }
+            listeners.add(listener);
+            if (priority < highestSubmittedPriority) {
+                highestSubmittedPriority = priority;
+
+                BlockCheck check = new BlockCheck(priority, this);
+                inFlight.add(check);
+                NoComment.executor.execute(() -> world.submit(check));
             }
         }
 
