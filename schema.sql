@@ -65,7 +65,7 @@ CREATE TABLE hits
     dimension  SMALLINT NOT NULL,
     server_id  SMALLINT NOT NULL,
     legacy     BOOLEAN  NOT NULL DEFAULT FALSE,
-    -- NOTE: AN EXTRA COLUMN IS ADDED LATER. can't be added here due to cyclic references
+    -- NOTE: TRACK_ID COLUMN IS ADDED LATER. can't be added here due to cyclic references
 
     FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
         ON UPDATE RESTRICT ON DELETE RESTRICT,
