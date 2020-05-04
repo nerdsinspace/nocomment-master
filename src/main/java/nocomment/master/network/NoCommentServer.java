@@ -8,8 +8,6 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.HashMap;
-import java.util.Map;
 
 public enum NoCommentServer {
     // cat /dev/random | head -c 100000000 | shasum -a 512
@@ -23,11 +21,6 @@ public enum NoCommentServer {
     private final String magic;
     private final String version;
     private final SocketConsumer onConnection;
-    private static final Map<String, NoCommentServer> magics = new HashMap<String, NoCommentServer>() {{
-        for (NoCommentServer s : values()) {
-            put(s.magic, s);
-        }
-    }};
 
     NoCommentServer(String magic, String version, SocketConsumer onConnection) {
         this.magic = magic;
@@ -41,7 +34,8 @@ public enum NoCommentServer {
             String recv = in.readUTF(); // limits to 65536 so this is fine
             String magic = recv.split(" ")[0];
             String version = recv.split(" ")[1];
-            NoCommentServer server = magics.get(magic);
+            NoCommentServer server = getByMagic(magic);
+            System.out.println(magic + " " + version + " " + server + " " + recv);
             if (server == null) {
                 s.close();
                 return;
@@ -67,6 +61,15 @@ public enum NoCommentServer {
             } catch (Throwable th) {
             }
         }
+    }
+
+    private static NoCommentServer getByMagic(String magic) {
+        for (NoCommentServer s : values()) {
+            if (s.magic.equals(magic)) {
+                return s;
+            }
+        }
+        return null;
     }
 
     private static SocketConsumer withWorld(WorldContextConsumer wcc) {

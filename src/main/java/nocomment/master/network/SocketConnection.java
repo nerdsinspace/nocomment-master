@@ -56,7 +56,7 @@ public class SocketConnection extends Connection {
     }
 
     @Override
-    protected void dispatchDisconnectRequest() {
+    public void dispatchDisconnectRequest() {
         queue.add(out -> out.writeByte(2));
     }
 

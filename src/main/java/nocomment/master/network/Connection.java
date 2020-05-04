@@ -65,10 +65,6 @@ public abstract class Connection {
         recentCheckTimestamps.values().removeIf(ts -> ts < System.currentTimeMillis() - 1000);
     }
 
-    public void requestServerDisconnect() {
-        NoComment.executor.execute(this::dispatchDisconnectRequest);
-    }
-
     public synchronized boolean blockAffinity(BlockPos pos) {
         return checks.containsKey(pos) || recentCheckTimestamps.containsKey(pos);
     }
@@ -80,14 +76,14 @@ public abstract class Connection {
             return;
         }
         checks.put(check.pos, check);
-        NoComment.executor.execute(() -> dispatchBlockCheck(check));
+        dispatchBlockCheck(check);
     }
 
     public synchronized void acceptTask(Task task) {
         // even at 500 per second, it would take over 3 months of 24/7 2b2t uptime for this to overflow, so don't worry
         int id = taskIDSeq++;
         tasks.put(id, task);
-        NoComment.executor.execute(() -> dispatchTask(task, id));
+        dispatchTask(task, id);
     }
 
     protected void hitReceived(int taskID, ChunkPos pos) {
@@ -193,7 +189,7 @@ public abstract class Connection {
     /**
      * Never throw exception. Just close the socket and let read fail gracefully.
      */
-    protected abstract void dispatchDisconnectRequest();
+    public abstract void dispatchDisconnectRequest();
 
     /**
      * Read (looped). Throw exception on any failure.
