@@ -1,7 +1,6 @@
 package nocomment.master;
 
 import nocomment.master.db.Database;
-import nocomment.master.network.BlockAPI;
 import nocomment.master.network.NoCommentServer;
 import nocomment.master.util.LoggingExecutor;
 
@@ -15,7 +14,6 @@ public class NoComment {
     public static void main(String[] args) throws Exception {
         if (!DRY_RUN) {
             new Database();
-            executor.execute(BlockAPI::listen);
             NoCommentServer.listen();
         }
     }

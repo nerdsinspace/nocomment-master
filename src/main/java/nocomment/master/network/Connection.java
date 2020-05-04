@@ -59,6 +59,8 @@ public abstract class Connection {
         }
     }
 
+    public abstract void writeLoop();
+
     private synchronized void clearRecentChecks() {
         recentCheckTimestamps.values().removeIf(ts -> ts < System.currentTimeMillis() - 1000);
     }

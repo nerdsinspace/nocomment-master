@@ -2,26 +2,27 @@ package nocomment.master.network;
 
 import nocomment.master.World;
 import nocomment.master.task.Task;
-import nocomment.master.util.*;
+import nocomment.master.util.BlockCheck;
+import nocomment.master.util.BlockPos;
+import nocomment.master.util.ChunkPos;
+import nocomment.master.util.OnlinePlayer;
 
-import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.OptionalInt;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class SocketConnection extends Connection {
     private final Socket sock;
-    private final DataOutputStream out;
-    private final Object sockWriteLock = new Object();
+    private final LinkedBlockingQueue<DataWriter> queue;
     private final String uuid;
 
     public SocketConnection(World world, Socket sock) throws IOException {
         super(world);
         this.sock = sock;
         this.uuid = new DataInputStream(sock.getInputStream()).readUTF();
-        this.out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream()));
+        this.queue = new LinkedBlockingQueue<>();
     }
 
     @Override
@@ -31,48 +32,40 @@ public class SocketConnection extends Connection {
 
     @Override
     protected void dispatchTask(Task task, int taskID) {
-        synchronized (sockWriteLock) {
-            try {
-                out.writeByte(0);
-                out.writeInt(taskID);
-                out.writeInt(task.priority);
-                out.writeInt(task.start.x);
-                out.writeInt(task.start.z);
-                out.writeInt(task.directionX);
-                out.writeInt(task.directionZ);
-                out.writeInt(task.count);
-                out.flush();
-            } catch (IOException ex) {
-                closeUnderlying();
-            }
-        }
+        queue.add(out -> {
+            out.writeByte(0);
+            out.writeInt(taskID);
+            out.writeInt(task.priority);
+            out.writeInt(task.start.x);
+            out.writeInt(task.start.z);
+            out.writeInt(task.directionX);
+            out.writeInt(task.directionZ);
+            out.writeInt(task.count);
+        });
     }
 
     @Override
     protected void dispatchBlockCheck(BlockCheck check) {
-        synchronized (sockWriteLock) {
-            try {
-                out.writeByte(1);
-                out.writeInt(check.pos.x);
-                out.writeInt(check.pos.y);
-                out.writeInt(check.pos.z);
-                out.writeInt(check.priority);
-                out.flush();
-            } catch (IOException ex) {
-                closeUnderlying();
-            }
-        }
+        queue.add(out -> {
+            out.writeByte(1);
+            out.writeInt(check.pos.x);
+            out.writeInt(check.pos.y);
+            out.writeInt(check.pos.z);
+            out.writeInt(check.priority);
+        });
     }
 
     @Override
     protected void dispatchDisconnectRequest() {
-        synchronized (sockWriteLock) {
-            try {
-                out.writeByte(2);
-                out.flush();
-            } catch (IOException ex) {
-                closeUnderlying();
-            }
+        queue.add(out -> out.writeByte(2));
+    }
+
+    @Override
+    public void writeLoop() {
+        try {
+            DataWriter.writeLoop(queue, sock);
+        } catch (IOException | InterruptedException ex) {
+            closeUnderlying();
         }
     }
 
