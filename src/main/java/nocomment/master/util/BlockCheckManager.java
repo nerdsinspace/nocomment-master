@@ -70,7 +70,7 @@ public class BlockCheckManager {
         }
 
         public void requested(long mustBeNewerThan, int priority, Consumer<OptionalInt> listener) {
-            checkedDatabaseYet.thenAccept(ignored -> requested0(mustBeNewerThan, priority, listener));
+            checkedDatabaseYet.thenAcceptAsync(ignored -> requested0(mustBeNewerThan, priority, listener), NoComment.executor);
         }
 
         public synchronized void requested0(long mustBeNewerThan, int priority, Consumer<OptionalInt> listener) {
