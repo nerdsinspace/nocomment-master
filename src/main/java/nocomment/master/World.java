@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class World {
     private static final int MAX_BURDEN = 1000; // about 2.3 seconds
@@ -18,6 +19,7 @@ public class World {
     private final PriorityQueue<PriorityDispatchable> pending;
     public final short dimension;
     public final BlockCheckManager blockCheckManager;
+    private final LinkedBlockingQueue<Boolean> taskSendSignal;
 
     public World(Server server, short dimension) {
         this.server = server;
@@ -25,7 +27,9 @@ public class World {
         this.pending = new PriorityQueue<>();
         this.dimension = dimension;
         this.blockCheckManager = new BlockCheckManager(this);
+        this.taskSendSignal = new LinkedBlockingQueue<>();
         new Staggerer(this).start();
+        NoComment.executor.execute(this::taskSendLoop);
     }
 
     public synchronized void incomingConnection(Connection connection) {
@@ -64,6 +68,18 @@ public class World {
         }
         submit(task);
         return task;
+    }
+
+    private void taskSendLoop() {
+        try {
+            while (true) {
+                taskSendSignal.take(); // block
+                taskSendSignal.clear(); // clear all extras
+                sendTasksOnConnections();
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     private synchronized void sendTasksOnConnections() {
@@ -115,7 +131,7 @@ public class World {
     }
 
     public void worldUpdate() { // something has changed (a connection has completed a task). time to get a new one
-        NoComment.executor.execute(this::sendTasksOnConnections);
+        taskSendSignal.add(true);
     }
 
     public void serverUpdate() {
