@@ -247,3 +247,21 @@ CREATE TABLE blocks
 );
 
 CREATE INDEX blocks_by_loc ON blocks (x, z);
+
+CREATE TYPE statuses_enum AS ENUM ('OFFLINE', 'QUEUE', 'ONLINE');
+
+CREATE TABLE statuses
+(
+    player_id   INTEGER       NOT NULL,
+    curr_status statuses_enum NOT NULL,
+    updated_at  BIGINT        NOT NULL,
+    data        TEXT, -- any additional data, such as queue position
+    server_id   SMALLINT      NOT NULL,
+
+    UNIQUE (player_id, server_id),
+
+    FOREIGN KEY (player_id) REFERENCES players (id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);

@@ -2,12 +2,15 @@ package nocomment.master.db;
 
 import nocomment.master.NoComment;
 import nocomment.master.clustering.DBSCAN;
+import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.Associator;
+import nocomment.master.util.LoggingExecutor;
 import nocomment.master.util.OnlinePlayer;
 import org.apache.commons.dbcp2.BasicDataSource;
 
 import java.sql.*;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 public class Database {
     private static BasicDataSource pool;
@@ -30,6 +33,7 @@ public class Database {
             Maintenance.scheduleMaintenance();
             DBSCAN.INSTANCE.beginIncrementalDBSCANThread();
             Associator.INSTANCE.beginIncrementalAssociatorThread();
+            TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(Database::pruneStaleStatuses), 0, 1, TimeUnit.MINUTES);
         }
     }
 
@@ -205,6 +209,8 @@ public class Database {
                 stmt.setLong(3, now);
                 stmt.execute();
             }
+            // note: this doesn't use batch because of https://github.com/pgjdbc/pgjdbc/issues/194
+            // as of https://github.com/leijurv/nocomment-master/commit/0ed24f993100241d6467d1e21dbbfd5efff82f61
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
@@ -390,6 +396,55 @@ public class Database {
                 }
                 return ret;
             }
+        }
+    }
+
+    private static void pruneStaleStatuses() {
+        try (Connection connection = pool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET curr_status = 'OFFLINE'::statuses_enum, data = NULL, updated_at = ? WHERE updated_at < ?")) {
+            stmt.setLong(1, System.currentTimeMillis());
+            stmt.setLong(2, System.currentTimeMillis() - 60_000);
+            stmt.execute();
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static void updateStatus(int playerID, short serverID, String currStatus, Optional<String> data) {
+        long now = System.currentTimeMillis();
+        try (Connection connection = pool.getConnection()) {
+            try (PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET curr_status = ?::statuses_enum, updated_at = ?, data = ? WHERE player_id = ? AND server_id = ?")) {
+                stmt.setString(1, currStatus);
+                stmt.setLong(2, now);
+                if (data.isPresent()) {
+                    stmt.setString(3, data.get());
+                } else {
+                    stmt.setNull(3, Types.VARCHAR);
+                }
+                stmt.setInt(4, playerID);
+                stmt.setShort(5, serverID);
+                int numRows = stmt.executeUpdate();
+                if (numRows > 0) {
+                    return; // success
+                }
+            }
+            // update hit 0 rows, so we need to insert
+            try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO statuses (player_id, server_id, curr_status, updated_at, data) VALUES (?, ?, ?::statuses_enum, ?, ?)")) {
+                stmt.setInt(1, playerID);
+                stmt.setShort(2, serverID);
+                stmt.setString(3, currStatus);
+                stmt.setLong(4, now);
+                if (data.isPresent()) {
+                    stmt.setString(5, data.get());
+                } else {
+                    stmt.setNull(5, Types.VARCHAR);
+                }
+                stmt.execute();
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
         }
     }
 

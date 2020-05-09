@@ -21,6 +21,10 @@ public class ChunkPos {
         this.z = z;
     }
 
+    public ChunkPos(BlockPos pos) {
+        this(pos.x >> 4, pos.z >> 4);
+    }
+
     /**
      * Converts the chunk coordinate pair to a long
      */

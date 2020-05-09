@@ -37,6 +37,7 @@ public abstract class Connection {
     private long mostRecentRead = System.currentTimeMillis();
 
     public void readLoop() {
+        int playerID = getIdentity();
         ScheduledFuture<?> future = TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(() -> {
             long time = System.currentTimeMillis() - mostRecentRead;
             if (time > MIN_READ_INTERVAL_MS) {
@@ -44,6 +45,7 @@ public abstract class Connection {
                 closeUnderlying();
             }
             clearRecentChecks();
+            Database.updateStatus(playerID, world.server.serverID, "ONLINE", Optional.empty());
         }), 0, 1, TimeUnit.SECONDS);
         while (true) {
             try {
@@ -163,6 +165,21 @@ public abstract class Connection {
             }
         }
         return sum;
+    }
+
+    public synchronized int countHigherPriority(int priority) {
+        int count = 0;
+        for (Task task : tasks.values()) {
+            if (task.priority <= priority) {
+                count++;
+            }
+        }
+        for (BlockCheck check : checks.values()) {
+            if (check.priority <= priority) {
+                count++;
+            }
+        }
+        return count;
     }
 
     public synchronized void forEachDispatch(Consumer<PriorityDispatchable> consumer) {

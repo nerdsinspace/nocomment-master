@@ -4,6 +4,7 @@ import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.db.Database;
 import nocomment.master.task.PriorityDispatchable;
+import nocomment.master.tracking.TrackyTrackyManager;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -11,18 +12,70 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class BlockCheckManager {
     public final World world;
-    private final Map<BlockPos, BlockCheckStatus> statuses = new HashMap<>();
+    private final Map<ChunkPos, Map<BlockPos, BlockCheckStatus>> statuses = new HashMap<>();
+    private final Map<ChunkPos, Long> observedUnloaded = new HashMap<>();
+    private final LinkedBlockingQueue<BlockCheckStatus.ResultToInsert> results = new LinkedBlockingQueue<>();
 
     public BlockCheckManager(World world) {
         this.world = world;
+        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::update), 0, 250, TimeUnit.MILLISECONDS);
+    }
+
+    private void update() {
+        prune();
+        if (results.isEmpty()) {
+            return;
+        }
+        List<BlockCheckStatus.ResultToInsert> toInsert = new ArrayList<>(100);
+        try (Connection connection = Database.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("INSERT INTO blocks (x, y, z, block_state, created_at, dimension, server_id) VALUES (?, ?, ?, ?, ?, ?, ?)")) {
+            connection.setAutoCommit(false);
+            do {
+                results.drainTo(toInsert, 100);
+                for (BlockCheckStatus.ResultToInsert result : toInsert) {
+                    result.setupStatement(stmt);
+                    stmt.execute();
+                }
+                connection.commit();
+                toInsert.clear();
+            } while (results.size() >= 100);
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
     }
 
     private synchronized BlockCheckStatus get(BlockPos pos) {
-        return statuses.computeIfAbsent(pos, BlockCheckStatus::new);
+        return statuses.computeIfAbsent(new ChunkPos(pos), cpos -> new HashMap<>()).computeIfAbsent(pos, BlockCheckStatus::new);
+    }
+
+    private synchronized OptionalLong isUnloaded(ChunkPos pos) {
+        if (observedUnloaded.containsKey(pos)) {
+            return OptionalLong.of(observedUnloaded.get(pos));
+        }
+        return OptionalLong.empty();
+    }
+
+    private synchronized void unloadedAt(ChunkPos pos, long now) {
+        if (!observedUnloaded.containsKey(pos) || observedUnloaded.get(pos) < now) {
+            observedUnloaded.put(pos, now);
+        }
+        // wrap in executor to prevent stupid deadlock again
+        statuses.get(pos).values().forEach(status -> NoComment.executor.execute(() -> status.onResponseInternal(OptionalInt.empty(), now)));
+    }
+
+    private synchronized void loaded(ChunkPos pos) {
+        observedUnloaded.remove(pos);
+    }
+
+    private synchronized void prune() {
+        observedUnloaded.values().removeIf(aLong -> aLong < System.currentTimeMillis() - 10_000);
     }
 
     public void requestBlockState(long mustBeNewerThan, BlockPos pos, int priority, Consumer<OptionalInt> onCompleted) {
@@ -45,6 +98,9 @@ public class BlockCheckManager {
             this.reply = Optional.empty();
             this.checkedDatabaseYet = new CompletableFuture<>();
             NoComment.executor.execute(this::checkDatabase);
+            if (!Thread.holdsLock(BlockCheckManager.this)) {
+                throw new IllegalStateException();
+            }
         }
 
         private synchronized void checkDatabase() { // this synchronized is just for peace of mind, it should never actually become necessary
@@ -74,9 +130,19 @@ public class BlockCheckManager {
         }
 
         public synchronized void requested0(long mustBeNewerThan, int priority, Consumer<OptionalInt> listener) {
-            if (reply.isPresent() && responseAt > mustBeNewerThan) {
+            // first, check if cached loaded (e.g. from db)
+            if (reply.isPresent() && reply.get().isPresent() && responseAt > mustBeNewerThan) {
                 OptionalInt state = reply.get();
                 NoComment.executor.execute(() -> listener.accept(state));
+                return;
+            }
+            // then, check if cached unloaded
+            OptionalLong unloadedAt = isUnloaded(new ChunkPos(pos));
+            if (unloadedAt.isPresent() && unloadedAt.getAsLong() > mustBeNewerThan && !(reply.isPresent() && responseAt > unloadedAt.getAsLong())) {
+                // if this is unloaded, since the newer than, and not older than a real response
+                // then that's what we do
+                onResponseInternal(OptionalInt.empty(), unloadedAt.getAsLong());
+                NoComment.executor.execute(() -> listener.accept(OptionalInt.empty()));
                 return;
             }
             listeners.add(listener);
@@ -89,8 +155,21 @@ public class BlockCheckManager {
             }
         }
 
-        public synchronized void onResponse(OptionalInt state) {
-            responseAt = System.currentTimeMillis();
+        public void onResponse(OptionalInt state) {
+            long now = System.currentTimeMillis();
+            onResponseInternal(state, now);
+            if (state.isPresent()) {
+                loaded(new ChunkPos(pos));
+            } else {
+                unloadedAt(new ChunkPos(pos), now);
+            }
+        }
+
+        private synchronized void onResponseInternal(OptionalInt state, long timestamp) {
+            if (responseAt >= timestamp) {
+                return;
+            }
+            responseAt = timestamp;
             reply = Optional.of(state);
             highestSubmittedPriority = Integer.MAX_VALUE; // reset
             inFlight.forEach(PriorityDispatchable::cancel); // unneeded
@@ -100,13 +179,20 @@ public class BlockCheckManager {
             }
             listeners.clear();
             if (state.isPresent()) {
-                NoComment.executor.execute(() -> saveToDatabase(state.getAsInt(), responseAt));
+                results.add(new ResultToInsert(state.getAsInt(), responseAt));
             }
         }
 
-        private void saveToDatabase(int blockState, long timestamp) {
-            try (Connection connection = Database.getConnection();
-                 PreparedStatement stmt = connection.prepareStatement("INSERT INTO blocks (x, y, z, block_state, created_at, dimension, server_id) VALUES (?, ?, ?, ?, ?, ?, ?)")) {
+        private class ResultToInsert {
+            private final int blockState;
+            private final long timestamp;
+
+            private ResultToInsert(int blockState, long timestamp) {
+                this.blockState = blockState;
+                this.timestamp = timestamp;
+            }
+
+            private void setupStatement(PreparedStatement stmt) throws SQLException {
                 stmt.setInt(1, pos.x);
                 stmt.setShort(2, (short) pos.y);
                 stmt.setInt(3, pos.z);
@@ -114,10 +200,6 @@ public class BlockCheckManager {
                 stmt.setLong(5, timestamp);
                 stmt.setShort(6, world.dimension);
                 stmt.setShort(7, world.server.serverID);
-                stmt.execute();
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-                throw new RuntimeException(ex);
             }
         }
     }

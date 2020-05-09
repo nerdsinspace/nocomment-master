@@ -90,7 +90,8 @@ public class World {
         int minBurden = Integer.MAX_VALUE;
         for (Connection conn : connections) {
             int burden = conn.sumHigherPriority(toDispatch.priority);
-            if (burden > MAX_BURDEN) {
+            if (burden > MAX_BURDEN && conn.countHigherPriority(toDispatch.priority) > 1) {
+                // even if burden is above max, allow it but ONLY if ALL that burden is from just ONE task
                 continue;
             }
             if (toDispatch.hasAffinity(conn)) {
