@@ -67,7 +67,8 @@ public class BlockCheckManager {
             observedUnloaded.put(pos, now);
         }
         // wrap in executor to prevent stupid deadlock again
-        statuses.get(pos).values().forEach(status -> NoComment.executor.execute(() -> status.onResponseInternal(OptionalInt.empty(), now)));
+        List<BlockCheckStatus> s = new ArrayList<>(statuses.get(pos).values());
+        NoComment.executor.execute(() -> s.forEach(status -> status.onResponseInternal(OptionalInt.empty(), now)));
     }
 
     private synchronized void loaded(ChunkPos pos) {
