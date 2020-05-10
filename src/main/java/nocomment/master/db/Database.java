@@ -448,6 +448,19 @@ public class Database {
         }
     }
 
+    public static void setDimension(int playerID, short serverID, short dimension) {
+        try (Connection connection = pool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET dimension = ? WHERE player_id = ? AND server_id = ?")) {
+            stmt.setShort(1, dimension);
+            stmt.setInt(2, playerID);
+            stmt.setShort(3, serverID);
+            stmt.execute();
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
     static void vacuum() {
         try (Connection connection = pool.getConnection(); PreparedStatement stmt = connection.prepareStatement("VACUUM ANALYZE")) {
             stmt.execute();

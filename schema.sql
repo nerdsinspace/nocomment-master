@@ -256,12 +256,15 @@ CREATE TABLE statuses
     curr_status statuses_enum NOT NULL,
     updated_at  BIGINT        NOT NULL,
     data        TEXT, -- any additional data, such as queue position
+    dimension   SMALLINT      NOT NULL,
     server_id   SMALLINT      NOT NULL,
 
     UNIQUE (player_id, server_id),
 
     FOREIGN KEY (player_id) REFERENCES players (id)
         ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
+        ON UPDATE RESTRICT ON DELETE RESTRICT,
     FOREIGN KEY (server_id) REFERENCES servers (id)
         ON UPDATE CASCADE ON DELETE CASCADE
 );

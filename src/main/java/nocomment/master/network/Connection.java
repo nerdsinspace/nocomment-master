@@ -38,6 +38,9 @@ public abstract class Connection {
 
     public void readLoop() {
         int playerID = getIdentity();
+        short serverID = world.server.serverID;
+        Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
+        Database.setDimension(playerID, serverID, world.dimension);
         ScheduledFuture<?> future = TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(() -> {
             long time = System.currentTimeMillis() - mostRecentRead;
             if (time > MIN_READ_INTERVAL_MS) {
@@ -45,7 +48,7 @@ public abstract class Connection {
                 closeUnderlying();
             }
             clearRecentChecks();
-            Database.updateStatus(playerID, world.server.serverID, "ONLINE", Optional.empty());
+            Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
         }), 0, 1, TimeUnit.SECONDS);
         while (true) {
             try {
