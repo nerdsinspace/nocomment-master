@@ -137,6 +137,14 @@ public abstract class Connection {
         world.worldUpdate();
     }
 
+    protected void signCompleted(BlockPos pos, Optional<byte[]> nbt) {
+        System.out.println("Sign " + pos + " " + nbt);
+    }
+
+    protected void chatMessage(String msg, byte chatType) {
+        System.out.println("Chat " + msg + " " + chatType);
+    }
+
     public synchronized void addOnlinePlayers(Collection<OnlinePlayer> collection) {
         collection.removeAll(onlinePlayerSet);
         collection.addAll(onlinePlayerSet);
@@ -210,6 +218,16 @@ public abstract class Connection {
      * Never throw exception. Just close the socket and let read fail gracefully.
      */
     public abstract void dispatchDisconnectRequest();
+
+    /**
+     * Never throw exception. Just close the socket and let read fail gracefully.
+     */
+    public abstract void dispatchSignCheck(BlockPos pos);
+
+    /**
+     * Never throw exception. Just close the socket and let read fail gracefully.
+     */
+    public abstract void dispatchChatMessage(String msg);
 
     /**
      * Read (looped). Throw exception on any failure.

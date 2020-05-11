@@ -10,6 +10,7 @@ import nocomment.master.util.OnlinePlayer;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.Socket;
+import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -61,6 +62,24 @@ public class SocketConnection extends Connection {
     }
 
     @Override
+    public void dispatchSignCheck(BlockPos pos) {
+        queue.add(out -> {
+            out.writeByte(3);
+            out.writeInt(pos.x);
+            out.writeInt(pos.y);
+            out.writeInt(pos.z);
+        });
+    }
+
+    @Override
+    public void dispatchChatMessage(String msg) {
+        queue.add(out -> {
+            out.writeByte(4);
+            out.writeUTF(msg);
+        });
+    }
+
+    @Override
     public void writeLoop() {
         try {
             DataWriter.writeLoop(queue, sock);
@@ -93,12 +112,33 @@ public class SocketConnection extends Connection {
                 playerJoinLeave(join, player);
                 break;
             }
-            case 3: {
+            case 3: { // block response
                 int x = in.readInt();
                 int y = in.readInt();
                 int z = in.readInt();
                 OptionalInt blockState = in.readBoolean() ? OptionalInt.of(in.readInt()) : OptionalInt.empty();
                 checkCompleted(new BlockPos(x, y, z), blockState);
+                break;
+            }
+            case 4: { // sign response
+                int x = in.readInt();
+                int y = in.readInt();
+                int z = in.readInt();
+                Optional<byte[]> nbt;
+                if (in.readBoolean()) {
+                    byte[] data = new byte[in.readInt()];
+                    in.readFully(data);
+                    nbt = Optional.of(data);
+                } else {
+                    nbt = Optional.empty();
+                }
+                signCompleted(new BlockPos(x, y, z), nbt);
+                break;
+            }
+            case 5: { // chat message
+                String msg = in.readUTF();
+                byte chatType = in.readByte();
+                chatMessage(msg, chatType);
                 break;
             }
             case 69: { // ping
