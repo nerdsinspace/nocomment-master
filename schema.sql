@@ -22,6 +22,8 @@ CREATE TABLE players
     username TEXT
 );
 
+CREATE INDEX players_by_username ON players (username);
+
 CREATE EXTENSION btree_gist;
 CREATE TABLE player_sessions
 (

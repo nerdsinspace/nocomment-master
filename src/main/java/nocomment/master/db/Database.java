@@ -165,6 +165,23 @@ public class Database {
         }
     }
 
+    public static OptionalInt getPlayer(String username) {
+        try (Connection connection = pool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("SELECT id FROM players WHERE username = ?")) {
+            stmt.setString(1, username);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return OptionalInt.of(rs.getInt("id"));
+                } else {
+                    return OptionalInt.empty();
+                }
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
     private static Optional<Short> idForExistingServer(String hostname) {
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT id FROM servers WHERE hostname = ?")) {
