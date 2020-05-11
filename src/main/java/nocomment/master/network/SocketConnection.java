@@ -136,8 +136,8 @@ public class SocketConnection extends Connection {
                 break;
             }
             case 5: { // chat message
-                String msg = in.readUTF();
                 byte chatType = in.readByte();
+                String msg = in.readUTF();
                 chatMessage(msg, chatType);
                 break;
             }
