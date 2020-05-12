@@ -4,12 +4,11 @@ import nocomment.master.network.Connection;
 import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.task.Task;
 import nocomment.master.util.BlockCheckManager;
+import nocomment.master.util.BlockPos;
+import nocomment.master.util.SignManager;
 import nocomment.master.util.Staggerer;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.PriorityQueue;
+import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class World {
@@ -20,6 +19,7 @@ public class World {
     public final short dimension;
     public final BlockCheckManager blockCheckManager;
     private final LinkedBlockingQueue<Boolean> taskSendSignal;
+    public final SignManager signManager;
 
     public World(Server server, short dimension) {
         this.server = server;
@@ -28,6 +28,7 @@ public class World {
         this.dimension = dimension;
         this.blockCheckManager = new BlockCheckManager(this);
         this.taskSendSignal = new LinkedBlockingQueue<>();
+        this.signManager = new SignManager(this);
         new Staggerer(this).start();
         NoComment.executor.execute(this::taskSendLoop);
     }
@@ -122,11 +123,20 @@ public class World {
         return bestConn;
     }
 
+    public void submitSign(BlockPos pos) {
+        List<Connection> conns = getOpenConnections();
+        if (conns.isEmpty()) {
+            signManager.response(pos, Optional.empty());
+            return;
+        }
+        conns.get(new Random().nextInt(conns.size())).acceptSignCheck(pos);
+    }
+
     public synchronized Collection<PriorityDispatchable> getPending() {
         return new ArrayList<>(pending);
     }
 
-    public synchronized Collection<Connection> getOpenConnections() {
+    public synchronized List<Connection> getOpenConnections() {
         return new ArrayList<>(connections);
     }
 

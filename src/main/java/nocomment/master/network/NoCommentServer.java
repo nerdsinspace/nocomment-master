@@ -16,7 +16,7 @@ public enum NoCommentServer {
 
     SLAVE_DATA("0d7119c0a25e82e5c36d5188dcce4090d5ff9813a36a6fef6a0b3aca051b253a1b3c345452f23f2564403012abe98e20d3eb5f4191d3f8907e9ceb505ba0c2ba", "v3", withWorld((s, world) -> world.incomingConnection(new SocketConnection(world, s)))),
 
-    BLOCK("316667dc06d7ec96cd090c91dea7092bf43e6639ad53e3d68e8ec30511280af80504ac026490bb194ea1c0309a3c437f479e3de258688ad29d139ff00dcc0911", "v1", withWorld(BlockAPI::handle)),
+    BLOCK("316667dc06d7ec96cd090c91dea7092bf43e6639ad53e3d68e8ec30511280af80504ac026490bb194ea1c0309a3c437f479e3de258688ad29d139ff00dcc0911", "v2", withWorld(BlockAPI::handle)),
 
     SHITPOST("c34d05a79be75c0a003ff9bb063883f5fbcb2026293ed21122c62f770f3e78fcfef969ff7186719e2d54c1891a744f3e678d0b485a847198e337b246b9167161", "v1", ShitpostAPI::handle);
     private final String magic;

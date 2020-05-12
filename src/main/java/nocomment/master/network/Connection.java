@@ -34,6 +34,7 @@ public abstract class Connection {
     private int taskIDSeq = 0;
     private final Set<OnlinePlayer> onlinePlayerSet = new HashSet<>();
     private final Map<OnlinePlayer, Long> removalTimestamps = new HashMap<>();
+    private final Set<BlockPos> pendingSignChecks = new HashSet<>();
     private long mostRecentRead = System.currentTimeMillis();
 
     public void readLoop() {
@@ -82,6 +83,12 @@ public abstract class Connection {
         }
         checks.put(check.pos, check);
         dispatchBlockCheck(check);
+    }
+
+    public synchronized void acceptSignCheck(BlockPos pos) {
+        if (pendingSignChecks.add(pos)) {
+            dispatchSignCheck(pos);
+        }
     }
 
     public synchronized void acceptTask(Task task) {
@@ -137,8 +144,9 @@ public abstract class Connection {
         world.worldUpdate();
     }
 
-    protected void signCompleted(BlockPos pos, Optional<byte[]> nbt) {
-        System.out.println("Sign " + pos + " " + nbt);
+    protected synchronized void signCompleted(BlockPos pos, Optional<byte[]> nbt) {
+        pendingSignChecks.remove(pos);
+        NoComment.executor.execute(() -> world.signManager.response(pos, nbt));
     }
 
     protected void chatMessage(String msg, byte chatType) {
@@ -222,7 +230,7 @@ public abstract class Connection {
     /**
      * Never throw exception. Just close the socket and let read fail gracefully.
      */
-    public abstract void dispatchSignCheck(BlockPos pos);
+    protected abstract void dispatchSignCheck(BlockPos pos);
 
     /**
      * Never throw exception. Just close the socket and let read fail gracefully.

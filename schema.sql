@@ -270,3 +270,39 @@ CREATE TABLE statuses
     FOREIGN KEY (server_id) REFERENCES servers (id)
         ON UPDATE CASCADE ON DELETE CASCADE
 );
+
+CREATE TABLE notes
+(
+    x          INTEGER  NOT NULL,
+    z          INTEGER  NOT NULL,
+    data       TEXT     NOT NULL,
+    created_at BIGINT   NOT NULL,
+    updated_at BIGINT   NOT NULL,
+    dimension  SMALLINT NOT NULL,
+    server_id  SMALLINT NOT NULL,
+
+    UNIQUE (server_id, dimension, x, z),
+
+    FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
+        ON UPDATE RESTRICT ON DELETE RESTRICT,
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE signs
+(
+    x          INTEGER  NOT NULL,
+    y          SMALLINT NOT NULL,
+    z          INTEGER  NOT NULL,
+    nbt        BYTEA    NOT NULL,
+    created_at BIGINT   NOT NULL,
+    dimension  SMALLINT NOT NULL,
+    server_id  SMALLINT NOT NULL,
+
+    FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
+        ON UPDATE RESTRICT ON DELETE RESTRICT,
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX signs_by_loc ON signs (x, z);
