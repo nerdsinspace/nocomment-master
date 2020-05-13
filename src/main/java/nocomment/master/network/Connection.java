@@ -167,38 +167,33 @@ public abstract class Connection {
 
     /**
      * Sum the sizes of pending tasks with higher or equal priority to this one
+     * <p>
+     * Exclude the single highest priority task. This lets us send a task even if there's
+     * one big one already there. Essentially, if we're dealing with Big Tasks, such as the spiral
+     * scanner, we should keep one task "on standby" while the other is running. So, if there is
+     * just one BIG task with higher priority, we send anyway, give it a friend.
      *
      * @param priority the priority of a tentative task
      * @return total counts of all tasks
      */
     public synchronized int sumHigherPriority(int priority) {
         int sum = 0;
+        int highest = 0;
         for (Task task : tasks.values()) {
             if (task.priority <= priority) {
                 sum += task.count;
+                if (task.count > highest) {
+                    highest = task.count;
+                }
             }
         }
+        sum -= highest;
         for (BlockCheck check : checks.values()) {
             if (check.priority <= priority) {
                 sum++;
             }
         }
         return sum;
-    }
-
-    public synchronized int countHigherPriority(int priority) {
-        int count = 0;
-        for (Task task : tasks.values()) {
-            if (task.priority <= priority) {
-                count++;
-            }
-        }
-        for (BlockCheck check : checks.values()) {
-            if (check.priority <= priority) {
-                count++;
-            }
-        }
-        return count;
     }
 
     public synchronized void forEachDispatch(Consumer<PriorityDispatchable> consumer) {

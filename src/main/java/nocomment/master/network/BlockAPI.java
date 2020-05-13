@@ -61,6 +61,7 @@ public class BlockAPI {
                             out.write(opt.get());
                         }
                     }));
+                    break;
                 }
             }
         }
