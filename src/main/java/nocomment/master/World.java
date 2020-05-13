@@ -47,6 +47,7 @@ public class World {
         // so, shuffling the tasks elsewhere is safe, and doesn't risk "completed" being called twice or anything like that
         connections.remove(conn);
         conn.forEachDispatch(pending::add);
+        conn.forEachPendingSign(this::submitSign);
         worldUpdate();
         serverUpdate(); // only for connection status change
     }

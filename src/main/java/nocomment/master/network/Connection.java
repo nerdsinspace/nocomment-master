@@ -201,6 +201,10 @@ public abstract class Connection {
         checks.values().forEach(consumer);
     }
 
+    public synchronized void forEachPendingSign(Consumer<BlockPos> consumer) {
+        pendingSignChecks.forEach(consumer);
+    }
+
     public int getIdentity() {
         return Database.idForPlayer(new OnlinePlayer(getUUID()));
     }
