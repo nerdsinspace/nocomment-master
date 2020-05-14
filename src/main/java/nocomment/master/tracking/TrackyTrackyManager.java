@@ -93,10 +93,8 @@ public class TrackyTrackyManager {
         if (spawnDistanceSq <= 100 * 100) {
             return false;
         }
-        // within 3 chunks of an axis = highway scanner will get it again, not worth gridding prob
-        // unless they're more than 1000 chunks (16000 blocks) away, in which case we won't get to them all that quickly
         int axisDistance = Math.min(Math.min(Math.abs(resumeData.pos.x), Math.abs(resumeData.pos.z)), Math.abs(Math.abs(resumeData.pos.x) - Math.abs(resumeData.pos.z)));
-        if (axisDistance <= 3 && spawnDistanceSq <= 1000 * 1000) {
+        if (axisDistance <= 5 && spawnDistanceSq <= 1000 * 1000) {
             return false;
         }
         return true;

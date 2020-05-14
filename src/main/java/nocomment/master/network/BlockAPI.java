@@ -36,7 +36,7 @@ public class BlockAPI {
                 case 0: {
                     int priority = in.readInt();
                     long mustBeNewerThan = in.readLong();
-                    bcm.requestBlockState(mustBeNewerThan, new BlockPos(x, y, z), priority, opt -> queue.add(out -> {
+                    bcm.requestBlockState(mustBeNewerThan, new BlockPos(x, y, z), priority, (opt, updated) -> queue.add(out -> {
                         out.writeByte(0);
                         out.writeInt(x);
                         out.writeInt(y);
@@ -45,6 +45,7 @@ public class BlockAPI {
                         if (opt.isPresent()) {
                             out.writeInt(opt.getAsInt());
                         }
+                        out.writeBoolean(updated);
                     }));
                     break;
                 }

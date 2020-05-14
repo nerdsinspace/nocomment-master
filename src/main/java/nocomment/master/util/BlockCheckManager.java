@@ -14,7 +14,6 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Consumer;
 
 public class BlockCheckManager {
     public final World world;
@@ -51,6 +50,11 @@ public class BlockCheckManager {
         }
     }
 
+    @FunctionalInterface
+    public interface BlockListener {
+        void accept(OptionalInt state, boolean updated);
+    }
+
     private synchronized BlockCheckStatus get(BlockPos pos) {
         return statuses.computeIfAbsent(new ChunkPos(pos), cpos -> new HashMap<>()).computeIfAbsent(pos, BlockCheckStatus::new);
     }
@@ -79,16 +83,16 @@ public class BlockCheckManager {
         observedUnloaded.values().removeIf(aLong -> aLong < System.currentTimeMillis() - 10_000);
     }
 
-    public void requestBlockState(long mustBeNewerThan, BlockPos pos, int priority, Consumer<OptionalInt> onCompleted) {
+    public void requestBlockState(long mustBeNewerThan, BlockPos pos, int priority, BlockListener onCompleted) {
         NoComment.executor.execute(() -> get(pos).requested(mustBeNewerThan, priority, onCompleted));
     }
 
     public class BlockCheckStatus {
         public final BlockPos pos;
         private int highestSubmittedPriority = Integer.MAX_VALUE;
-        private final List<Consumer<OptionalInt>> listeners;
+        private final List<BlockListener> listeners;
         private final List<BlockCheck> inFlight;
-        private Optional<OptionalInt> reply;
+        private OptionalInt blockState;
         private long responseAt;
         private CompletableFuture<Boolean> checkedDatabaseYet;
 
@@ -96,7 +100,7 @@ public class BlockCheckManager {
             this.listeners = new ArrayList<>();
             this.pos = pos;
             this.inFlight = new ArrayList<>();
-            this.reply = Optional.empty();
+            this.blockState = OptionalInt.empty();
             this.checkedDatabaseYet = new CompletableFuture<>();
             NoComment.executor.execute(this::checkDatabase);
             if (!Thread.holdsLock(BlockCheckManager.this)) {
@@ -114,7 +118,7 @@ public class BlockCheckManager {
                 stmt.setShort(5, world.server.serverID);
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
-                        reply = Optional.of(OptionalInt.of(rs.getInt("block_state")));
+                        blockState = OptionalInt.of(rs.getInt("block_state"));
                         responseAt = rs.getLong("created_at");
                     }
                 }
@@ -126,24 +130,24 @@ public class BlockCheckManager {
             }
         }
 
-        public void requested(long mustBeNewerThan, int priority, Consumer<OptionalInt> listener) {
+        public void requested(long mustBeNewerThan, int priority, BlockListener listener) {
             checkedDatabaseYet.thenAcceptAsync(ignored -> requested0(mustBeNewerThan, priority, listener), NoComment.executor);
         }
 
-        public synchronized void requested0(long mustBeNewerThan, int priority, Consumer<OptionalInt> listener) {
+        public synchronized void requested0(long mustBeNewerThan, int priority, BlockListener listener) {
             // first, check if cached loaded (e.g. from db)
-            if (reply.isPresent() && reply.get().isPresent() && responseAt > mustBeNewerThan) {
-                OptionalInt state = reply.get();
-                NoComment.executor.execute(() -> listener.accept(state));
+            if (blockState.isPresent() && responseAt > mustBeNewerThan) {
+                OptionalInt state = blockState;
+                NoComment.executor.execute(() -> listener.accept(state, false));
                 return;
             }
             // then, check if cached unloaded
             OptionalLong unloadedAt = isUnloaded(new ChunkPos(pos));
-            if (unloadedAt.isPresent() && unloadedAt.getAsLong() > mustBeNewerThan && !(reply.isPresent() && responseAt > unloadedAt.getAsLong())) {
+            if (unloadedAt.isPresent() && unloadedAt.getAsLong() > mustBeNewerThan && !(blockState.isPresent() && responseAt > unloadedAt.getAsLong())) {
                 // if this is unloaded, since the newer than, and not older than a real response
                 // then that's what we do
                 onResponseInternal(OptionalInt.empty(), unloadedAt.getAsLong());
-                NoComment.executor.execute(() -> listener.accept(OptionalInt.empty()));
+                NoComment.executor.execute(() -> listener.accept(OptionalInt.empty(), false));
                 return;
             }
             listeners.add(listener);
@@ -158,8 +162,8 @@ public class BlockCheckManager {
 
         public void onResponse(OptionalInt state) {
             long now = System.currentTimeMillis();
-            onResponseInternal(state, now);
             if (state.isPresent()) {
+                onResponseInternal(state, now);
                 loaded(new ChunkPos(pos));
             } else {
                 unloadedAt(new ChunkPos(pos), now);
@@ -170,18 +174,19 @@ public class BlockCheckManager {
             if (responseAt >= timestamp) {
                 return;
             }
-            responseAt = timestamp;
-            reply = Optional.of(state);
+            boolean updated = state.isPresent() && blockState.isPresent() && blockState.getAsInt() != state.getAsInt();
+            if (state.isPresent()) {
+                responseAt = timestamp;
+                blockState = state;
+                results.add(new ResultToInsert(state.getAsInt(), responseAt));
+            }
             highestSubmittedPriority = Integer.MAX_VALUE; // reset
             inFlight.forEach(PriorityDispatchable::cancel); // unneeded
             inFlight.clear();
-            for (Consumer<OptionalInt> listener : listeners) {
-                NoComment.executor.execute(() -> listener.accept(state));
+            for (BlockListener listener : listeners) {
+                NoComment.executor.execute(() -> listener.accept(state, updated));
             }
             listeners.clear();
-            if (state.isPresent()) {
-                results.add(new ResultToInsert(state.getAsInt(), responseAt));
-            }
         }
 
         private class ResultToInsert {
