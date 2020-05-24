@@ -6,14 +6,15 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 enum Aggregator {
     INSTANCE;
     private static final int THRESHOLD = 3;
     private static final int MAX_COUNT = THRESHOLD + 1;
     private static final boolean ENABLE_LEGACY_CORE_AUTOPROMOTION = false;
+    private static final long DBSCAN_TIMESTAMP_INTERVAL = 3600 * 1000; // 1 hour
+    private final Map<Integer, Long> parentAgeCache = new HashMap<>();
 
     private static class AggregatedHits {
         short serverID;
@@ -48,7 +49,7 @@ enum Aggregator {
                 "                    AND ABS(ABS(x) - ABS(z)) > 100                                  " +
                 "                    AND x::BIGINT * x::BIGINT + z::BIGINT * z::BIGINT > 1000 * 1000 " +
                 "                ORDER BY id                                                         " +
-                "                LIMIT 1000                                                          " + // keep this pretty lower otherwise the commits get long
+                "                LIMIT 1000                                                          " + // keep this pretty low otherwise the commits get long
                 "             ) tmp                                                                  " +
                 "        GROUP BY                                                                    " +
                 "            server_id, dimension, x, z                                              "
@@ -110,8 +111,9 @@ enum Aggregator {
                 int dbID = 0;
                 boolean wasInDB;
                 boolean dbIsCore = false;
+                OptionalInt clusterParent = OptionalInt.empty();
 
-                try (PreparedStatement stmt = connection.prepareStatement("SELECT cnt, id, is_core FROM dbscan WHERE server_id = ? AND dimension = ? AND x = ? AND z = ?")) {
+                try (PreparedStatement stmt = connection.prepareStatement("SELECT cnt, id, is_core, cluster_parent FROM dbscan WHERE server_id = ? AND dimension = ? AND x = ? AND z = ?")) {
                     stmt.setShort(1, aggr.serverID);
                     stmt.setShort(2, aggr.dimension);
                     stmt.setInt(3, aggr.x);
@@ -122,10 +124,26 @@ enum Aggregator {
                             syntheticCount += prevCountInDB;
                             dbID = rs.getInt("id");
                             dbIsCore = rs.getBoolean("is_core");
+                            int parent = rs.getInt("cluster_parent");
+                            if (!rs.wasNull()) {
+                                clusterParent = OptionalInt.of(parent);
+                            }
                             wasInDB = true;
                         } else {
                             wasInDB = false;
                         }
+                    }
+                }
+                if (clusterParent.isPresent()) {
+                    long committedUpdate = parentAgeCache.getOrDefault(clusterParent.getAsInt(), 0L);
+                    long now = System.currentTimeMillis();
+                    if (committedUpdate < now - DBSCAN_TIMESTAMP_INTERVAL) {
+                        try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET updated_at_approx = ? WHERE id = ?")) {
+                            stmt.setLong(1, now);
+                            stmt.setInt(2, clusterParent.getAsInt());
+                            stmt.executeUpdate();
+                        }
+                        parentAgeCache.put(clusterParent.getAsInt(), now);
                     }
                 }
 

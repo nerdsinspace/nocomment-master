@@ -167,16 +167,17 @@ CLUSTER tracks;
 
 CREATE TABLE dbscan
 (
-    id             SERIAL PRIMARY KEY,
-    cnt            INTEGER  NOT NULL,
-    x              INTEGER  NOT NULL,
-    z              INTEGER  NOT NULL,
-    dimension      SMALLINT NOT NULL,
-    server_id      SMALLINT NOT NULL,
-    is_core        BOOLEAN  NOT NULL,
-    cluster_parent INTEGER, -- nullable
-    disjoint_rank  INTEGER  NOT NULL,
-    disjoint_size  INTEGER  NOT NULL,
+    id                SERIAL PRIMARY KEY,
+    cnt               INTEGER  NOT NULL,
+    x                 INTEGER  NOT NULL,
+    z                 INTEGER  NOT NULL,
+    dimension         SMALLINT NOT NULL,
+    server_id         SMALLINT NOT NULL,
+    is_core           BOOLEAN  NOT NULL,
+    cluster_parent    INTEGER, -- nullable
+    disjoint_rank     INTEGER  NOT NULL,
+    disjoint_size     INTEGER  NOT NULL,
+    updated_at_approx BIGINT,
 
     FOREIGN KEY (cluster_parent) REFERENCES dbscan (id)
         ON UPDATE CASCADE ON DELETE SET NULL,
