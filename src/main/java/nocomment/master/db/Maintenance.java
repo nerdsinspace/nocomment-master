@@ -19,6 +19,7 @@ public class Maintenance {
         scheduleReindex("dbscan_ingest");
         scheduleReindex("dbscan_process");
         scheduleReindex("dbscan_disjoint_traversal");
+        scheduleReindex("dbscan_to_update_pkey", 3600);
     }
 
     private static void scheduleReindex(String indexName) {
