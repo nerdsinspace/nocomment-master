@@ -91,11 +91,11 @@ public enum Associator {
                 int clusterID = cluster.getAsInt();
                 double association = 1.0d / possiblePlayers.size();
                 for (int playerID : possiblePlayers) {
-                    try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO associations (cluster_id, player_id, association) VALUES (?, ?, ?) ON CONFLICT ON CONSTRAINT associations_cluster_id_player_id_key DO UPDATE SET association = associations.association + ?")) {
+                    try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO associations (cluster_id, player_id, association, created_at) VALUES (?, ?, ?, ?)")) {
                         stmt.setInt(1, clusterID);
                         stmt.setInt(2, playerID);
                         stmt.setDouble(3, association);
-                        stmt.setDouble(4, association);
+                        stmt.setLong(4, track.updatedAt);
                         stmt.execute();
                     }
                 }

@@ -213,8 +213,7 @@ CREATE TABLE associations
     cluster_id  INTEGER          NOT NULL,
     player_id   INTEGER          NOT NULL,
     association DOUBLE PRECISION NOT NULL,
-
-    UNIQUE (cluster_id, player_id),
+    created_at  BIGINT           NOT NULL,
 
     FOREIGN KEY (player_id) REFERENCES players (id)
         ON UPDATE CASCADE ON DELETE CASCADE,
@@ -222,8 +221,19 @@ CREATE TABLE associations
         ON UPDATE CASCADE ON DELETE CASCADE
 );
 
-CREATE INDEX associations_player_id ON associations (player_id);
-CREATE INDEX associations_cluster_id ON associations (cluster_id);
+CREATE INDEX associations_player_id ON associations (player_id, created_at);
+CREATE INDEX associations_cluster_id ON associations (cluster_id, created_at);
+CREATE INDEX associations_player_and_cluster ON associations (player_id, cluster_id);
+
+CREATE VIEW assoc AS
+(
+SELECT players.username, tmp.cluster_id, tmp.association
+FROM (
+         SELECT cluster_id, player_id, SUM(association) AS association
+         FROM associations
+         GROUP BY player_id, cluster_id) tmp
+         INNER JOIN players ON players.id = tmp.player_id
+    );
 
 CREATE TABLE track_associator_progress
 (
