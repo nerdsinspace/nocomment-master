@@ -418,7 +418,7 @@ public class Database {
 
     private static void pruneStaleStatuses() {
         try (Connection connection = pool.getConnection();
-             PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET curr_status = 'OFFLINE'::statuses_enum, data = NULL, updated_at = ? WHERE updated_at < ?")) {
+             PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET curr_status = 'OFFLINE'::statuses_enum, data = NULL, updated_at = ? WHERE updated_at < ? AND curr_status != 'OFFLINE'::statuses_enum")) {
             stmt.setLong(1, System.currentTimeMillis());
             stmt.setLong(2, System.currentTimeMillis() - 60_000);
             stmt.execute();
