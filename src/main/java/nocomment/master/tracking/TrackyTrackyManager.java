@@ -58,11 +58,11 @@ public class TrackyTrackyManager {
     }
 
     private void lostTrackingInOverworld(Filter lost) {
-        nether.ingestApprox(new ChunkPos(lost.getMostRecentHit().x / 8, lost.getMostRecentHit().z / 8), OptionalInt.of(lost.getTrackID()), true);
+        nether.ingestApprox(new ChunkPos(lost.getMostRecentHit().x / 8, lost.getMostRecentHit().z / 8), OptionalInt.of(lost.getTrackID()), true, 11);
     }
 
     private void lostTrackingInNether(Filter lost) {
-        overworld.ingestApprox(new ChunkPos(lost.getMostRecentHit().x * 8, lost.getMostRecentHit().z * 8), OptionalInt.of(lost.getTrackID()), true);
+        overworld.ingestApprox(new ChunkPos(lost.getMostRecentHit().x * 8, lost.getMostRecentHit().z * 8), OptionalInt.of(lost.getTrackID()), true, 11);
     }
 
     public boolean hasActiveFilter(int trackID) {
@@ -74,11 +74,11 @@ public class TrackyTrackyManager {
         System.out.println("Attempting to resume tracking at " + resumeData.pos + " in dimension " + resumeData.dimension + " in server " + server.hostname + " from track id " + resumeData.prevTrackID + " interesting " + interesting);
         switch (resumeData.dimension) {
             case 0: {
-                overworld.ingestApprox(resumeData.pos, OptionalInt.of(resumeData.prevTrackID), interesting);
+                overworld.ingestApprox(resumeData.pos, OptionalInt.of(resumeData.prevTrackID), false, interesting ? 12 : 15);
                 break;
             }
             case -1: {
-                nether.ingestApprox(resumeData.pos, OptionalInt.of(resumeData.prevTrackID), interesting);
+                nether.ingestApprox(resumeData.pos, OptionalInt.of(resumeData.prevTrackID), false, interesting ? 12 : 15);
                 break;
             }
             default: {

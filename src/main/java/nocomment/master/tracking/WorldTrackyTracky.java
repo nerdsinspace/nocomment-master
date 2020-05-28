@@ -93,14 +93,14 @@ public class WorldTrackyTracky {
         filter.start();
     }
 
-    public void ingestApprox(ChunkPos pos, OptionalInt prevTrack, boolean doWeCare) { // for example, if tracking was lost in another dimension
-        if (doWeCare) {
+    public void ingestApprox(ChunkPos pos, OptionalInt prevTrack, boolean wide, int priority) { // for example, if tracking was lost in another dimension
+        if (wide) {
             // 11 by 11 grid pattern, spacing of 7 between each one
             // so, 121 checks
             // plus or minus 560 blocks (7*5*16) in any direction
-            List<Task> largerGrid = grid(10, 7, 5, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
+            List<Task> largerGrid = grid(priority, 7, 5, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
             // also, with slightly higher priority, hit the exact location (9 checks)
-            grid(9, 9, 1, pos, hit -> {
+            grid(priority - 1, 9, 1, pos, hit -> {
                 // if we get a hit in the center 9 checks, then cancel the other 121 checks
                 largerGrid.forEach(Task::cancel);
 
@@ -110,7 +110,7 @@ public class WorldTrackyTracky {
             // 3 by 3 grid pattern, we don't care all that much
             // 9 checks
             // plus or minus 144 blocks (9*1*16) in any direction
-            grid(11, 9, 1, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
+            grid(priority, 9, 1, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
         }
     }
 
@@ -119,7 +119,7 @@ public class WorldTrackyTracky {
         ChunkPos last = filter.getMostRecentHit();
         System.out.println("Filter failed. Last hit at " + last + " dimension " + world.dimension);
         onLost.accept(filter);
-        ingestApprox(last, OptionalInt.of(filter.getTrackID()), true); // one last hail mary
+        ingestApprox(last, OptionalInt.of(filter.getTrackID()), true, 10); // one last hail mary
     }
 
     public List<Task> grid(int priority, int gridInterval, int gridRadius, ChunkPos center, Consumer<Hit> onHit) {
