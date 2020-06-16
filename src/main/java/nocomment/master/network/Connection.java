@@ -21,6 +21,7 @@ import java.util.function.Consumer;
  * When a client changes dimension or server, it will drop the connection and make a new one.
  */
 public abstract class Connection {
+
     private static final long MIN_READ_INTERVAL_MS = 5_000;
 
     public Connection(World world) {
@@ -36,6 +37,7 @@ public abstract class Connection {
     private final Map<OnlinePlayer, Long> removalTimestamps = new HashMap<>();
     private final Set<BlockPos> pendingSignChecks = new HashSet<>();
     private long mostRecentRead = System.currentTimeMillis();
+    private Integer identityCache;
 
     public void readLoop() {
         int playerID = getIdentity();
@@ -96,6 +98,7 @@ public abstract class Connection {
         int id = taskIDSeq++;
         tasks.put(id, task);
         dispatchTask(task, id);
+        world.stats.taskDispatched(task.priority, task.count);
     }
 
     protected void hitReceived(int taskID, ChunkPos pos) {
@@ -107,6 +110,7 @@ public abstract class Connection {
         }
         // this cannot be on another thread / executor because then a hitReceived could possibly be reordered after taskCompleted
         task.hitReceived(hit);
+        world.stats.hitReceived(task.priority);
     }
 
     protected void taskCompleted(int taskID) {
@@ -117,6 +121,7 @@ public abstract class Connection {
         // this could theoretically be on another thread / executor, because it's guaranteed to be the last thing in this task, so no worries if it gets delayed for any amount of time
         task.completed();
         world.worldUpdate();
+        world.stats.taskCompleted(task);
     }
 
     protected synchronized void playerJoinLeave(boolean join, OnlinePlayer player) {
@@ -142,15 +147,28 @@ public abstract class Connection {
             NoComment.executor.execute(() -> check.onCompleted(blockState));
         }
         world.worldUpdate();
+        if (check != null) {
+            if (blockState.isPresent()) {
+                world.stats.blockReceived(check.priority);
+            } else {
+                world.stats.blockUnloaded(check.priority);
+            }
+        }
     }
 
     protected synchronized void signCompleted(BlockPos pos, Optional<byte[]> nbt) {
         pendingSignChecks.remove(pos);
         NoComment.executor.execute(() -> world.signManager.response(pos, nbt));
+        if (nbt.isPresent()) {
+            world.stats.signHit();
+        } else {
+            world.stats.signMiss();
+        }
     }
 
     protected void chatMessage(String msg, byte chatType) {
-        System.out.println("Chat " + msg + " " + chatType);
+        long now = System.currentTimeMillis();
+        NoComment.executor.execute(() -> Database.saveChat(msg, chatType, getIdentity(), world.server.serverID, now));
     }
 
     public synchronized void addOnlinePlayers(Collection<OnlinePlayer> collection) {
@@ -206,7 +224,10 @@ public abstract class Connection {
     }
 
     public int getIdentity() {
-        return Database.idForPlayer(new OnlinePlayer(getUUID()));
+        if (identityCache == null) {
+            identityCache = Database.idForPlayer(new OnlinePlayer(getUUID()));
+        }
+        return identityCache;
     }
 
     public abstract String getUUID();

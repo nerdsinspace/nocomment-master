@@ -3,15 +3,13 @@ package nocomment.master;
 import nocomment.master.network.Connection;
 import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.task.Task;
-import nocomment.master.util.BlockCheckManager;
-import nocomment.master.util.BlockPos;
-import nocomment.master.util.SignManager;
-import nocomment.master.util.Staggerer;
+import nocomment.master.util.*;
 
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class World {
+
     private static final int MAX_BURDEN = 1000; // about 2.3 seconds
     public final Server server;
     private final List<Connection> connections;
@@ -20,6 +18,7 @@ public class World {
     public final BlockCheckManager blockCheckManager;
     private final LinkedBlockingQueue<Boolean> taskSendSignal;
     public final SignManager signManager;
+    public final WorldStatistics stats;
 
     public World(Server server, short dimension) {
         this.server = server;
@@ -29,6 +28,7 @@ public class World {
         this.blockCheckManager = new BlockCheckManager(this);
         this.taskSendSignal = new LinkedBlockingQueue<>();
         this.signManager = new SignManager(this);
+        this.stats = new WorldStatistics(this);
         new Staggerer(this).start();
         NoComment.executor.execute(this::taskSendLoop);
     }
@@ -123,13 +123,15 @@ public class World {
         return bestConn;
     }
 
-    public void submitSign(BlockPos pos) {
-        List<Connection> conns = getOpenConnections();
-        if (conns.isEmpty()) {
-            signManager.response(pos, Optional.empty());
+    public synchronized void submitSign(BlockPos pos) {
+        if (connections.isEmpty()) {
+            // can't do signManager.response while holding synchronized(World) because SignManager also
+            // synchronizes on a database access, in request, and we don't want World to block on db
+            NoComment.executor.execute(() -> signManager.response(pos, Optional.empty()));
             return;
         }
-        conns.get(new Random().nextInt(conns.size())).acceptSignCheck(pos);
+        // must hold synchronized so that we don't race with connectionClosed for sign redistributing
+        connections.get(new Random().nextInt(connections.size())).acceptSignCheck(pos);
     }
 
     public synchronized Collection<PriorityDispatchable> getPending() {

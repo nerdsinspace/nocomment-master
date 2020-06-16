@@ -16,25 +16,26 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class WorldTrackyTracky {
+
     public final World world;
     public final TrackyTrackyManager parent;
-    private final List<Filter> activeFilters;
-    private final Consumer<Filter> onLost;
+    private final List<Track> activeTracks;
+    private final Consumer<Track> onLost;
 
-    public WorldTrackyTracky(World world, TrackyTrackyManager parent, Consumer<Filter> onLost) {
+    public WorldTrackyTracky(World world, TrackyTrackyManager parent, Consumer<Track> onLost) {
         this.world = world;
         this.parent = parent;
-        this.activeFilters = new ArrayList<>();
+        this.activeTracks = new ArrayList<>();
         this.onLost = onLost;
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pairwiseFilterCheck), 0, 250, TimeUnit.MILLISECONDS);
     }
 
     public void pairwiseFilterCheck() {
-        List<Filter> copy;
+        List<Track> copy;
         synchronized (this) {
-            copy = new ArrayList<>(activeFilters);
+            copy = new ArrayList<>(activeTracks);
         }
-        for (Filter A : copy) {
+        for (Track A : copy) {
             ChunkPos Ahit = A.getMostRecentHit();
             if (Math.abs(Ahit.x) < 30 && Math.abs(Ahit.z) < 30) {
                 System.out.println("Too close to spawn");
@@ -47,8 +48,11 @@ public class WorldTrackyTracky {
                 fail(A);
                 return;
             }
-            for (Filter B : copy) {
+            for (Track B : copy) {
                 if (A == B) {
+                    continue;
+                }
+                if (A.getFilterMode().getEnum() != B.getFilterMode().getEnum()) {
                     continue;
                 }
                 if (Ahit.distSq(B.getMostRecentHit()) < 20L * 20L) {
@@ -62,10 +66,10 @@ public class WorldTrackyTracky {
         }
     }
 
-    private void fail(Filter filter) {
-        filter.failed(false);
+    private void fail(Track track) {
+        track.failed(false);
         synchronized (this) {
-            activeFilters.remove(filter);
+            activeTracks.remove(track);
         }
     }
 
@@ -81,16 +85,16 @@ public class WorldTrackyTracky {
             System.out.println("Too close to us " + hit.pos);
             return;
         }
-        for (Filter filter : activeFilters) {
-            if (hit.pos.distSq(filter.getMostRecentHit()) < 50L * 50L && filter.includesBroadly(hit.pos)) {
-                filter.insertHit(hit);
+        for (Track track : activeTracks) {
+            if (hit.pos.distSq(track.getMostRecentHit()) < 50L * 50L && track.includesBroadly(hit.pos)) {
+                track.hit(hit);
                 return;
             }
         }
-        Filter filter = new Filter(hit, this, prevTrack);
-        System.out.println("Success. Starting new filter from confirmed hit at " + hit.pos + " dimension " + world.dimension + " track id " + filter.getTrackID());
-        activeFilters.add(filter);
-        filter.start();
+        Track track = new Track(hit, this, prevTrack);
+        System.out.println("Success. Starting new track from confirmed hit at " + hit.pos + " dimension " + world.dimension + " track id " + track.getTrackID());
+        activeTracks.add(track);
+        track.start();
     }
 
     public void ingestApprox(ChunkPos pos, OptionalInt prevTrack, boolean wide, int priority) { // for example, if tracking was lost in another dimension
@@ -114,12 +118,12 @@ public class WorldTrackyTracky {
         }
     }
 
-    public synchronized void filterFailure(Filter filter) {
-        activeFilters.remove(filter);
-        ChunkPos last = filter.getMostRecentHit();
-        System.out.println("Filter failed. Last hit at " + last + " dimension " + world.dimension);
-        onLost.accept(filter);
-        ingestApprox(last, OptionalInt.of(filter.getTrackID()), true, 10); // one last hail mary
+    public synchronized void trackFailure(Track track) {
+        activeTracks.remove(track);
+        ChunkPos last = track.getMostRecentHit();
+        System.out.println("Track " + track.getTrackID() + " failed. Last hit at " + last + " dimension " + world.dimension);
+        onLost.accept(track);
+        ingestApprox(last, OptionalInt.of(track.getTrackID()), true, 10); // one last hail mary
     }
 
     public List<Task> grid(int priority, int gridInterval, int gridRadius, ChunkPos center, Consumer<Hit> onHit) {
@@ -139,6 +143,6 @@ public class WorldTrackyTracky {
     }
 
     public synchronized boolean hasActiveFilter(int trackID) {
-        return activeFilters.stream().anyMatch(filter -> filter.getTrackID() == trackID);
+        return activeTracks.stream().anyMatch(filter -> filter.getTrackID() == trackID);
     }
 }

@@ -11,6 +11,8 @@ public abstract class Task extends PriorityDispatchable {
     public final int directionZ;
     public final int count;
 
+    public long dispatchedAt;
+
     public Task(int priority, ChunkPos start, int directionX, int directionZ, int count) {
         super(priority);
         if (count == 0) {
@@ -32,6 +34,7 @@ public abstract class Task extends PriorityDispatchable {
 
     @Override
     public void dispatch(Connection onto) {
+        dispatchedAt = System.currentTimeMillis();
         onto.acceptTask(this);
     }
 }

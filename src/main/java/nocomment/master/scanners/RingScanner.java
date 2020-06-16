@@ -27,8 +27,8 @@ public class RingScanner {
         this.radius = 1 + (int) Math.ceil(distanceBlocks / 16f / INTERVAL);
         int tot = 4 * (2 * radius + 1);
         System.out.println("Total count: " + tot);
-        System.out.println("Estimated time in seconds: " + tot / 400);
-        System.out.println("Fraction of time: " + tot / 400.0 / (rerunDelayMS / 1000.0));
+        System.out.println("Estimated time in seconds: " + tot / 160.0);
+        System.out.println("Fraction of time: " + tot / 160.0 / (rerunDelayMS / 1000.0));
     }
 
     public void submitTasks() {

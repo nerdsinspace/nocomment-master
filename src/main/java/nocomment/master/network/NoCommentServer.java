@@ -88,11 +88,13 @@ public enum NoCommentServer {
 
     @FunctionalInterface
     private interface SocketConsumer {
+
         void consume(Socket s, DataInputStream in) throws IOException;
     }
 
     @FunctionalInterface
     private interface WorldContextConsumer {
+
         void consume(Socket s, World world) throws IOException;
     }
 

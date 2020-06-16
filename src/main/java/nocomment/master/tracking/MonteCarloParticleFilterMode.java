@@ -1,115 +1,63 @@
 package nocomment.master.tracking;
 
-import nocomment.master.NoComment;
-import nocomment.master.db.Database;
-import nocomment.master.db.Hit;
-import nocomment.master.task.SingleChunkTask;
 import nocomment.master.util.ChunkPos;
 import nocomment.master.util.LoggingExecutor;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.List;
 import java.util.*;
-import java.util.concurrent.ScheduledFuture;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-public class Filter {
+public class MonteCarloParticleFilterMode extends AbstractFilterMode {
+
     private static final boolean GUI = false;
     private static final int M = 1000;
     private final Random random = new Random();
-    private final WorldTrackyTracky context;
-    private final int trackID;
-
+    private final Track track;
     private List<Particle> particles = new ArrayList<>();
-
     private long lastUpdateMS;
-    private ChunkPos mostRecentHit;
-    private ScheduledFuture<?> updater;
-
     private int iterationsWithoutHits;
+    private final ChunkPos start;
+    private final JFrame frame;
     private int iterationsWithoutAnything;
 
-    private List<ChunkPos> hits = new ArrayList<>();
-    private List<ChunkPos> misses = new ArrayList<>();
-    private final ChunkPos start;
-
-    private final JFrame frame;
-
-    public Filter(Hit hit, WorldTrackyTracky context, OptionalInt prevTrackID) {
-        this.context = context;
+    public MonteCarloParticleFilterMode(ChunkPos start, Track parent) {
+        generatePoints(new ChunkPos(0, 0), start, M, false);
+        this.start = start;
+        this.track = parent;
         deltaT();
-        generatePoints(new ChunkPos(0, 0), hit.pos, M, false);
-        this.trackID = Database.createTrack(hit, prevTrackID);
-        insertHit(hit);
-        runCheck(hit.pos);
-        this.start = hit.pos;
-        if (!GUI) {
+        if (GUI) {
+            frame = setupFrame();
+            TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(frame::repaint), 0, 100, TimeUnit.MILLISECONDS);
+        } else {
             frame = null;
-            return;
         }
-        frame = new JFrame("no comment");
-        frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-        frame.setSize(690, 690);
-        frame.setContentPane(new JComponent() {
-            @Override
-            public void paintComponent(Graphics g) {
-                double d = (System.currentTimeMillis() - lastUpdateMS) / 1000D;
-                g.setColor(Color.BLACK);
-                for (Particle p : particles) {
-                    int[] pos = worldToScreen(p.x + p.dx * d, p.z + p.dz * d);
-                    int[] pos2 = worldToScreen(p.x + p.dx, p.z + p.dz);
-                    g.drawRect(pos[0], pos[1], 1, 1);
-                    //g.drawLine(pos[0], pos[1], pos2[0], pos2[1]);
-                }
-
-                for (ChunkPos p : hits) {
-                    int[] pos = worldToScreen(p.x + 0.5, p.z + 0.5);
-                    g.setColor(Color.GREEN);
-                    g.fillRect(pos[0] - 2, pos[1] - 2, 5, 5);
-                    g.drawString(p.blockPos(), pos[0], pos[1]);
-
-                }
-                for (ChunkPos p : misses) {
-                    int[] pos = worldToScreen(p.x + 0.5, p.z + 0.5);
-                    g.setColor(Color.RED);
-                    g.fillRect(pos[0] - 2, pos[1] - 2, 5, 5);
-                    g.drawString(p.blockPos(), pos[0], pos[1]);
-                }
-            }
-        });
-        frame.setVisible(true);
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(frame::repaint), 0, 100, TimeUnit.MILLISECONDS);
     }
 
-    private int[] worldToScreen(double x, double z) {
-        int xx = (int) Math.round(2 * (x - start.x)) + frame.getWidth() / 2;
-        int zz = (int) Math.round(2 * (z - start.z)) + frame.getHeight() / 2;
-        return new int[]{xx, zz};
-    }
+    private List<ChunkPos> renderHits;
+    private List<ChunkPos> renderMisses;
 
-    public void start() {
-        updater = TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::updateStep), 0, 1, TimeUnit.SECONDS);
-    }
-
-    private synchronized void updateStep() {
-        //System.out.println("Update step");
+    @Override
+    public List<ChunkPos> updateStep(List<ChunkPos> hits, List<ChunkPos> misses) {
         if (hits.isEmpty() && misses.isEmpty()) {
-            System.out.println("Maybe offline");
+            System.out.println("Maybe offline monte :(");
             // maybe we're offline
             if (iterationsWithoutAnything++ > 120) {
-                System.out.println("Offine for 120 seconds, killing filter");
+                System.out.println("Offine for 120 seconds, killing track");
                 // the bot itself going offline then coming back online will resume the paused filters
-                failed(true);
+                return null;
             }
-            return;
+            return Collections.emptyList();
         }
         iterationsWithoutAnything = 0;
+
         int numGuesses = 3;
         boolean failed = hits.isEmpty();
         if (failed) {
+            ChunkPos mostRecentHit = track.getMostRecentHit();
             for (int dx = -1; dx <= 1; dx++) {
                 for (int dz = -1; dz <= 1; dz++) {
                     ChunkPos p = mostRecentHit.add(dx * 7, dz * 7);
@@ -128,37 +76,65 @@ public class Filter {
             numGuesses += 7;
             iterationsWithoutHits++;
             if (iterationsWithoutHits >= 5) {
-                failed(true);
-                return;
+                return null;
             }
         } else {
             iterationsWithoutHits = 0;
         }
         //hits.forEach(hit -> generatePoints(hit, 5));
         misses.forEach(miss -> updateFilter(particle -> particle.wouldUnload(miss)));
-        misses.clear();
         hits.forEach(hit -> updateFilter(particle -> particle.wouldLoad(hit)));
-        hits.clear();
+        this.renderHits = hits;
+        this.renderMisses = misses;
         List<ChunkPos> guesses = guessLocation(numGuesses);
         if (guesses.isEmpty()) {
-            failed(true);
-            return;
+            return null;
         }
+        return guesses;
         //System.out.println("Guesses: " + guesses);
         //System.out.println("Best guess: " + guesses.get(0));
         //System.out.println("Avg: " + getAvg());
-        guesses.forEach(this::runCheck);
     }
 
-    public void failed(boolean callUpwards) {
-        System.out.println("Filter " + trackID + " has FAILED");
-        updater.cancel(false);
-        if (callUpwards) {
-            NoComment.executor.execute(() -> context.filterFailure(this));
-        }
-        if (frame != null) {
-            frame.dispose();
-        }
+    private JFrame setupFrame() {
+        JFrame frame = new JFrame("no comment");
+        frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+        frame.setSize(690, 690);
+        frame.setContentPane(new JComponent() {
+            @Override
+            public void paintComponent(Graphics g) {
+                double d = (System.currentTimeMillis() - lastUpdateMS) / 1000D;
+                g.setColor(Color.BLACK);
+                for (Particle p : particles) {
+                    int[] pos = worldToScreen(p.x + p.dx * d, p.z + p.dz * d);
+                    int[] pos2 = worldToScreen(p.x + p.dx, p.z + p.dz);
+                    g.drawRect(pos[0], pos[1], 1, 1);
+                    //g.drawLine(pos[0], pos[1], pos2[0], pos2[1]);
+                }
+
+                for (ChunkPos p : renderHits) {
+                    int[] pos = worldToScreen(p.x + 0.5, p.z + 0.5);
+                    g.setColor(Color.GREEN);
+                    g.fillRect(pos[0] - 2, pos[1] - 2, 5, 5);
+                    g.drawString(p.blockPos(), pos[0], pos[1]);
+
+                }
+                for (ChunkPos p : renderMisses) {
+                    int[] pos = worldToScreen(p.x + 0.5, p.z + 0.5);
+                    g.setColor(Color.RED);
+                    g.fillRect(pos[0] - 2, pos[1] - 2, 5, 5);
+                    g.drawString(p.blockPos(), pos[0], pos[1]);
+                }
+            }
+        });
+        frame.setVisible(true);
+        return frame;
+    }
+
+    private int[] worldToScreen(double x, double z) {
+        int xx = (int) Math.round(2 * (x - start.x)) + frame.getWidth() / 2;
+        int zz = (int) Math.round(2 * (z - start.z)) + frame.getHeight() / 2;
+        return new int[]{xx, zz};
     }
 
     private List<ChunkPos> guessLocation(int count) {
@@ -200,7 +176,7 @@ public class Filter {
         return (now - then) / 1000D;
     }
 
-    private synchronized void updateFilter(Function<Particle, Double> weighter) {
+    private void updateFilter(Function<Particle, Double> weighter) {
         Collections.shuffle(particles);
         double dt = deltaT();
         int N = particles.size();
@@ -271,21 +247,9 @@ public class Filter {
         return avg;
     }
 
-    public synchronized void insertHit(Hit hit) {
-        hits.add(hit.pos);
-        mostRecentHit = hit.pos;
-        NoComment.executor.execute(() -> hit.associateWithTrack(trackID));
-    }
 
-    public ChunkPos getMostRecentHit() {
-        return mostRecentHit;
-    }
-
-    public int getTrackID() {
-        return trackID;
-    }
-
-    public synchronized boolean includesBroadly(ChunkPos pos) {
+    @Override
+    public boolean includesBroadly(ChunkPos pos) {
         for (Particle p : particles) {
             if (p.wouldLoadWithTripleBackprojection(pos)) {
                 return true;
@@ -294,14 +258,11 @@ public class Filter {
         return false;
     }
 
-    private void runCheck(ChunkPos pos) {
-        NoComment.executor.execute(() ->
-                context.world.submit(new SingleChunkTask(0, pos, this::insertHit, () -> {
-                    synchronized (Filter.this) {
-                        misses.add(pos);
-                    }
-                }))
-        );
+    @Override
+    public void decommission() {
+        if (frame != null) {
+            frame.dispose();
+        }
     }
 
     private static void normalize(double[] weights) {

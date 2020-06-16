@@ -3,45 +3,139 @@ package nocomment.master.util;
 import nocomment.master.World;
 import nocomment.master.db.Database;
 import nocomment.master.network.Connection;
+import nocomment.master.network.QueueStatus;
 import nocomment.master.tracking.TrackyTrackyManager;
 
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class Staggerer {
-    private static final long MAX_AGE = 12_600_000; // 3.5 hours
+
+    private static final long AUTO_KICK = 6 * 3_600 * 1_000; // 6 hours
+    private static final long STAGGER = AUTO_KICK / 4; // 90 minutes
     private final World world;
+    private final Map<Integer, Long> observedAt = new HashMap<>();
 
     public Staggerer(World world) {
         this.world = world;
     }
 
     public void start() {
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::run), 5, 10, TimeUnit.MINUTES);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::run), 20, 10, TimeUnit.MINUTES);
+    }
+
+    private static class QueueStat {
+
+        private final int pos;
+        private final int playerID;
+        private final long when;
+
+        public QueueStat(ResultSet rs) throws SQLException {
+            this.pos = Integer.parseInt(rs.getString("data").split("Queue position: ")[1]);
+            this.playerID = rs.getInt("player_id");
+            this.when = rs.getLong("updated_at");
+        }
+    }
+
+    private List<QueueStat> getInQueue() {
+        try (java.sql.Connection connection = Database.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("SELECT data, player_id, updated_at FROM statuses WHERE curr_status = 'QUEUE'::statuses_enum AND dimension = ?")) {
+            stmt.setShort(1, world.dimension);
+            try (ResultSet rs = stmt.executeQuery()) {
+                List<QueueStat> ret = new ArrayList<>();
+                while (rs.next()) {
+                    ret.add(new QueueStat(rs));
+                }
+                return ret;
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
     }
 
     private void run() {
-        Collection<Connection> conns = world.getOpenConnections();
-        if (conns.size() < 2) {
+        System.out.println("Staggerer for " + world.dimension);
+        System.out.println("Staggerer observations: " + observedAt);
+        observedAt.values().removeIf(ts -> ts < System.currentTimeMillis() - 30 * 60 * 1000);
+
+        Collection<Connection> onlineNow = world.getOpenConnections();
+        onlineNow.forEach(conn -> observedAt.put(conn.getIdentity(), System.currentTimeMillis()));
+        Map<Integer, Long> playerJoinTS = new HashMap<>();
+        if (world.server.hostname.equals("2b2t.org")) { // i mean this is sorta rart idk
+            for (QueueStat qs : getInQueue()) {
+                // this is safe since statuses will be reset from QUEUE to OFFLINE within 60s of kick
+                // and getInQueue will only return statuses that are currently QUEUE
+                observedAt.merge(qs.playerID, qs.when, Math::max);
+                playerJoinTS.put(qs.playerID, qs.when + qs.pos * QueueStatus.getEstimatedMillisecondsPerQueuePosition());
+            }
+        }
+        if (onlineNow.size() < 2) {
+            // absolutely never stagger with just one currently active
+            System.out.println("Only one");
             return;
         }
-        Map<Connection, Long> joins = new HashMap<>();
-        for (Connection conn : conns) {
+
+        Set<Integer> harem = observedAt.keySet();
+
+        for (Connection conn : onlineNow) {
             OptionalLong join = currentSessionJoinedAt(conn.getIdentity(), world.server.serverID);
             if (!join.isPresent()) {
                 System.out.println("Exceptional situation (i put that in so it would show up when i grep for Exception in the server logs) where a connection is here but not actually on the server " + System.currentTimeMillis() + " " + conn + " " + conn.getIdentity());
                 return;
             }
-            joins.put(conn, join.getAsLong());
+            playerJoinTS.put(conn.getIdentity(), join.getAsLong());
         }
-        Connection oldest = conns.stream().min(Comparator.comparingLong(joins::get)).get();
-        long joinedAt = joins.get(oldest);
-        long age = System.currentTimeMillis() - joinedAt;
-        System.out.println("Oldest account is " + oldest + " which has been on for " + age + "ms");
-        if (age > MAX_AGE) {
-            System.out.println("KICKING " + System.currentTimeMillis() + " " + oldest);
-            oldest.dispatchDisconnectRequest();
+
+        if (harem.stream().anyMatch(id -> !playerJoinTS.containsKey(id))) {
+            // a player id is in harem but not in playerJoinTS
+
+            // this means that we know of an account, but it isn't queued or in game
+
+            // if any harem accounts are currently OFFLINE, exit
+            // (this means that we're in a transient state awaiting a server restart or reconnect)
+            // only after 30 minutes of OFFLINE do we remove from harem
+            System.out.println("Staggerer transient harem overlap " + harem + " " + playerJoinTS.keySet());
+            return;
         }
+
+        if (getInQueue().stream().anyMatch(qs -> qs.pos < 250)) {
+            System.out.println("Awaiting requeue");
+            return;
+        }
+        Map<Integer, Long> leaveAtTS = new HashMap<>();
+        Long prevLeaveAt = null;
+        System.out.println(System.currentTimeMillis());
+        for (int pid : harem.stream().sorted(Comparator.comparingLong(pid -> -playerJoinTS.get(pid))).collect(Collectors.toList())) {
+            long joinAt = playerJoinTS.get(pid);
+            long serverLeaveAt = joinAt + AUTO_KICK;
+            long ourLeaveAt = serverLeaveAt;
+            if (prevLeaveAt != null) {
+                // this is the actual staggering algorithm
+                // it just depends on this for loop being in sorted order from youngest to oldest (aka: last connection first, first connection last)
+                ourLeaveAt = Math.min(prevLeaveAt - STAGGER, ourLeaveAt);
+            }
+            leaveAtTS.put(pid, ourLeaveAt);
+            prevLeaveAt = ourLeaveAt;
+            System.out.println("Player " + pid + " joined at " + format(joinAt) + " would be kicked at " + format(serverLeaveAt) + " but we'll kick at " + format(ourLeaveAt));
+        }
+        for (Connection conn : onlineNow) {
+            long leaveAt = leaveAtTS.get(conn.getIdentity());
+            if (leaveAt < System.currentTimeMillis()) {
+                System.out.println("Therefore, kicking " + conn.getIdentity());
+                conn.dispatchDisconnectRequest();
+                return;
+            }
+        }
+    }
+
+    private static String format(long ts) {
+        double h = (ts - System.currentTimeMillis()) / (double) 3_600_000;
+        return Math.round(h * 100) / 100d + "hours";
     }
 
     public static OptionalLong currentSessionJoinedAt(int playerID, short serverID) {
@@ -54,7 +148,7 @@ public class Staggerer {
             return joinedAt;
         }
         long timestamp = joinedAt.getAsLong();
-        // check if this was a BS server restart
+        // check if this was a BS master restart
         if (!anyEmpty(serverID, timestamp - 100, timestamp - 200, timestamp - 300, timestamp - 400, timestamp - 500)) {
             // nope, server was well populated
             return joinedAt;

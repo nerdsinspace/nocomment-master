@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class Server {
+
     private static final Map<String, Server> servers = new HashMap<>();
 
     public static synchronized Server getServer(String serverName) {
@@ -48,8 +49,15 @@ public class Server {
                 resp.append(pending.stream().mapToInt(d -> d instanceof Task ? ((Task) d).count : 1).sum());
                 resp.append(", connections: ");
                 for (Connection conn : world.getOpenConnections()) {
-                    resp.append("\nConnection ").append(conn);
+                    resp.append("\n Connection ").append(conn);
                 }
+                resp.append("\nStats:");
+                long start = System.currentTimeMillis();
+                resp.append(world.stats.report().replace("\n", " \n"));
+                long end = System.currentTimeMillis();
+                resp.append("\nStats lock held for ");
+                resp.append(end - start);
+                resp.append("ms");
             }
             resp.append("\nEnd status");
             System.out.println(resp.toString().replace("\n", "\n>  "));

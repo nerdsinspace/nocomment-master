@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class HighwayScanner {
+
     private static final int AXIS_INTERVAL = 9;
     private static final int DIAG_INTERVAL = 7; // overlap because otherwise there's a diagonal catty corner
 
@@ -33,8 +34,8 @@ public class HighwayScanner {
         System.out.println("Diag count: " + diagCount);
         int tot = axisCount * 4 + diagCount * 4;
         System.out.println("Total count: " + tot);
-        System.out.println("Estimated time in seconds: " + tot / 400);
-        System.out.println("Fraction of time: " + tot / 400.0 / (rerunDelayMS / 1000.0));
+        System.out.println("Estimated time in seconds: " + tot / 160.0);
+        System.out.println("Fraction of time: " + tot / 160.0 / (rerunDelayMS / 1000.0));
     }
 
     public void submitTasks() {

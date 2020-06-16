@@ -13,6 +13,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class Database {
+
     private static BasicDataSource pool;
 
     static {
@@ -471,6 +472,21 @@ public class Database {
             stmt.setShort(1, dimension);
             stmt.setInt(2, playerID);
             stmt.setShort(3, serverID);
+            stmt.execute();
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
+    public static void saveChat(String chat, short chatType, int playerID, short serverID, long timestamp) {
+        try (Connection connection = pool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("INSERT INTO chat (data, chat_type, reported_by, created_at, server_id) VALUES (CAST(? AS JSON), ?, ?, ?, ?)")) {
+            stmt.setString(1, chat);
+            stmt.setShort(2, chatType);
+            stmt.setInt(3, playerID);
+            stmt.setLong(4, timestamp);
+            stmt.setShort(5, serverID);
             stmt.execute();
         } catch (SQLException ex) {
             ex.printStackTrace();
