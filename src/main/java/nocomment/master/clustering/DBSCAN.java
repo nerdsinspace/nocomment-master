@@ -13,7 +13,9 @@ import java.util.concurrent.TimeUnit;
 
 public enum DBSCAN {
     INSTANCE;
-    private static final int MIN_PTS = 200;
+    private static final long MIN_LAYER_3_UPDATE_DUR = 3_600_000; // 1 hour
+    private static final long MAX_LAYER_3_UPDATE_DUR = 6 * MIN_LAYER_3_UPDATE_DUR; // 6 hours
+    public static final long MIN_OCCUPANCY_DURATION = 90 * 60 * 1000; // 90 minutes
 
     public void beginIncrementalDBSCANThread() {
         // schedule with fixed delay is Very Important, so that we get no overlaps
@@ -21,7 +23,7 @@ public enum DBSCAN {
     }
 
     private synchronized void incrementalRun() {
-        while (Aggregator.INSTANCE.aggregateHits()) ;
+        Aggregator.INSTANCE.multiAggregate();
         try (Connection connection = Database.getConnection()) {
             dbscan(connection);
         } catch (SQLException ex) {
@@ -116,7 +118,6 @@ public enum DBSCAN {
         }
     }
 
-    private static final String DANK_CONDITION = "cnt > 3 AND server_id = ? AND dimension = ? AND CIRCLE(POINT(x, z), 32) @> CIRCLE(POINT(?, ?), 0)";
     private static final String COLS = "id, x, z, dimension, server_id, is_core, cluster_parent, disjoint_rank, disjoint_size";
 
     private Datapoint getByID(Connection connection, int id, Map<Integer, Datapoint> cache) throws SQLException {
@@ -135,22 +136,44 @@ public enum DBSCAN {
     }
 
     public static void markForUpdateAllWithinRadius(short serverID, short dimension, int x, int z, Connection connection) throws SQLException {
-        try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO dbscan_to_update (dbscan_id) SELECT id FROM dbscan WHERE " + DANK_CONDITION + " ON CONFLICT DO NOTHING")) {
-            stmt.setShort(1, serverID);
-            stmt.setShort(2, dimension);
-            stmt.setInt(3, x);
-            stmt.setInt(4, z);
+        // queue for filter check from layer 2 to layer 3
+        try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO dbscan_to_update (dbscan_id, updatable_lower, updatable_upper) SELECT id, ?, ? FROM dbscan WHERE is_node AND server_id = ? AND dimension = ? AND CIRCLE(POINT(x, z), 32) @> CIRCLE(POINT(?, ?), 0) AND CIRCLE(POINT(x, z), 16) @> CIRCLE(POINT(?, ?), 0) ON CONFLICT ON CONSTRAINT dbscan_to_update_pkey DO UPDATE SET updatable_lower = excluded.updatable_lower")) {
+            stmt.setLong(1, System.currentTimeMillis() + MIN_LAYER_3_UPDATE_DUR);
+            stmt.setLong(2, System.currentTimeMillis() + MAX_LAYER_3_UPDATE_DUR);
+            stmt.setShort(3, serverID);
+            stmt.setShort(4, dimension);
+            stmt.setInt(5, x);
+            stmt.setInt(6, z);
+            stmt.setInt(7, x);
+            stmt.setInt(8, z);
             stmt.execute();
         }
     }
 
     private Datapoint getDatapoint(Connection connection) throws SQLException {
-        try (PreparedStatement stmt = connection.prepareStatement("WITH removed_id AS (DELETE FROM dbscan_to_update WHERE dbscan_id = (SELECT MAX(dbscan_id) FROM dbscan_to_update) RETURNING dbscan_id) SELECT " + COLS + " FROM dbscan WHERE id = (SELECT dbscan_id FROM removed_id)");
-             ResultSet rs = stmt.executeQuery()) {
-            if (rs.next()) {
-                return new Datapoint(rs);
-            } else {
-                return null;
+        try (PreparedStatement stmt = connection.prepareStatement("WITH removed_id AS (DELETE FROM dbscan_to_update WHERE dbscan_id = (SELECT dbscan_id FROM dbscan_to_update WHERE LEAST(updatable_lower, updatable_upper) < ? ORDER BY LEAST(updatable_lower, updatable_upper) ASC LIMIT 1) RETURNING dbscan_id) SELECT " + COLS + " FROM dbscan WHERE id = (SELECT dbscan_id FROM removed_id)")) {
+            stmt.setLong(1, System.currentTimeMillis());
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    return new Datapoint(rs);
+                } else {
+                    return null;
+                }
+            }
+        }
+    }
+
+    private static long calculateRangedOccupancyDuration(short serverID, short dimension, int x, int z, Connection connection) throws SQLException {
+        try (PreparedStatement stmt = connection.prepareStatement("SELECT range_union_cardinality(unnested) AS occupancy_duration FROM (SELECT UNNEST(ts_ranges) AS unnested FROM dbscan WHERE is_node AND server_id = ? AND dimension = ? AND CIRCLE(POINT(x, z), 32) @> CIRCLE(POINT(?, ?), 0) AND CIRCLE(POINT(x, z), 16) @> CIRCLE(POINT(?, ?), 0)) tmp")) {
+            stmt.setShort(1, serverID);
+            stmt.setShort(2, dimension);
+            stmt.setInt(3, x);
+            stmt.setInt(4, z);
+            stmt.setInt(5, x);
+            stmt.setInt(6, z);
+            try (ResultSet rs = stmt.executeQuery()) {
+                rs.next();
+                return rs.getLong("occupancy_duration");
             }
         }
     }
@@ -160,7 +183,7 @@ public enum DBSCAN {
     }
 
     private List<Datapoint> getWithinRange(short serverID, short dimension, int x, int z, Connection connection) throws SQLException {
-        try (PreparedStatement stmt = connection.prepareStatement("SELECT " + COLS + " FROM dbscan WHERE " + DANK_CONDITION)) {
+        try (PreparedStatement stmt = connection.prepareStatement("SELECT " + COLS + " FROM dbscan WHERE is_node AND server_id = ? AND dimension = ? AND CIRCLE(POINT(x, z), 32) @> CIRCLE(POINT(?, ?), 0)")) {
             stmt.setShort(1, serverID);
             stmt.setShort(2, dimension);
             stmt.setInt(3, x);
@@ -216,29 +239,34 @@ public enum DBSCAN {
             if (point == null) {
                 break;
             }
-            long a = System.currentTimeMillis();
-            List<Datapoint> neighbors = getWithinRange(point, connection); // IMPORTANT: THIS INCLUDES THE POINT ITSELF!
-            long b = System.currentTimeMillis();
-            if (b - a > 30)
-                System.out.println("Took " + (b - a) + "ms to get " + neighbors.size() + " neighbors of " + point);
-            if (!neighbors.contains(point)) {
-                throw new IllegalStateException();
-            }
-            long e = System.currentTimeMillis();
             commit = i++ % 20 == 0;
-            if (neighbors.size() > MIN_PTS && !point.isCore) {
-                System.out.println("DBSCAN promoting " + point + " to core point");
-                point.isCore = true;
-                try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET is_core = TRUE WHERE id = ?")) {
-                    stmt.setInt(1, point.id);
-                    stmt.execute();
+            // okay, the first gamer realization is that about half the points do NOT graduate to core!
+            if (!point.isCore) {
+                // only if it isn't core, we do the GAMER neighborhood query to maybe promote to core
+                // this one doesn't require potentially hundreds of neighbor nodes to be sent over the network
+                long occupancyDuration = calculateRangedOccupancyDuration(point.serverID, point.dimension, point.x, point.z, connection);
+                if (occupancyDuration > MIN_OCCUPANCY_DURATION) {
+                    System.out.println("DBSCAN promoting " + point + " to core point");
+                    point.isCore = true;
+                    try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET is_core = TRUE WHERE id = ?")) {
+                        stmt.setInt(1, point.id);
+                        stmt.execute();
+                    }
+                    commit = true;
                 }
-                commit = true;
-                //markForUpdateAllWithinRadius(point.serverID, point.dimension, point.x, point.z, connection);
-                // TODO I REALLY thought that this ^ would be necessary, but it isn't. WHY?
             }
-
+            // note: the ONLY case where this function is less than efficient (i.e. does the query twice) is in the moment of promotion from node to core
+            // a small price to pay for salvation
             if (point.isCore) {
+                long a = System.currentTimeMillis();
+                List<Datapoint> neighbors = getWithinRange(point, connection); // IMPORTANT: THIS INCLUDES THE POINT ITSELF!
+                long b = System.currentTimeMillis();
+                if (b - a > 30)
+                    System.out.println("Took " + (b - a) + "ms to get " + neighbors.size() + " neighbors of " + point);
+                if (!neighbors.contains(point)) {
+                    throw new IllegalStateException();
+                }
+                long e = System.currentTimeMillis();
                 // initial really fast sanity check
                 Set<Integer> chkParents = new HashSet<>();
                 for (Datapoint neighbor : neighbors) {
@@ -271,10 +299,10 @@ public enum DBSCAN {
                     }
                     commit = true;
                 }
+                long f = System.currentTimeMillis();
+                if (f - e > 5)
+                    System.out.println("Took " + (f - e) + "ms to do all the other shit");
             }
-            long f = System.currentTimeMillis();
-            if (f - e > 5)
-                System.out.println("Took " + (f - e) + "ms to do all the other shit");
             if (commit) {
                 connection.commit();
             }

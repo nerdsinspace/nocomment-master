@@ -19,7 +19,7 @@ public enum HitRetry {
                     "                    id,                                                      " +
                     "                    disjoint_rank                                            " +
                     "                FROM                                                         " +
-                    "                    dbscan                                                   " +
+                    "                    old_dbscan                                                   " +
                     "                WHERE                                                        " +
                     "                    cluster_parent IS NULL                                   " +
                     "                    AND disjoint_rank > 0                                    " +
@@ -36,13 +36,13 @@ public enum HitRetry {
                     "                    initial                                                  " +
                     "                UNION                                                        " +
                     "                    SELECT                                                   " +
-                    "                        dbscan.id,                                           " +
-                    "                        dbscan.disjoint_rank                                 " +
+                    "                        old_dbscan.id,                                           " +
+                    "                        old_dbscan.disjoint_rank                                 " +
                     "                    FROM                                                     " +
-                    "                        dbscan                                               " +
+                    "                        old_dbscan                                               " +
                     "                    INNER JOIN                                               " +
                     "                        clusters                                             " +
-                    "                            ON dbscan.cluster_parent = clusters.id           " +
+                    "                            ON old_dbscan.cluster_parent = clusters.id           " +
                     "                    WHERE                                                    " +
                     "                        clusters.disjoint_rank > 0                           " +
                     "            ), choice AS (                                                   " +
@@ -57,9 +57,9 @@ public enum HitRetry {
                     "                x,                                                           " +
                     "                z                                                            " +
                     "            FROM                                                             " +
-                    "                dbscan                                                       " +
+                    "                old_dbscan                                                       " +
                     "            INNER JOIN choice                                                " +
-                    "                ON choice.id = dbscan.id                                     ")) {
+                    "                ON choice.id = old_dbscan.id                                     ")) {
                 stmt.setShort(1, serverID);
                 stmt.setShort(2, dimension);
                 try (ResultSet rs = stmt.executeQuery()) {

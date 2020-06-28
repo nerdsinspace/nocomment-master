@@ -17,6 +17,9 @@ import java.util.concurrent.TimeUnit;
 public enum Associator {
     INSTANCE;
 
+    private static final long UNTIL = 86_400_000; // 24 hours
+    private static final long INTERVAL = 3_600_000; // 1 hour
+
     public void beginIncrementalAssociatorThread() {
         // schedule with fixed delay is Very Important, so that we get no overlaps
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::incrementalRun), 0, 5, TimeUnit.MINUTES);
@@ -62,11 +65,11 @@ public enum Associator {
                     prevFence = rs.getLong("first_track_timestamp");
                 }
             }
-            if (System.currentTimeMillis() - prevFence < 10 * 60 * 1000) {
-                System.out.println("We are associated up till less than 10 minutes ago so, no");
+            long fence = prevFence + INTERVAL;
+            if (System.currentTimeMillis() - fence < UNTIL) {
+                System.out.println("We are associated up till less than 1 day ago so, no");
                 return false;
             }
-            long fence = Math.min(System.currentTimeMillis() - 5 * 60 * 1000, prevFence + 3_600 * 1000); // an hour, unless that would extend beyond 5 minutes ago, in which case 5 minutes ago
             System.out.println(fence + " " + prevFence + " " + (fence - prevFence));
             List<TrackEnding> toProcess = new ArrayList<>();
             try (PreparedStatement stmt = connection.prepareStatement("SELECT tracks.id, tracks.updated_at, tracks.server_id, tracks.dimension, last.x, last.z FROM tracks LEFT OUTER JOIN hits AS first ON first.id = tracks.first_hit_id LEFT OUTER JOIN hits AS last ON last.id = tracks.last_hit_id WHERE NOT tracks.legacy AND ABS(last.x) > 100 AND ABS(last.z) > 100 AND ABS(ABS(last.x) - ABS(last.z)) > 100 AND last.x::bigint * last.x::bigint + last.z::bigint * last.z::bigint > 1000 * 1000 AND last.created_at - first.created_at > 3 * 60 * 1000 AND tracks.updated_at >= ? AND tracks.updated_at < ?")) {

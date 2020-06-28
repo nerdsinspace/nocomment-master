@@ -179,17 +179,25 @@ CLUSTER tracks;
 
 CREATE TABLE dbscan
 (
-    id                SERIAL PRIMARY KEY,
-    cnt               INTEGER  NOT NULL,
-    x                 INTEGER  NOT NULL,
-    z                 INTEGER  NOT NULL,
-    dimension         SMALLINT NOT NULL,
-    server_id         SMALLINT NOT NULL,
-    is_core           BOOLEAN  NOT NULL,
-    cluster_parent    INTEGER, -- nullable
-    disjoint_rank     INTEGER  NOT NULL,
-    disjoint_size     INTEGER  NOT NULL,
-    updated_at_approx BIGINT,
+    id              SERIAL PRIMARY KEY,
+
+    x               INTEGER     NOT NULL,
+    z               INTEGER     NOT NULL,
+    dimension       SMALLINT    NOT NULL,
+    server_id       SMALLINT    NOT NULL,
+
+    is_node         BOOLEAN     NOT NULL,
+    is_core         BOOLEAN     NOT NULL,
+    cluster_parent  INTEGER,              -- nullable
+    disjoint_rank   INTEGER     NOT NULL, -- rank based combination of disjoint set
+    disjoint_size   INTEGER     NOT NULL, -- used in traversal
+
+    root_updated_at BIGINT,               -- only updated for parent nodes, ideally the cluster core
+
+    ts_ranges       INT8RANGE[] NOT NULL,
+    last_init_hit   BIGINT      NOT NULL, -- contains most recent hit, potentially beyond the end of ts_ranges
+    first_init_hit  BIGINT      NOT NULL, -- will only be used for analytics / reporting, not used by dbscan
+
 
     FOREIGN KEY (cluster_parent) REFERENCES dbscan (id)
         ON UPDATE CASCADE ON DELETE SET NULL,
@@ -205,9 +213,44 @@ CREATE UNIQUE INDEX dbscan_ingest
     ON dbscan (server_id, dimension, x, z);
 CREATE INDEX dbscan_process
     ON dbscan
-        USING GiST (server_id, dimension, CIRCLE(POINT(x, z), 32)) WHERE cnt > 3;
+        USING GiST (CIRCLE(POINT(x, z), 32)) WHERE is_node;
 CREATE INDEX dbscan_disjoint_traversal
     ON dbscan (cluster_parent) WHERE cluster_parent IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION _range_union_cardinality(int8range[])
+    RETURNS bigint AS
+$$
+
+DECLARE
+    _range    int8range;
+    _current  int8range;
+    _duration bigint;
+
+BEGIN
+
+    _current := (SELECT x FROM unnest($1) x ORDER BY x LIMIT 1);
+    _duration := 0::bigint;
+
+    FOR _range IN SELECT unnest($1) x ORDER BY x
+        LOOP
+            IF _range && _current OR _range -|- _current THEN
+                _current := _current + _range;
+            ELSE
+                _duration := _duration + UPPER(_current) - LOWER(_current);
+                _current := _range;
+            END IF;
+        END LOOP;
+
+    RETURN _duration + UPPER(_current) - LOWER(_current);
+END;
+
+$$ LANGUAGE plpgsql;
+
+CREATE AGGREGATE range_union_cardinality (int8range) (
+    stype = int8range[],
+    sfunc = array_append,
+    finalfunc = _range_union_cardinality
+    );
 
 CREATE TABLE dbscan_progress
 (
@@ -219,11 +262,15 @@ VALUES (0);
 
 CREATE TABLE dbscan_to_update
 (
-    dbscan_id INTEGER PRIMARY KEY,
+    dbscan_id       INTEGER PRIMARY KEY,
+    updatable_lower BIGINT NOT NULL,
+    updatable_upper BIGINT NOT NULL,
 
     FOREIGN KEY (dbscan_id) REFERENCES dbscan (id)
         ON UPDATE CASCADE ON DELETE CASCADE
 );
+
+CREATE INDEX dbscan_to_update_by_schedule ON dbscan_to_update (LEAST(updatable_lower, updatable_upper));
 
 CREATE TABLE associations
 (

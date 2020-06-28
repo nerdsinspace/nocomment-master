@@ -10,36 +10,31 @@ import java.util.*;
 
 enum Aggregator {
     INSTANCE;
-    private static final int THRESHOLD = 3;
-    private static final int MAX_COUNT = THRESHOLD + 1;
-    private static final boolean ENABLE_LEGACY_CORE_AUTOPROMOTION = false;
     private static final long DBSCAN_TIMESTAMP_INTERVAL = 3600 * 1000; // 1 hour
+    private static final long MAX_GAP = 2 * 60 * 1000; // 2 minutes
+    private static final long MIN_DURATION_FOR_IGNORE = DBSCAN.MIN_OCCUPANCY_DURATION;
+    private static final long MIN_DURATION_FOR_NODE = 5 * 60 * 1000; // 5 minutes
+
     private final Map<Integer, Long> parentAgeCache = new HashMap<>();
 
-    private static class AggregatedHits {
+    private static class PastHit {
+        long id;
+        long created_at;
         short serverID;
         short dimension;
         int x;
         int z;
-        int count;
-        boolean anyLegacy;
-        long maxID;
+
+        @Override
+        public String toString() {
+            return "{" + id + " " + created_at + " " + x + "," + x + " " + serverID + " " + dimension + "}";
+        }
     }
 
-    private List<AggregatedHits> queryAggregates(long startID, Connection connection) throws SQLException {
+    private static List<PastHit> query(long startID, Connection connection) throws SQLException {
         try (PreparedStatement stmt = connection.prepareStatement("" +
-                "        SELECT                                                                      " +
-                "            server_id,                                                              " +
-                "            dimension,                                                              " +
-                "            x,                                                                      " +
-                "            z,                                                                      " +
-                "            COUNT(*) AS cnt,                                                        " +
-                "            BOOL_OR(legacy) AS any_legacy,                                          " +
-                "            MAX(id) AS max_id                                                       " +
-                "        FROM                                                                        " +
-                "            (                                                                       " +
                 "                SELECT                                                              " +
-                "                    *                                                               " +
+                "                    id, server_id, dimension, x, z, created_at                      " +
                 "                FROM                                                                " +
                 "                    hits                                                            " +
                 "                WHERE                                                               " +
@@ -47,33 +42,35 @@ enum Aggregator {
                 "                    AND ABS(x) > 100                                                " +
                 "                    AND ABS(z) > 100                                                " +
                 "                    AND ABS(ABS(x) - ABS(z)) > 100                                  " +
-                "                    AND x::BIGINT * x::BIGINT + z::BIGINT * z::BIGINT > 1000 * 1000 " +
+                "                    AND x::BIGINT * x::BIGINT + z::BIGINT * z::BIGINT > 1500 * 1500 " +
+                "                    AND dimension <> -1                                             " +
                 "                ORDER BY id                                                         " +
-                "                LIMIT 1000                                                          " + // keep this pretty low otherwise the commits get long
-                "             ) tmp                                                                  " +
-                "        GROUP BY                                                                    " +
-                "            server_id, dimension, x, z                                              "
+                "                LIMIT 1000                                                           "
         )) {
             stmt.setLong(1, startID);
             try (ResultSet rs = stmt.executeQuery()) {
-                List<AggregatedHits> ret = new ArrayList<>();
+                List<PastHit> ret = new ArrayList<>();
                 while (rs.next()) {
-                    AggregatedHits aggr = new AggregatedHits();
-                    aggr.serverID = rs.getShort("server_id");
-                    aggr.dimension = rs.getShort("dimension");
-                    aggr.x = rs.getInt("x");
-                    aggr.z = rs.getInt("z");
-                    aggr.count = rs.getInt("cnt");
-                    aggr.anyLegacy = rs.getBoolean("any_legacy") && ENABLE_LEGACY_CORE_AUTOPROMOTION;
-                    aggr.maxID = rs.getLong("max_id");
-                    ret.add(aggr);
+                    PastHit hit = new PastHit();
+                    hit.serverID = rs.getShort("server_id");
+                    hit.dimension = rs.getShort("dimension");
+                    hit.x = rs.getInt("x");
+                    hit.z = rs.getInt("z");
+                    hit.id = rs.getLong("id");
+                    hit.created_at = rs.getLong("created_at");
+                    ret.add(hit);
                 }
                 return ret;
             }
         }
     }
 
-    synchronized boolean aggregateHits() {
+    public synchronized void multiAggregate() {
+        Set<String> marked = new HashSet<>();
+        while (aggregateHits(marked)) ;
+    }
+
+    private boolean aggregateHits(Set<String> alreadyMarked) {
         System.out.println("DBSCAN aggregator triggered");
         try (Connection connection = Database.getConnection()) {
             connection.setAutoCommit(false);
@@ -90,55 +87,75 @@ enum Aggregator {
                 lastRealHitID = rs.getLong("max_id");
             }
             long lag = lastRealHitID - lastProcessedHitID;
-            if (lag < 1000) {
+            if (lag < 10000) {
                 System.out.println("DBSCAN aggregator not running, only " + lag + " hits behind real time");
                 return false;
             }
             System.out.println("DBSCAN aggregator running " + lag + " hits behind real time");
             long maxHitIDProcessed = 0;
-            List<AggregatedHits> aggregated = queryAggregates(lastProcessedHitID, connection);
-            if (aggregated.isEmpty()) {
+            List<PastHit> past = query(lastProcessedHitID, connection);
+            if (past.isEmpty()) {
                 return false;
             }
-            for (AggregatedHits aggr : aggregated) {
-                maxHitIDProcessed = Math.max(aggr.maxID, maxHitIDProcessed);
-                int syntheticCount = aggr.count;
-                if (aggr.anyLegacy) {
-                    syntheticCount += MAX_COUNT;
+            for (PastHit hit : past) {
+                // the common case is a brand new hit, so, counterintuitively, do that BEFORE the select
+                maxHitIDProcessed = Math.max(maxHitIDProcessed, hit.id);
+                try (PreparedStatement stmt = connection.prepareStatement("" +
+                        // 1 count will NEVER pass filter layer 2 and graduate to is_node
+                        "INSERT INTO dbscan (server_id, dimension, x, z, is_node, is_core, cluster_parent, disjoint_rank, disjoint_size, first_init_hit, last_init_hit, ts_ranges) VALUES" +
+                        "                   (?,         ?,         ?, ?, FALSE,   FALSE,   NULL,           0,             1,             ?,              ?,             ARRAY[]::INT8RANGE[]) ON CONFLICT (server_id, dimension, x, z) DO NOTHING RETURNING first_init_hit")) {
+                    stmt.setShort(1, hit.serverID);
+                    stmt.setShort(2, hit.dimension);
+                    stmt.setInt(3, hit.x);
+                    stmt.setInt(4, hit.z);
+                    stmt.setLong(5, hit.created_at);
+                    stmt.setLong(6, hit.created_at);
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        // we get 0 rows if duplicate, and 1 row if brand new
+                        if (rs.next()) {
+                            // it's brand new (no conflict)
+                            continue;
+                        }
+                    }
                 }
 
-                int prevCountInDB = 0;
-                int dbID = 0;
-                boolean wasInDB;
-                boolean dbIsCore = false;
+                int dbID;
+                long lastInitHit;
+                long occupancyDuration;
+                OptionalLong lastRangeEnd = OptionalLong.empty();
+                boolean isNode;
                 OptionalInt clusterParent = OptionalInt.empty();
-
-                try (PreparedStatement stmt = connection.prepareStatement("SELECT cnt, id, is_core, cluster_parent FROM dbscan WHERE server_id = ? AND dimension = ? AND x = ? AND z = ?")) {
-                    stmt.setShort(1, aggr.serverID);
-                    stmt.setShort(2, aggr.dimension);
-                    stmt.setInt(3, aggr.x);
-                    stmt.setInt(4, aggr.z);
+                try (PreparedStatement stmt = connection.prepareStatement("SELECT is_node, id, cluster_parent, last_init_hit, _range_union_cardinality(ts_ranges) AS occupancy_duration, UPPER(ts_ranges[ARRAY_UPPER(ts_ranges, 1)]) AS last_range FROM dbscan WHERE server_id = ? AND dimension = ? AND x = ? AND z = ?")) {
+                    stmt.setShort(1, hit.serverID);
+                    stmt.setShort(2, hit.dimension);
+                    stmt.setInt(3, hit.x);
+                    stmt.setInt(4, hit.z);
                     try (ResultSet rs = stmt.executeQuery()) {
-                        if (rs.next()) {
-                            prevCountInDB = rs.getInt("cnt");
-                            syntheticCount += prevCountInDB;
-                            dbID = rs.getInt("id");
-                            dbIsCore = rs.getBoolean("is_core");
-                            int parent = rs.getInt("cluster_parent");
-                            if (!rs.wasNull()) {
-                                clusterParent = OptionalInt.of(parent);
-                            }
-                            wasInDB = true;
-                        } else {
-                            wasInDB = false;
+                        if (!rs.next()) {
+                            throw new IllegalStateException("The insert failed due to unique, but the select also has no rows?!??! " + hit);
+                        }
+                        isNode = rs.getBoolean("is_node");
+                        dbID = rs.getInt("id");
+                        int parent = rs.getInt("cluster_parent");
+                        if (!rs.wasNull()) {
+                            clusterParent = OptionalInt.of(parent);
+                        }
+                        lastInitHit = rs.getLong("last_init_hit");
+                        occupancyDuration = rs.getLong("occupancy_duration");
+                        if (rs.wasNull()) {
+                            occupancyDuration = 0;
+                        }
+                        long lastRange = rs.getLong("last_range");
+                        if (!rs.wasNull()) {
+                            lastRangeEnd = OptionalLong.of(lastRange);
                         }
                     }
                 }
                 if (clusterParent.isPresent()) {
                     long committedUpdate = parentAgeCache.getOrDefault(clusterParent.getAsInt(), 0L);
-                    long now = System.currentTimeMillis();
+                    long now = hit.created_at;
                     if (committedUpdate < now - DBSCAN_TIMESTAMP_INTERVAL) {
-                        try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET updated_at_approx = ? WHERE id = ?")) {
+                        try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET root_updated_at = ? WHERE id = ?")) {
                             stmt.setLong(1, now);
                             stmt.setInt(2, clusterParent.getAsInt());
                             stmt.executeUpdate();
@@ -147,44 +164,62 @@ enum Aggregator {
                     }
                 }
 
-                syntheticCount = Math.min(syntheticCount, MAX_COUNT); // clamp to at most 4
-
-                boolean needsRangedUpdate = false;
-                if (!wasInDB) {
-                    try (PreparedStatement stmt = connection.prepareStatement("" +
-                            "INSERT INTO dbscan (cnt, server_id, dimension, x, z, is_core, cluster_parent, disjoint_rank, disjoint_size) VALUES" +
-                            "                   (?,   ?,         ?,         ?, ?, ?,       NULL,           0,             1)")) {
-                        stmt.setInt(1, syntheticCount);
-                        stmt.setShort(2, aggr.serverID);
-                        stmt.setShort(3, aggr.dimension);
-                        stmt.setInt(4, aggr.x);
-                        stmt.setInt(5, aggr.z);
-                        stmt.setBoolean(6, aggr.anyLegacy);
-                        stmt.execute();
+                // we need to update duration information, and count information
+                boolean guaranteedCore = occupancyDuration > MIN_DURATION_FOR_IGNORE;
+                if (guaranteedCore) {
+                    if (!isNode) {
+                        throw new IllegalStateException("Impossible " + hit);
                     }
-                    needsRangedUpdate = true;
-                } else {
-                    // was in db
-                    if (aggr.anyLegacy && !dbIsCore) {
-                        needsRangedUpdate = true;
-                        try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET is_core = TRUE WHERE id = ?")) {
-                            stmt.setInt(1, dbID);
-                            stmt.execute();
-                        }
+                    // nothing to do
+                    continue;
+                }
+                long gap = hit.created_at - lastInitHit;
+                if (gap <= 0) {
+                    continue;
+                }
+                if (gap > MAX_GAP) {
+                    // we don't want to do anything except for update last_init_hit
+                    // this doesn't change ts_ranges, so it can't change is_node
+                    try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET last_init_hit = ? WHERE id = ?")) {
+                        stmt.setLong(1, hit.created_at);
+                        stmt.setInt(2, dbID);
+                        stmt.executeUpdate();
                     }
-                    if (prevCountInDB <= THRESHOLD) { // if it's already >THRESHOLD, then there's nothing to do at all
-                        try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET cnt = ? WHERE id = ?")) {
-                            stmt.setInt(1, syntheticCount);
-                            stmt.setInt(2, dbID);
-                            stmt.execute();
-                        }
-                        if (syntheticCount > THRESHOLD) {
-                            needsRangedUpdate = true;
-                        }
+                    continue;
+                }
+                long newOccupancy = occupancyDuration + gap;
+                boolean newNode = isNode || newOccupancy > MIN_DURATION_FOR_NODE;
+                // okay, time to add this time range (from lastInitHit to hit.created_at) to ts_ranges!
+                // two possible ways:
+                if (lastRangeEnd.isPresent() && lastRangeEnd.getAsLong() == lastInitHit) { // first way: increase the upper of the last array element
+                    // if lastRangeEnd is present, that means that ts_ranges already has entries
+                    // it also means that the last range end is actually our most recent hit, so we want to extend that by gap, to hit.created_at
+                    try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET last_init_hit = ?, is_node = ?, ts_ranges = ARRAY_APPEND((SELECT ARRAY(SELECT UNNEST(ts_ranges) LIMIT (SELECT ARRAY_UPPER(ts_ranges, 1) - 1))), INT8RANGE(LOWER(ts_ranges[ARRAY_UPPER(ts_ranges, 1)]), ?)) WHERE id = ?")) {
+                        stmt.setLong(1, hit.created_at);
+                        stmt.setBoolean(2, newNode);
+                        stmt.setLong(3, hit.created_at);
+                        stmt.setInt(4, dbID);
+                        stmt.executeUpdate();
+                    }
+                } else { // otherwise, we need to add a new element, from lastInitHit to hit.created_at
+                    try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET last_init_hit = ?, is_node = ?, ts_ranges = ARRAY_APPEND(ts_ranges, INT8RANGE(?, ?)) WHERE id = ?")) {
+                        stmt.setLong(1, hit.created_at);
+                        stmt.setBoolean(2, newNode);
+                        stmt.setLong(3, lastInitHit);
+                        stmt.setLong(4, hit.created_at);
+                        stmt.setInt(5, dbID);
+                        stmt.executeUpdate();
                     }
                 }
-                if (needsRangedUpdate) { // NOTE: the ranged update will include the centered point itself!
-                    DBSCAN.markForUpdateAllWithinRadius(aggr.serverID, aggr.dimension, aggr.x, aggr.z, connection);
+                if (newNode) {
+                    // if anything changed AND we are currently a node, queue a ranged update in an hour
+                    // if we were previously a node (so, no count change) and duration didn't change (i.e. we just updated last_init_hit), then we don't though
+                    String dedupeKey = hit.serverID + " " + hit.dimension + " " + hit.x + " " + hit.z;
+                    if (alreadyMarked.add(dedupeKey)) {
+                        // within a single run of aggregator, there was no consumer of dbscan_to_update, by contract
+                        // therefore this only needs to run once each
+                        DBSCAN.markForUpdateAllWithinRadius(hit.serverID, hit.dimension, hit.x, hit.z, connection);
+                    }
                 }
             }
             try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan_progress SET last_processed_hit_id = ?")) {

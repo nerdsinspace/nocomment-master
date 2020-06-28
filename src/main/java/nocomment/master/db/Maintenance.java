@@ -14,12 +14,12 @@ public class Maintenance {
         scheduleReindex("track_endings");
         //scheduleReindex("player_sessions_range");
         scheduleReindex("player_sessions_by_leave");
-        scheduleReindex("dbscan_pkey");
+        /*scheduleReindex("dbscan_pkey");
         scheduleReindex("dbscan_cluster_roots");
         scheduleReindex("dbscan_ingest");
         scheduleReindex("dbscan_process");
         scheduleReindex("dbscan_disjoint_traversal");
-        scheduleReindex("dbscan_to_update_pkey", 3600);
+        scheduleReindex("dbscan_to_update_pkey", 3600);*/
     }
 
     private static void scheduleReindex(String indexName) {
