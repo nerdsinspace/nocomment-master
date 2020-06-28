@@ -14,6 +14,7 @@ enum Aggregator {
     private static final long MAX_GAP = 2 * 60 * 1000; // 2 minutes
     private static final long MIN_DURATION_FOR_IGNORE = DBSCAN.MIN_OCCUPANCY_DURATION;
     private static final long MIN_DURATION_FOR_NODE = 5 * 60 * 1000; // 5 minutes
+    private static final int LIMIT_SZ = 1000;
 
     private final Map<Integer, Long> parentAgeCache = new HashMap<>();
 
@@ -45,9 +46,10 @@ enum Aggregator {
                 "                    AND x::BIGINT * x::BIGINT + z::BIGINT * z::BIGINT > 1500 * 1500 " +
                 "                    AND dimension <> -1                                             " +
                 "                ORDER BY id                                                         " +
-                "                LIMIT 1000                                                           "
+                "                LIMIT ?                                                             "
         )) {
             stmt.setLong(1, startID);
+            stmt.setInt(2, LIMIT_SZ);
             try (ResultSet rs = stmt.executeQuery()) {
                 List<PastHit> ret = new ArrayList<>();
                 while (rs.next()) {
@@ -67,7 +69,16 @@ enum Aggregator {
 
     public synchronized void multiAggregate() {
         Set<String> marked = new HashSet<>();
-        while (aggregateHits(marked)) ;
+        long start = System.currentTimeMillis();
+        long num = 0;
+        while (true) {
+            if (!aggregateHits(marked)) {
+                // done
+                break;
+            }
+            num += LIMIT_SZ;
+            System.out.println("MS per was approx " + (double) (System.currentTimeMillis() - start) / (double) num);
+        }
     }
 
     private boolean aggregateHits(Set<String> alreadyMarked) {
