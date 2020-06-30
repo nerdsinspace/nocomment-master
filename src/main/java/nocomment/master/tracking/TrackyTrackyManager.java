@@ -41,13 +41,13 @@ public class TrackyTrackyManager {
         new RingScanner(nether.world, 99, 2000, 16_000, nether::ingestGenericNewHit).submitTasks();
         System.out.println("Overworld:");
         // scan up to 25k overworld every 40 seconds
-        //new HighwayScanner(overworld.world, 100, 25_000, 40_000, overworld::ingestGenericNewHit).submitTasks();
+        new HighwayScanner(overworld.world, 100, 25_000, 40_000, overworld::ingestGenericNewHit).submitTasks();
         // scan the 2k ring road every 16 seconds
-        //new RingScanner(overworld.world, 99, 2000, 16_000, overworld::ingestGenericNewHit).submitTasks();
+        new RingScanner(overworld.world, 99, 2000, 16_000, overworld::ingestGenericNewHit).submitTasks();
     }
 
     private void clusters() {
-        new ClusterRetryScanner(overworld.world, 50, 10, 1000, overworld::ingestGenericNewHit).submitTasks();
+        new ClusterRetryScanner(overworld.world, 50, 5, 1000, overworld::ingestGenericNewHit).submitTasks();
 
         //new ClusterRetryScanner(nether.world, 50, 2, 1000, nether::ingestGenericNewHit).submitTasks();
     }
@@ -65,6 +65,7 @@ public class TrackyTrackyManager {
 
     private void lostTrackingInNether(Track lost) {
         overworld.ingestApprox(new ChunkPos(lost.getMostRecentHit().x * 8, lost.getMostRecentHit().z * 8), OptionalInt.of(lost.getTrackID()), true, 11);
+        overworld.ingestApprox(new ChunkPos(lost.getMostRecentHit().x, lost.getMostRecentHit().z), OptionalInt.of(lost.getTrackID()), false, 19);
     }
 
     public boolean hasActiveFilter(int trackID) {

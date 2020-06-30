@@ -1,7 +1,9 @@
 package nocomment.master.db;
 
 import nocomment.master.NoComment;
+import nocomment.master.clustering.DBSCAN;
 import nocomment.master.tracking.TrackyTrackyManager;
+import nocomment.master.util.Associator;
 import nocomment.master.util.LoggingExecutor;
 import nocomment.master.util.OnlinePlayer;
 import org.apache.commons.dbcp2.BasicDataSource;
@@ -26,12 +28,12 @@ public class Database {
         pool.setAutoCommitOnReturn(true); // make absolutely sure
         pool.setDefaultTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
         pool.setRollbackOnReturn(true);
-        //pool.setDefaultReadOnly(NoComment.DRY_RUN);
+        pool.setDefaultReadOnly(NoComment.DRY_RUN);
         System.out.println("Connected.");
         if (!NoComment.DRY_RUN) {
             Maintenance.scheduleMaintenance();
-            //DBSCAN.INSTANCE.beginIncrementalDBSCANThread();
-            //Associator.INSTANCE.beginIncrementalAssociatorThread();
+            DBSCAN.INSTANCE.beginIncrementalDBSCANThread();
+            Associator.INSTANCE.beginIncrementalAssociatorThread();
             TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(Database::pruneStaleStatuses), 0, 1, TimeUnit.MINUTES);
         }
     }

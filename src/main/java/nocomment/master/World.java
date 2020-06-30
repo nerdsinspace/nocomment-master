@@ -107,13 +107,13 @@ public class World {
         Connection bestConn = null;
         int minBurden = Integer.MAX_VALUE;
         for (Connection conn : connections) {
+            if (toDispatch.hasAffinity(conn)) {
+                // will be cached anyway
+                return conn;
+            }
             int burden = conn.sumHigherPriority(toDispatch.priority);
             if (burden > MAX_BURDEN) {
                 continue;
-            }
-            if (toDispatch.hasAffinity(conn)) {
-                // affinity = send on this conn if possible, EVEN IF it isn't the lowest burden connection
-                return conn;
             }
             if (burden < minBurden) {
                 minBurden = burden;

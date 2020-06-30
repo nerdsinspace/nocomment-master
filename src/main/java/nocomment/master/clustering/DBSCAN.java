@@ -16,6 +16,7 @@ public enum DBSCAN {
     private static final long MIN_LAYER_3_UPDATE_DUR = 3_600_000; // 1 hour
     private static final long MAX_LAYER_3_UPDATE_DUR = 6 * MIN_LAYER_3_UPDATE_DUR; // 6 hours
     public static final long MIN_OCCUPANCY_DURATION = 90 * 60 * 1000; // 90 minutes
+    private boolean completed;
 
     public void beginIncrementalDBSCANThread() {
         // schedule with fixed delay is Very Important, so that we get no overlaps
@@ -30,6 +31,11 @@ public enum DBSCAN {
             ex.printStackTrace();
             throw new RuntimeException(ex);
         }
+        completed = true;
+    }
+
+    public boolean hasCompletedAnIteration() {
+        return completed;
     }
 
     public class Datapoint {
@@ -252,7 +258,7 @@ public enum DBSCAN {
                         stmt.setInt(1, point.id);
                         stmt.execute();
                     }
-                    commit = true;
+                    //commit = true;
                 }
             }
             // note: the ONLY case where this function is less than efficient (i.e. does the query twice) is in the moment of promotion from node to core

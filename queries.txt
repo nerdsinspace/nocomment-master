@@ -1,0 +1,148 @@
+Some useful queries on the database:
+
+Number of hits
+select max(id) from hits;
+
+Is dbscan up to date? (aka: is this zero)
+select count(*) from dbscan_to_update;
+
+How many clusters are there? (fast)
+select count(*) from dbscan where cluster_parent is null and disjoint_rank>0;
+
+Old query (april 1), VERY SLOW, gets ALL tracks EVER, sorted by in-game distance traveled over the course of the track
+select * from (select tracks.id as track_id, tracks.dimension, start.x as startx, start.z as startz, last.x as lastx, last.z as lastz, start.x-last.x as dx, start.z-last.z as dz from tracks left outer join hits as start on tracks.first_hit_id=start.id left outer join hits as last on tracks.last_hit_id=last.id) tmp where abs(lastx) > 10 and abs(lastz) > 10 and abs(abs(lastx)-abs(lastz)) > 10 order by dx*dx+dz+dz desc;
+
+Old query (april 4), reasonably fast (<20 seconds), gets all players sorted by the number of times they've logged in. data is heavily skewed by legacy import, and it ends up just showing what players were online for most of the legacy hits in 2018 / 2019.
+select players.*, tmp.cnt from (select player_id, count(*) as cnt from player_sessions group by player_id) tmp inner join players on tmp.player_id = players.id order by tmp.cnt desc limit 1000;
+
+Old query (april 5), used in online.sh, gets stats on player, fast
+select to_timestamp("join"/1000) as start,to_timestamp("leave"/1000) as end FROM player_sessions WHERE server_id = 1 and player_id=7 order by upper(range) desc limit 10;
+
+April 6, gets the top 50 largest cluster by number of chunks contained, fast
+select x*16 as block_x,z*16 as block_z,disjoint_size as num_chunks_in_cluster,dimension,server_id,is_core,cluster_parent,disjoint_rank from dbscan WHERE cluster_parent IS NULL AND disjoint_rank > 0 order by disjoint_size desc limit 50;
+
+April 7, sanity check, should return the same number twice, sums up root sizes and compares to number of child nodes, pretty slow.
+begin; select sum(disjoint_size) from dbscan where cluster_parent is null and disjoint_rank>0; select count(*) from dbscan where cluster_parent is not null or is_core; commit;
+
+April 7, sanity check, should return N then N-1. only checks the biggest cluster though! verifies that dbscan properly tagged the size. it may return N then a number lower than N-1 if flattening hasn't happened yet, but this should only be a temporary / transient state. it should never return N then a number ≥N. fast.
+ select (select max(disjoint_size) from dbscan), (select sum(disjoint_size) from dbscan where cluster_parent = (select id from dbscan order by disjoint_size desc limit 1));
+
+Old query, april 8, don't run, will scan the entire hits table stupidly (ever since i removed the index on hits.created_at)
+select (select max(id) from hits where server_id=1) - (select id from hits where server_id=1 and created_at > (extract(epoch from now())*1000)::bigint - 1000*3600 order by created_at asc limit 1);
+
+Good sanity check query, april 11, verifies that every cluster has the same sum of child size as the parent size minus one (because the parent itself counts). this is good because it makes sure that all the cluster merging incremental code is functioning. pretty slow, takes 10 to 20 seconds.
+select * from (select sum(disjoint_size) AS children_sizes_sum, cluster_parent from dbscan where cluster_parent is not null group by cluster_parent) parents inner join (select id, disjoint_size from dbscan where cluster_parent is null and disjoint_rank>0) childs on parents.cluster_parent=childs.id where children_sizes_sum + 1 != disjoint_size;
+
+the previous query on steroids, june 29, don't run because it takes forever (40+ seconds). it verifies it at every level of the tree, including leafs. unnecessary tbh.
+select * from (select id, disjoint_size from dbscan) childs left outer join (select sum(disjoint_size) AS children_sizes_sum, cluster_parent from dbscan where cluster_parent is not null group by cluster_parent) parents on parents.cluster_parent=childs.id where coalesce(children_sizes_sum, 0) + 1 != disjoint_size;
+
+Simple sanity check on dbscan, april 11, honestly this should be a check constraint, reasonably fast
+select count(*) from dbscan where (disjoint_rank!=0 or disjoint_size!=1 or cluster_parent is not null or is_core) and not is_node;
+
+April 15, shows all legacy hits. fast to run.
+select * from (select last_hit_id from tracks where legacy) t left outer join hits on hits.id=t.last_hit_id;
+
+april 18, associations, fast
+select associations.cluster_id, associations.association, players.username, dbscan.x*16 as block_x, dbscan.z*16 as block_z, dbscan.dimension, dbscan.server_id from associations inner join dbscan on dbscan.id=associations.cluster_id inner join players on players.id=associations.player_id order by association desc;
+
+june 27, find all 8x overworld to nether teleports, takes a few minutes
+SELECT older_track.id AS ow_first_track, newer_track.id AS neth_second_track, older_last_hit.x AS ow_chunk_x, older_last_hit.z AS ow_chunk_z, newer_first_hit.x AS neth_chunk_x, newer_first_hit.z AS neth_chunk_z, newer_first_hit.created_at-older_last_hit.created_at AS gap_time_ms, older_last_hit.x*8*16 AS overworld_block_x, older_last_hit.z*8*16 As overworld_block_z FROM tracks AS newer_track INNER JOIN tracks AS older_track ON newer_track.prev_track_id=older_track.id INNER JOIN hits AS newer_first_hit ON newer_first_hit.id=newer_track.first_hit_id INNER JOIN hits AS older_last_hit ON older_last_hit.id=older_track.last_hit_id WHERE newer_track.dimension=-1 AND older_track.dimension=0 AND ABS(newer_first_hit.x-older_last_hit.x)<10 AND ABS(newer_first_hit.z-older_last_hit.z)<10 AND ABS(newer_first_hit.x)>100 AND ABS(newer_first_hit.z)>100 AND ABS(ABS(newer_first_hit.x)-ABS(newer_first_hit.z))>100
+
+may 28, show players that have been kicked & rejoined the most number of times in the last 24 hours
+select tmp.cnt as num_kicks, players.username from (select player_id, count(*) as cnt from player_sessions where range && int8range((extract(epoch from now())*1000)::bigint - 1000*3600*24*7, (extract(epoch from now())*1000)::bigint, '[]') group by player_id) tmp inner join players on tmp.player_id = players.id order by tmp.cnt desc;
+
+may 27, heatmap queries
+create table heatmap_overworld as (select x,z,count(*) as cnt from hits where server_id=1 and dimension=0 group by x,z);
+\copy heatmap_overworld to '/heatmap.csv' delimiter ',' csv;
+
+may 24, The Beautiful Query that locates a player from their username, properly traversing all tables efficiently. postgres is crap, so it can only do 2 without tricking the query planner into doing something stupid.
+WITH RECURSIVE
+player_ids AS MATERIALIZED (
+    SELECT
+        DISTINCT id AS player_id
+    FROM
+        players
+    WHERE
+        LOWER(username) IN ('usernames', 'go here')
+    LIMIT 2
+),
+initial AS (
+    SELECT
+        cluster_id,
+        cluster_id,
+        FALSE
+    FROM
+        associations
+    INNER JOIN player_ids
+        ON player_ids.player_id = associations.player_id
+    GROUP BY cluster_id
+),
+tmp (child, parent, root) AS (
+    SELECT
+        *
+    FROM
+        initial
+    UNION ALL
+        SELECT
+            tmp.child,
+            CASE WHEN
+                dbscan.cluster_parent IS NULL THEN tmp.parent
+                ELSE dbscan.cluster_parent
+            END,
+            dbscan.cluster_parent IS NULL
+        FROM
+            tmp
+            INNER JOIN dbscan
+                ON tmp.parent = dbscan.id
+        WHERE
+            NOT tmp.root
+),
+leaf_to_root AS MATERIALIZED (
+    SELECT
+        child,
+        parent
+    FROM
+        tmp
+    WHERE
+        tmp.root
+),
+scorings AS (
+    SELECT
+        leaf_to_root.parent,
+        associations.player_id,
+        SUM(associations.association) AS strength
+    FROM
+        associations
+        INNER JOIN leaf_to_root
+            ON leaf_to_root.child = associations.cluster_id
+        INNER JOIN player_ids
+            ON player_ids.player_id = associations.player_id
+    GROUP BY leaf_to_root.parent, associations.player_id
+)
+SELECT
+    scorings.strength,
+    players.username,
+    dbscan.x * 16 AS block_x,
+    dbscan.z * 16 AS block_z,
+    dbscan.dimension,
+    dbscan.server_id
+FROM
+    scorings
+    INNER JOIN dbscan
+        ON dbscan.id = scorings.parent
+    INNER JOIN players
+        ON players.id = scorings.player_id
+ORDER BY strength DESC;
+
+may 9, list players at a given base, by cluster id
+WITH RECURSIVE tmp AS (SELECT id, disjoint_rank FROM dbscan WHERE id = 68), clusters AS (SELECT * FROM tmp UNION SELECT dbscan.id, dbscan.disjoint_rank FROM dbscan INNER JOIN clusters ON dbscan.cluster_parent = clusters.id WHERE clusters.disjoint_rank > 0) SELECT * FROM (SELECT player_id, SUM(association) AS strength FROM associations INNER JOIN clusters ON clusters.id = associations.cluster_id GROUP BY associations.player_id) AS assc LEFT OUTER JOIN players ON assc.player_id = players.id ORDER BY strength DESC;
+
+may 2, recent hits
+SELECT tracks.id, tracks.server_id, tracks.dimension, last_hit.x, last_hit.z FROM tracks LEFT OUTER JOIN hits AS first_hit ON first_hit.id = tracks.first_hit_id LEFT OUTER JOIN hits AS last_hit ON last_hit.id = tracks.last_hit_id WHERE first_hit.created_at < tracks.updated_at - 60 * 1000 AND tracks.updated_at > (EXTRACT(EPOCH FROM NOW())*1000)::BIGINT - 10000;
+
+april 15, traverse track history by following prev
+with recursive track_hist as (select 487900 as track_id union select t.prev_track_id from tracks t inner join track_hist on track_hist.track_id = t.id where t.prev_track_id is not null) select * from track_hist;
+
+april 11, get all chunk coords within a given cluster
+WITH RECURSIVE tmp AS (SELECT id, disjoint_size FROM dbscan WHERE id = 606), clusters AS (SELECT * FROM tmp UNION SELECT dbscan.id, dbscan.disjoint_size FROM dbscan INNER JOIN clusters ON dbscan.cluster_parent = clusters.id WHERE clusters.disjoint_size > 1) SELECT x, z FROM clusters INNER JOIN dbscan ON dbscan.id = clusters.id;
+

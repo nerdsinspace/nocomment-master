@@ -26,6 +26,9 @@ public enum Associator {
     }
 
     private synchronized void incrementalRun() {
+        if (!DBSCAN.INSTANCE.hasCompletedAnIteration()) {
+            return; // wait for our friend
+        }
         while (run()) ;
     }
 
