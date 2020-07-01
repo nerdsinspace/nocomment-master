@@ -1,8 +1,8 @@
 package nocomment.master.network;
 
 import nocomment.master.World;
-import nocomment.master.task.Task;
 import nocomment.master.slurp.BlockCheck;
+import nocomment.master.task.Task;
 import nocomment.master.util.BlockPos;
 import nocomment.master.util.ChunkPos;
 import nocomment.master.util.OnlinePlayer;

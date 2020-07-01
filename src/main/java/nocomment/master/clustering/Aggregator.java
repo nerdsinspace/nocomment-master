@@ -35,7 +35,7 @@ enum Aggregator {
     }
 
     public boolean aggregateEligible(ChunkPos pos) {
-        return Math.abs(pos.x) > 100 && Math.abs(pos.z) > 100 && Math.abs(Math.abs(pos.x) - Math.abs(pos.z)) > 100 && pos.distSq()> 1500L * 1500L;
+        return Math.abs(pos.x) > 100 && Math.abs(pos.z) > 100 && Math.abs(Math.abs(pos.x) - Math.abs(pos.z)) > 100 && pos.distSq() > 1500L * 1500L;
     }
 
     private static List<PastHit> query(long startID, Connection connection) throws SQLException {

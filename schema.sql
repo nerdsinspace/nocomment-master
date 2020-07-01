@@ -327,6 +327,9 @@ CREATE TABLE blocks
 CREATE INDEX blocks_by_loc
     ON blocks (x, z);
 
+CREATE INDEX blocks_by_time
+    ON blocks (created_at);
+
 CREATE TYPE statuses_enum AS ENUM ('OFFLINE', 'QUEUE', 'ONLINE');
 
 CREATE TABLE statuses

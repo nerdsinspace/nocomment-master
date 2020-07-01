@@ -80,19 +80,19 @@ public class SlurpManager {
         // again, no need for a lock on renewalSchedule since only this touches it
         renewalSchedule.put(cpos, now + RENEW_INTERVAL);
         int[] data = chunkManager.getChunk(cpos).get();
-        int[][] offsetsToMeme = {{0, 0}, {0, 8}, {8, 0}, {8, 8}};
+        int[][] offsetsToMeme = {{4, 4}, {4, 12}, {12, 4}, {12, 12}};
         for (int[] offset : offsetsToMeme) {
             BlockPos pos;
-            int y = 63;
+            int y = 254;
             do {
                 pos = new BlockPos(cpos.getXStart() + offset[0], y, cpos.getZStart() + offset[1]);
-                if (isAir(expected(pos, data))) {
+                if (!isAir(expected(pos, data))) {
                     break;
                 }
-                y++;
-            } while (y < 256);
+                y--;
+            } while (y > 1);
             askFor(pos, 57, now - RENEW_AGE);
-            askFor(pos.add(0, -1, 0), 58, now - RENEW_AGE);
+            askFor(pos.add(0, 1, 0), 58, now - RENEW_AGE);
         }
     }
 
@@ -198,8 +198,10 @@ public class SlurpManager {
                 doRawSign(signBrushNewer(), pos);
             }
         }
+        if (isShulker(blockState)) {
+            System.out.println("Shulker (blockstate " + blockState + ") at " + pos);
+        }
         int expected = expected(pos, chunkData);
-
         // important to remember that there are FOUR things at play here:
         // previous (stored in DB)
         // current
@@ -276,6 +278,18 @@ public class SlurpManager {
 
     private static boolean isAir(int blockState) {
         return blockState == 0;
+    }
+
+    private static final Set<Integer> SHULKER_BLOCK_STATES = new HashSet<>();
+
+    static {
+        for (int i : new int[]{3504, 3505, 3506, 3507, 3508, 3509, 3520, 3521, 3522, 3523, 3524, 3525, 3536, 3537, 3538, 3539, 3540, 3541, 3552, 3553, 3554, 3555, 3556, 3557, 3568, 3569, 3570, 3571, 3572, 3573, 3584, 3585, 3586, 3587, 3588, 3589, 3600, 3601, 3602, 3603, 3604, 3605, 3616, 3617, 3618, 3619, 3620, 3621, 3632, 3633, 3634, 3635, 3636, 3637, 3648, 3649, 3650, 3651, 3652, 3653, 3664, 3665, 3666, 3667, 3668, 3669, 3680, 3681, 3682, 3683, 3684, 3685, 3696, 3697, 3698, 3699, 3700, 3701, 3712, 3713, 3714, 3715, 3716, 3717, 3728, 3729, 3730, 3731, 3732, 3733, 3744, 3745, 3746, 3747, 3748, 3749}) {
+            SHULKER_BLOCK_STATES.add(i);
+        }
+    }
+
+    private static boolean isShulker(int blockState) {
+        return SHULKER_BLOCK_STATES.contains(blockState);
     }
 
     private static long signBrushNewer() {

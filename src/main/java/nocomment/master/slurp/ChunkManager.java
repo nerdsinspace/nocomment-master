@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 public class ChunkManager {
     private final int MAX_SIZE = 2048; // about 500MB RAM
@@ -30,8 +31,15 @@ public class ChunkManager {
     {
         NoComment.executor.execute(() -> {
             try {
-                fetchLoop();
-            } catch (IOException | InterruptedException ex) {
+                while (true) {
+                    try {
+                        fetchLoop();
+                    } catch (IOException ex) {
+                        ex.printStackTrace();
+                    }
+                    Thread.sleep(TimeUnit.SECONDS.toMillis(60));
+                }
+            } catch (InterruptedException ex) {
                 ex.printStackTrace();
                 throw new RuntimeException(ex);
             }
@@ -44,7 +52,12 @@ public class ChunkManager {
         DataOutputStream out = new DataOutputStream(s.getOutputStream());
         int num = 0;
         while (true) {
-            ChunkPos pos = queue.take();
+            while (queue.isEmpty()) {
+                // there is no blocking wait to wait until a queue is nonempty, without actually popping the head
+                // and we don't want to pop the head :(
+                Thread.sleep(5);
+            }
+            ChunkPos pos = queue.peek();
             System.out.println("Requesting pos from world gen: " + pos);
             out.writeInt(pos.x);
             out.writeInt(pos.z);
@@ -54,6 +67,7 @@ public class ChunkManager {
                 ret[i] = in.readInt();
             }
             System.out.println("Received chunk from world gen: " + pos);
+            System.out.println("Cache map size is " + cache.size() + " and total age is " + num);
             synchronized (this) {
                 cache.get(pos).complete(ret);
                 if (num++ > MAX_SIZE) { // obv can't use cache.size
@@ -64,6 +78,7 @@ public class ChunkManager {
                             .ifPresent(cache::remove);
                 }
             }
+            queue.poll();
         }
     }
 }

@@ -28,4 +28,9 @@ public class BlockPos {
     public BlockPos add(int dx, int dy, int dz) {
         return new BlockPos(x + dx, y + dy, z + dz);
     }
+
+    @Override
+    public String toString() {
+        return "(" + x + "," + y + "," + z + ")";
+    }
 }

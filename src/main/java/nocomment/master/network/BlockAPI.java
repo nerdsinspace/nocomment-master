@@ -3,8 +3,8 @@ package nocomment.master.network;
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.slurp.BlockCheckManager;
-import nocomment.master.util.BlockPos;
 import nocomment.master.slurp.SignManager;
+import nocomment.master.util.BlockPos;
 
 import java.io.DataInputStream;
 import java.io.IOException;
