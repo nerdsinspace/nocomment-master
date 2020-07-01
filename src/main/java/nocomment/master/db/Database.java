@@ -330,8 +330,8 @@ public class Database {
 
             try (PreparedStatement stmt = connection.prepareStatement("SELECT id FROM tracks WHERE updated_at >= ? AND updated_at <= ? AND server_id = ?")) {
                 for (long logoutTimestamp : logoutTimestamps) {
-                    stmt.setLong(1, logoutTimestamp - 60_000);
-                    stmt.setLong(2, logoutTimestamp + 60_000); // plus or minus 1 minute
+                    stmt.setLong(1, logoutTimestamp - TimeUnit.MINUTES.toMillis(1));
+                    stmt.setLong(2, logoutTimestamp + TimeUnit.MINUTES.toMillis(1));
                     stmt.setShort(3, serverID);
                     try (ResultSet rs = stmt.executeQuery()) {
                         while (rs.next()) {
@@ -421,7 +421,7 @@ public class Database {
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET curr_status = 'OFFLINE'::statuses_enum, data = NULL, updated_at = ? WHERE updated_at < ? AND curr_status != 'OFFLINE'::statuses_enum")) {
             stmt.setLong(1, System.currentTimeMillis());
-            stmt.setLong(2, System.currentTimeMillis() - 60_000);
+            stmt.setLong(2, System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(1));
             stmt.execute();
         } catch (SQLException ex) {
             ex.printStackTrace();

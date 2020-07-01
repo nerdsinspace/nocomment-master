@@ -11,6 +11,7 @@ import nocomment.master.util.ChunkPos;
 import java.util.OptionalInt;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class TrackyTrackyManager {
 
@@ -60,7 +61,9 @@ public class TrackyTrackyManager {
 
     private void lostTrackingInOverworld(Track lost) {
         nether.ingestApprox(new ChunkPos(lost.getMostRecentHit().x / 8, lost.getMostRecentHit().z / 8), OptionalInt.of(lost.getTrackID()), false, 11);
-        nether.ingestApprox(new ChunkPos(lost.getMostRecentHit().x, lost.getMostRecentHit().z), OptionalInt.of(lost.getTrackID()), false, 17);
+        for (int i = 0; i <= 30; i += 10) {
+            scheduler.schedule(() -> nether.ingestApprox(new ChunkPos(lost.getMostRecentHit().x, lost.getMostRecentHit().z), OptionalInt.of(lost.getTrackID()), false, 17), i, TimeUnit.SECONDS);
+        }
     }
 
     private void lostTrackingInNether(Track lost) {

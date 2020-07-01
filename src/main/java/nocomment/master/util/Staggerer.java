@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 
 public class Staggerer {
 
-    private static final long AUTO_KICK = 6 * 3_600 * 1_000; // 6 hours
+    private static final long AUTO_KICK = TimeUnit.HOURS.toMillis(6);
     private static final long STAGGER = AUTO_KICK / 4; // 90 minutes
     private final World world;
     private final Map<Integer, Long> observedAt = new HashMap<>();
@@ -61,7 +61,7 @@ public class Staggerer {
     private void run() {
         System.out.println("Staggerer for " + world.dimension);
         System.out.println("Staggerer observations: " + observedAt);
-        observedAt.values().removeIf(ts -> ts < System.currentTimeMillis() - 30 * 60 * 1000);
+        observedAt.values().removeIf(ts -> ts < System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(30));
 
         Collection<Connection> onlineNow = world.getOpenConnections();
         onlineNow.forEach(conn -> observedAt.put(conn.getIdentity(), System.currentTimeMillis()));
@@ -134,7 +134,7 @@ public class Staggerer {
     }
 
     private static String format(long ts) {
-        double h = (ts - System.currentTimeMillis()) / (double) 3_600_000;
+        double h = (ts - System.currentTimeMillis()) / (double) TimeUnit.HOURS.toMillis(1);
         return Math.round(h * 100) / 100d + "hours";
     }
 
@@ -153,7 +153,7 @@ public class Staggerer {
             // nope, server was well populated
             return joinedAt;
         }
-        long tentative = timestamp - 20_000;
+        long tentative = timestamp - TimeUnit.SECONDS.toMillis(20);
         OptionalLong whatWeDoHereIsGoBack = currentSessionJoinedAt(playerID, serverID, tentative);
         if (whatWeDoHereIsGoBack.isPresent()) {
             return whatWeDoHereIsGoBack;

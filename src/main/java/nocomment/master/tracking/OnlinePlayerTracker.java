@@ -7,11 +7,12 @@ import nocomment.master.network.Connection;
 import nocomment.master.util.OnlinePlayer;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 public class OnlinePlayerTracker {
     public final Server server;
     private Set<OnlinePlayer> onlinePlayerSet;
-    private static final long REMOVAL_QUELL_DURATION_MS = 30_000;
+    private static final long REMOVAL_QUELL_DURATION_MS = TimeUnit.SECONDS.toMillis(30);
     private final Map<OnlinePlayer, Long> removalTimestamps = new HashMap<>();
 
     public OnlinePlayerTracker(Server server) {

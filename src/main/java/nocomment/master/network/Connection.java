@@ -4,6 +4,7 @@ import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.db.Database;
 import nocomment.master.db.Hit;
+import nocomment.master.slurp.BlockCheck;
 import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.task.Task;
 import nocomment.master.tracking.TrackyTrackyManager;
@@ -22,7 +23,7 @@ import java.util.function.Consumer;
  */
 public abstract class Connection {
 
-    private static final long MIN_READ_INTERVAL_MS = 5_000;
+    private static final long MIN_READ_INTERVAL_MS = TimeUnit.SECONDS.toMillis(5);
 
     public Connection(World world) {
         this.world = world;
@@ -70,7 +71,8 @@ public abstract class Connection {
     public abstract void writeLoop();
 
     private synchronized void clearRecentChecks() {
-        recentCheckTimestamps.values().removeIf(ts -> ts < System.currentTimeMillis() - 1000);
+        long now = System.currentTimeMillis();
+        recentCheckTimestamps.values().removeIf(ts -> ts < now - 1000);
     }
 
     public synchronized boolean blockAffinity(BlockPos pos) {
@@ -110,7 +112,7 @@ public abstract class Connection {
         }
         // this cannot be on another thread / executor because then a hitReceived could possibly be reordered after taskCompleted
         task.hitReceived(hit);
-        world.stats.hitReceived(task.priority);
+        world.notifyHit(pos, task.priority);
     }
 
     protected void taskCompleted(int taskID) {
@@ -272,7 +274,7 @@ public abstract class Connection {
         String ret = getUUID() + " " + tasks.size() + " tasks, " + sumHigherPriority(Integer.MAX_VALUE) + " checks, " + taskIDSeq + " task ID, " + onlinePlayerSet.size() + " online players reported, " + (System.currentTimeMillis() - mostRecentRead) + "ms since most recent read";
         OptionalLong join = Staggerer.currentSessionJoinedAt(getIdentity(), world.server.serverID);
         if (join.isPresent()) {
-            ret += ", " + (System.currentTimeMillis() - join.getAsLong()) / 3600_000d + "hours since server join";
+            ret += ", " + (System.currentTimeMillis() - join.getAsLong()) / (double) TimeUnit.HOURS.toMillis(1) + "hours since server join";
         }
         return ret;
     }

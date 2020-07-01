@@ -1,7 +1,8 @@
-package nocomment.master.util;
+package nocomment.master.slurp;
 
 import nocomment.master.network.Connection;
 import nocomment.master.task.PriorityDispatchable;
+import nocomment.master.util.BlockPos;
 
 import java.util.OptionalInt;
 

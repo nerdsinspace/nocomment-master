@@ -17,8 +17,8 @@ import java.util.concurrent.TimeUnit;
 public enum Associator {
     INSTANCE;
 
-    private static final long UNTIL = 86_400_000; // 24 hours
-    private static final long INTERVAL = 3_600_000; // 1 hour
+    private static final long UNTIL = TimeUnit.HOURS.toMillis(24);
+    private static final long INTERVAL = TimeUnit.HOURS.toMillis(1);
 
     public void beginIncrementalAssociatorThread() {
         // schedule with fixed delay is Very Important, so that we get no overlaps
@@ -86,7 +86,7 @@ public enum Associator {
             }
             System.out.println("toProcess size " + toProcess.size());
             for (TrackEnding track : toProcess) {
-                Set<Integer> possiblePlayers = Database.allPlayerIDsThatLeftBetween(track.updatedAt - 6_000, track.updatedAt + 1_000, track.serverID, connection);
+                Set<Integer> possiblePlayers = Database.allPlayerIDsThatLeftBetween(track.updatedAt - TimeUnit.SECONDS.toMillis(6), track.updatedAt + TimeUnit.SECONDS.toMillis(1), track.serverID, connection);
                 if (possiblePlayers.size() > 10) {
                     continue; // bad data, probably a server restart that kicked everyone
                 }

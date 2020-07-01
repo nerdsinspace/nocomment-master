@@ -2,9 +2,9 @@ package nocomment.master.network;
 
 import nocomment.master.NoComment;
 import nocomment.master.World;
-import nocomment.master.util.BlockCheckManager;
+import nocomment.master.slurp.BlockCheckManager;
 import nocomment.master.util.BlockPos;
-import nocomment.master.util.SignManager;
+import nocomment.master.slurp.SignManager;
 
 import java.io.DataInputStream;
 import java.io.IOException;

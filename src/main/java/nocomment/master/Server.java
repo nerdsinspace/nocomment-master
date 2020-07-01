@@ -8,10 +8,7 @@ import nocomment.master.tracking.OnlinePlayerTracker;
 import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.LoggingExecutor;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class Server {
@@ -20,6 +17,10 @@ public class Server {
 
     public static synchronized Server getServer(String serverName) {
         return servers.computeIfAbsent(serverName, Server::new);
+    }
+
+    public static synchronized Optional<Server> getServerIfLoaded(short serverID) {
+        return servers.values().stream().filter(server -> server.serverID == serverID).findFirst();
     }
 
     public final String hostname;

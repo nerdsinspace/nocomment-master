@@ -1,20 +1,15 @@
 package nocomment.master.util;
 
-import nocomment.master.World;
 import nocomment.master.task.Task;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 public class WorldStatistics {
 
-    private final World world;
     private final Map<Integer, PriorityLevelStats> stats = new HashMap<>();
     private int numSignHits;
     private int numSignMisses;
-
-    public WorldStatistics(World world) {
-        this.world = world;
-    }
 
     private PriorityLevelStats stats(int priority) {
         if (!Thread.holdsLock(this)) {
@@ -75,7 +70,7 @@ public class WorldStatistics {
                             .append("\n Average round trip duration was ")
                             .append(avg)
                             .append("ms");
-                    long rem = System.currentTimeMillis() - 300_000; // 5 minutes
+                    long rem = System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(5); // 5 minutes
                     stats.timingData.stream()
                             .filter(td -> td.completedAt > rem)
                             .findFirst()

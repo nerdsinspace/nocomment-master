@@ -1,25 +1,31 @@
-package nocomment.master.util;
+package nocomment.master.slurp;
 
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.db.Database;
 import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.tracking.TrackyTrackyManager;
+import nocomment.master.util.BlockPos;
+import nocomment.master.util.ChunkPos;
+import nocomment.master.util.LoggingExecutor;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 public class BlockCheckManager {
     public final World world;
     private final Map<ChunkPos, Map<BlockPos, BlockCheckStatus>> statuses = new HashMap<>();
     private final Map<ChunkPos, Long> observedUnloaded = new HashMap<>();
     private final LinkedBlockingQueue<BlockCheckStatus.ResultToInsert> results = new LinkedBlockingQueue<>();
+
+    // check status are spammed WAY too fast
+    // this executor is for database fetches from blocks or signs
+    // to avoid overwhelming the main executor with literally thousands of DB queries for blocks and signs from the past
+    public static Executor checkStatusExecutor = new LoggingExecutor(Executors.newFixedThreadPool(4));
 
     public BlockCheckManager(World world) {
         this.world = world;
@@ -80,7 +86,10 @@ public class BlockCheckManager {
     }
 
     private synchronized void prune() {
-        observedUnloaded.values().removeIf(aLong -> aLong < System.currentTimeMillis() - 10_000);
+        long now = System.currentTimeMillis();
+        observedUnloaded.values().removeIf(aLong -> aLong < now - TimeUnit.SECONDS.toMillis(10));
+        statuses.values().removeIf(Map::isEmpty); // any chunk with no remaining checks can be removed, just to save some ram lol
+        // TODO clear statuses values values more than, say, 1 hour old
     }
 
     public void requestBlockState(long mustBeNewerThan, BlockPos pos, int priority, BlockListener onCompleted) {
@@ -96,13 +105,14 @@ public class BlockCheckManager {
         private long responseAt;
         private CompletableFuture<Boolean> checkedDatabaseYet;
 
+
         private BlockCheckStatus(BlockPos pos) {
             this.listeners = new ArrayList<>();
             this.pos = pos;
             this.inFlight = new ArrayList<>();
             this.blockState = OptionalInt.empty();
             this.checkedDatabaseYet = new CompletableFuture<>();
-            NoComment.executor.execute(this::checkDatabase);
+            checkStatusExecutor.execute(this::checkDatabase);
             if (!Thread.holdsLock(BlockCheckManager.this)) {
                 throw new IllegalStateException();
             }
@@ -134,7 +144,7 @@ public class BlockCheckManager {
             checkedDatabaseYet.thenAcceptAsync(ignored -> requested0(mustBeNewerThan, priority, listener), NoComment.executor);
         }
 
-        public synchronized void requested0(long mustBeNewerThan, int priority, BlockListener listener) {
+        private synchronized void requested0(long mustBeNewerThan, int priority, BlockListener listener) {
             // first, check if cached loaded (e.g. from db)
             if (blockState.isPresent() && responseAt > mustBeNewerThan) {
                 OptionalInt state = blockState;

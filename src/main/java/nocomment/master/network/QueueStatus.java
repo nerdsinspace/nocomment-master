@@ -7,6 +7,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 public class QueueStatus {
 
@@ -52,7 +53,7 @@ public class QueueStatus {
             if (cache.containsKey(playerID)) {
                 long prevTime = cache.get(playerID).timestamp;
                 long dist = now - prevTime;
-                if (dist > 5_000) {
+                if (dist > TimeUnit.SECONDS.toMillis(5)) {
                     int prevPos = cache.get(playerID).position;
 
                     events.add(new QueueDiff(prevPos - queuePos, prevTime, now));
@@ -64,7 +65,7 @@ public class QueueStatus {
 
     public static long getEstimatedMillisecondsPerQueuePosition() {
         synchronized (cache) {
-            long rem = System.currentTimeMillis() - 86_400_000; // 1 day
+            long rem = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(1);
             events.stream()
                     .filter(td -> td.end > rem)
                     .findFirst()
@@ -78,7 +79,7 @@ public class QueueStatus {
                 System.out.println("MS per queue position estimated as " + est);
                 return est;
             }
-            return 30_000;
+            return TimeUnit.SECONDS.toMillis(30);
         }
     }
 }

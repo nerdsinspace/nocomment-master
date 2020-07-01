@@ -58,6 +58,10 @@ public class ChunkPos {
         return dx * dx + dz * dz;
     }
 
+    public long distSq() {
+        return distSq(SPAWN);
+    }
+
     public ChunkPos add(int dx, int dz) {
         return new ChunkPos(this.x + dx, this.z + dz);
     }

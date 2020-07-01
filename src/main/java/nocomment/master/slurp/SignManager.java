@@ -1,8 +1,9 @@
-package nocomment.master.util;
+package nocomment.master.slurp;
 
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.db.Database;
+import nocomment.master.util.BlockPos;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -20,7 +21,11 @@ public class SignManager {
         this.signListeners = new HashMap<>();
     }
 
-    public synchronized void request(long mustBeNewerThan, BlockPos pos, Consumer<Optional<byte[]>> consumer) {
+    public void requestAsync(long mustBeNewerThan, BlockPos pos, Consumer<Optional<byte[]>> consumer) {
+        BlockCheckManager.checkStatusExecutor.execute(() -> request(mustBeNewerThan, pos, consumer));
+    }
+
+    public void request(long mustBeNewerThan, BlockPos pos, Consumer<Optional<byte[]>> consumer) {
         try (Connection connection = Database.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT nbt FROM signs WHERE x = ? AND y = ? AND z = ? AND dimension = ? AND server_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT 1")) {
             stmt.setInt(1, pos.x);
@@ -31,7 +36,9 @@ public class SignManager {
             stmt.setLong(6, mustBeNewerThan);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
-                    consumer.accept(Optional.of(rs.getBytes("nbt")));
+                    byte[] nbt = rs.getBytes("nbt");
+                    // can't let rs escape try-with-resources into this lambda lmao
+                    NoComment.executor.execute(() -> consumer.accept(Optional.of(nbt)));
                     return;
                 }
             }
@@ -39,16 +46,18 @@ public class SignManager {
             ex.printStackTrace();
             throw new RuntimeException(ex);
         }
-        signListeners.computeIfAbsent(pos, p -> new ArrayList<>()).add(consumer);
+        synchronized (this) {
+            signListeners.computeIfAbsent(pos, p -> new ArrayList<>()).add(consumer);
+        }
         world.submitSign(pos);
     }
-
 
     public synchronized void response(BlockPos pos, Optional<byte[]> data) {
         List<Consumer<Optional<byte[]>>> listeners = signListeners.remove(pos);
         if (listeners != null) {
             NoComment.executor.execute(() -> listeners.forEach(l -> l.accept(data)));
         }
+        // this can use main executor since sign RESPONSES (unlike sign requests) will occur at max once a second per bot
         data.ifPresent(bytes -> NoComment.executor.execute(() -> saveToDB(pos, bytes)));
     }
 

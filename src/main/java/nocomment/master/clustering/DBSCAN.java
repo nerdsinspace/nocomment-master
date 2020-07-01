@@ -1,7 +1,9 @@
 package nocomment.master.clustering;
 
+import nocomment.master.Server;
 import nocomment.master.db.Database;
 import nocomment.master.tracking.TrackyTrackyManager;
+import nocomment.master.util.ChunkPos;
 import nocomment.master.util.LoggingExecutor;
 
 import java.sql.Connection;
@@ -13,9 +15,9 @@ import java.util.concurrent.TimeUnit;
 
 public enum DBSCAN {
     INSTANCE;
-    private static final long MIN_LAYER_3_UPDATE_DUR = 3_600_000; // 1 hour
-    private static final long MAX_LAYER_3_UPDATE_DUR = 6 * MIN_LAYER_3_UPDATE_DUR; // 6 hours
-    public static final long MIN_OCCUPANCY_DURATION = 90 * 60 * 1000; // 90 minutes
+    private static final long MIN_LAYER_3_UPDATE_DUR = TimeUnit.HOURS.toMillis(1);
+    private static final long MAX_LAYER_3_UPDATE_DUR = TimeUnit.HOURS.toMillis(6);
+    public static final long MIN_OCCUPANCY_DURATION = TimeUnit.MINUTES.toMillis(90);
     private boolean completed;
 
     public void beginIncrementalDBSCANThread() {
@@ -204,6 +206,10 @@ public enum DBSCAN {
         }
     }
 
+    private void updateSoon(Datapoint point) {
+        TrackyTrackyManager.scheduler.schedule(() -> Server.getServerIfLoaded(point.serverID).ifPresent(server -> server.getWorld(point.dimension).dbscanUpdate(new ChunkPos(point.x, point.z))), 1, TimeUnit.MINUTES);
+    }
+
     private Datapoint merge(Datapoint xRoot, Datapoint yRoot, Connection connection) throws SQLException {
         if (xRoot.disjointRank < yRoot.disjointRank || (xRoot.disjointRank == yRoot.disjointRank && ((!xRoot.isCore && yRoot.isCore) || (xRoot.isCore == yRoot.isCore && (xRoot.disjointSize < yRoot.disjointSize))))) {
             return merge(yRoot, xRoot, connection); // intentionally swap
@@ -258,6 +264,7 @@ public enum DBSCAN {
                         stmt.setInt(1, point.id);
                         stmt.execute();
                     }
+                    updateSoon(point);
                     //commit = true;
                 }
             }
@@ -301,6 +308,7 @@ public enum DBSCAN {
                         throw new IllegalStateException();
                     }
                     for (Datapoint remain : clustersToMerge) {
+                        updateSoon(remain);
                         merging = merge(merging, remain, connection);
                     }
                     commit = true;
@@ -346,5 +354,9 @@ public enum DBSCAN {
             return OptionalInt.empty();
         }
         return OptionalInt.of(neighbors.stream().min(Comparator.comparingDouble(dp -> Math.sqrt((dp.x - x) * (dp.x - x) + (dp.z - z) * (dp.z - z)) * 1.0d / dp.disjointSize)).get().fetchRootReadOnly(connection, cache).id);
+    }
+
+    public boolean aggregateEligible(ChunkPos pos) {
+        return Aggregator.INSTANCE.aggregateEligible(pos);
     }
 }

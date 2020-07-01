@@ -1,19 +1,21 @@
 package nocomment.master.clustering;
 
 import nocomment.master.db.Database;
+import nocomment.master.util.ChunkPos;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 enum Aggregator {
     INSTANCE;
-    private static final long DBSCAN_TIMESTAMP_INTERVAL = 3600 * 1000; // 1 hour
-    private static final long MAX_GAP = 2 * 60 * 1000; // 2 minutes
+    private static final long DBSCAN_TIMESTAMP_INTERVAL = TimeUnit.HOURS.toMillis(1);
+    private static final long MAX_GAP = TimeUnit.MINUTES.toMillis(2);
     private static final long MIN_DURATION_FOR_IGNORE = DBSCAN.MIN_OCCUPANCY_DURATION;
-    private static final long MIN_DURATION_FOR_NODE = 5 * 60 * 1000; // 5 minutes
+    private static final long MIN_DURATION_FOR_NODE = TimeUnit.MINUTES.toMillis(5);
     private static final int LIMIT_SZ = 1000;
 
     private final Map<Integer, Long> parentAgeCache = new HashMap<>();
@@ -30,6 +32,10 @@ enum Aggregator {
         public String toString() {
             return "{" + id + " " + created_at + " " + x + "," + x + " " + serverID + " " + dimension + "}";
         }
+    }
+
+    public boolean aggregateEligible(ChunkPos pos) {
+        return Math.abs(pos.x) > 100 && Math.abs(pos.z) > 100 && Math.abs(Math.abs(pos.x) - Math.abs(pos.z)) > 100 && pos.distSq()> 1500L * 1500L;
     }
 
     private static List<PastHit> query(long startID, Connection connection) throws SQLException {

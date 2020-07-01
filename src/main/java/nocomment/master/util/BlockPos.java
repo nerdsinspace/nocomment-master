@@ -24,4 +24,8 @@ public class BlockPos {
     public boolean equals(Object o) {
         return o instanceof BlockPos && ((BlockPos) o).x == x && ((BlockPos) o).y == y && ((BlockPos) o).z == z;
     }
+
+    public BlockPos add(int dx, int dy, int dz) {
+        return new BlockPos(x + dx, y + dy, z + dz);
+    }
 }
