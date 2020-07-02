@@ -44,6 +44,7 @@ public class SlurpManager {
         }
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneAsks), 24, 24, TimeUnit.HOURS);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneClusterData), 1, 1, TimeUnit.HOURS);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneBlocks), 40, 60, TimeUnit.MINUTES);
         NoComment.executor.execute(this::ingestConsumer);
     }
 
@@ -59,14 +60,22 @@ public class SlurpManager {
         }
     }
 
+    private synchronized void pruneBlocks() {
+        int beforeSz = allAsks.size();
+        long now = System.currentTimeMillis();
+        allAsks.entrySet().removeIf(ask -> ask.getValue().lastDirectAsk < now - BlockCheckManager.PRUNE_AGE && world.blockCheckManager.hasBeenRemoved(ask.getKey()));
+        System.out.println("Took " + (System.currentTimeMillis() - now) + "ms to prune allAsks keySet. Size went from " + beforeSz + " to " + allAsks.size());
+    }
+
     private void scanClusterHit() throws InterruptedException, ExecutionException {
         long now = System.currentTimeMillis();
+        renewalSchedule.values().removeIf(ts -> ts < now);
         Optional<ChunkPos> candidates = clusterHit.entrySet()
                 .stream()
                 .filter(entry -> entry.getValue() > now - CHECK_MAX_GAP)
                 .map(Map.Entry::getKey)
                 .sorted(Comparator.<ChunkPos>comparingLong(ChunkPos::distSq).reversed())
-                .filter(cpos -> !(renewalSchedule.containsKey(cpos) && renewalSchedule.get(cpos) > now))
+                .filter(cpos -> !(renewalSchedule.containsKey(cpos)))
                 .findFirst();
         if (!candidates.isPresent()) {
             return;
@@ -311,6 +320,7 @@ public class SlurpManager {
         cur.highestPriorityAskedAt = priority;
         cur.mustBeNewerThan = mustBeNewerThan;
         cur.response = OptionalInt.empty();
+        cur.lastDirectAsk = System.currentTimeMillis();
         allAsks.put(pos, cur);
         doRawAsk(mustBeNewerThan, pos, priority);
     }
@@ -342,6 +352,7 @@ public class SlurpManager {
         int highestPriorityAskedAt;
         long mustBeNewerThan;
         OptionalInt response;
+        long lastDirectAsk;
     }
 
     private static class ChunkPosWithTimestamp {

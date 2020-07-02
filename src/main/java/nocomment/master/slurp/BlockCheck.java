@@ -17,7 +17,9 @@ public class BlockCheck extends PriorityDispatchable {
     }
 
     public void onCompleted(OptionalInt blockState) { // this can be called from any thread at any time
-        parent.onResponse(blockState);
+        if (!isCanceled()) {
+            parent.onResponse(blockState);
+        }
     }
 
     @Override

@@ -21,6 +21,8 @@ public class BlockCheckManager {
     private final Map<ChunkPos, Map<BlockPos, BlockCheckStatus>> statuses = new HashMap<>();
     private final Map<ChunkPos, Long> observedUnloaded = new HashMap<>();
     private final LinkedBlockingQueue<BlockCheckStatus.ResultToInsert> results = new LinkedBlockingQueue<>();
+    private final Object pruneLock = new Object();
+    public static final long PRUNE_AGE = TimeUnit.MINUTES.toMillis(60);
 
     // check status are spammed WAY too fast
     // this executor is for database fetches from blocks or signs
@@ -30,6 +32,7 @@ public class BlockCheckManager {
     public BlockCheckManager(World world) {
         this.world = world;
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::update), 0, 250, TimeUnit.MILLISECONDS);
+        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::blockPrune), 30, 60, TimeUnit.MINUTES);
     }
 
     private void update() {
@@ -88,12 +91,48 @@ public class BlockCheckManager {
     private synchronized void prune() {
         long now = System.currentTimeMillis();
         observedUnloaded.values().removeIf(aLong -> aLong < now - TimeUnit.SECONDS.toMillis(10));
-        statuses.values().removeIf(Map::isEmpty); // any chunk with no remaining checks can be removed, just to save some ram lol
-        // TODO clear statuses values values more than, say, 1 hour old
+
+    }
+
+    public synchronized boolean hasBeenRemoved(BlockPos pos) {
+        ChunkPos cpos = new ChunkPos(pos);
+        return !statuses.containsKey(cpos) || !statuses.get(cpos).containsKey(pos);
+    }
+
+    private synchronized int cacheSize() {
+        return statuses.values().stream().mapToInt(Map::size).sum();
+    }
+
+    private synchronized void blockPrune() {
+        long now = System.currentTimeMillis();
+        int beforeSz = cacheSize();
+        synchronized (pruneLock) {
+            statuses.values().forEach(m -> {
+                Iterator<BlockCheckStatus> it = m.values().iterator();
+                while (it.hasNext()) {
+                    BlockCheckStatus bcs = it.next();
+                    if (bcs.maybePrunable(now)) {
+                        synchronized (bcs) {
+                            if (bcs.actuallyPrunable(now)) {
+                                it.remove(); // must call remove within bcs lock!!
+                            }
+                        }
+                    }
+                }
+            });
+            statuses.values().removeIf(Map::isEmpty); // any chunk with no remaining checks can be removed, just to save some ram lol
+        }
+        System.out.println("Block prune in block check manager took " + (System.currentTimeMillis() - now) + "ms. Cache size went from " + beforeSz + " to " + cacheSize());
     }
 
     public void requestBlockState(long mustBeNewerThan, BlockPos pos, int priority, BlockListener onCompleted) {
-        NoComment.executor.execute(() -> get(pos).requested(mustBeNewerThan, priority, onCompleted));
+        NoComment.executor.execute(() -> {
+            synchronized (BlockCheckManager.this) { // i hate myself
+                synchronized (pruneLock) {
+                    get(pos).requested(mustBeNewerThan, priority, onCompleted); // this is fine since requested holds no locks
+                }
+            }
+        });
     }
 
     public class BlockCheckStatus {
@@ -104,7 +143,7 @@ public class BlockCheckManager {
         private OptionalInt blockState;
         private long responseAt;
         private CompletableFuture<Boolean> checkedDatabaseYet;
-
+        private long lastActivity;
 
         private BlockCheckStatus(BlockPos pos) {
             this.listeners = new ArrayList<>();
@@ -112,10 +151,22 @@ public class BlockCheckManager {
             this.inFlight = new ArrayList<>();
             this.blockState = OptionalInt.empty();
             this.checkedDatabaseYet = new CompletableFuture<>();
+            lastActivity = System.currentTimeMillis();
             checkStatusExecutor.execute(this::checkDatabase);
             if (!Thread.holdsLock(BlockCheckManager.this)) {
                 throw new IllegalStateException();
             }
+        }
+
+        private boolean maybePrunable(long now) {
+            return checkedDatabaseYet.isDone() && lastActivity < now - PRUNE_AGE;
+        }
+
+        private boolean actuallyPrunable(long now) {
+            if (!Thread.holdsLock(BlockCheckStatus.this)) {
+                throw new IllegalStateException();
+            }
+            return maybePrunable(now) && inFlight.isEmpty() && listeners.isEmpty();
         }
 
         private synchronized void checkDatabase() { // this synchronized is just for peace of mind, it should never actually become necessary
@@ -141,10 +192,12 @@ public class BlockCheckManager {
         }
 
         public void requested(long mustBeNewerThan, int priority, BlockListener listener) {
+            lastActivity = System.currentTimeMillis();
             checkedDatabaseYet.thenAcceptAsync(ignored -> requested0(mustBeNewerThan, priority, listener), NoComment.executor);
         }
 
         private synchronized void requested0(long mustBeNewerThan, int priority, BlockListener listener) {
+            lastActivity = System.currentTimeMillis();
             // first, check if cached loaded (e.g. from db)
             if (blockState.isPresent() && responseAt > mustBeNewerThan) {
                 OptionalInt state = blockState;
@@ -171,6 +224,7 @@ public class BlockCheckManager {
         }
 
         public void onResponse(OptionalInt state) {
+            lastActivity = System.currentTimeMillis();
             long now = System.currentTimeMillis();
             if (state.isPresent()) {
                 onResponseInternal(state, now);
@@ -181,6 +235,10 @@ public class BlockCheckManager {
         }
 
         private synchronized void onResponseInternal(OptionalInt state, long timestamp) {
+            if (state.isPresent()) {
+                // chunk confirmed unloaded doesn't count as activity
+                lastActivity = System.currentTimeMillis();
+            }
             if (responseAt >= timestamp) {
                 return;
             }
