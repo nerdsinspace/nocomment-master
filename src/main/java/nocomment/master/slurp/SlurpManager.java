@@ -136,7 +136,13 @@ public class SlurpManager {
             throw new RuntimeException(ex);
         }
         // no need for a lock on clusterHit, since this is the only function that touches it, and this function is single threaded
-        list.forEach(cpwt -> clusterHit.merge(cpwt.pos, cpwt.timestamp, Math::max));
+        list.forEach(cpwt -> {
+            for (int dx = -4; dx <= 4; dx++) {
+                for (int dz = -4; dz <= 4; dz++) {
+                    clusterHit.merge(cpwt.pos.add(dx, dz), cpwt.timestamp, Math::max);
+                }
+            }
+        });
         long now = System.currentTimeMillis();
         clusterHit.values().removeIf(ts -> ts < now - RENEW_INTERVAL);
     }
