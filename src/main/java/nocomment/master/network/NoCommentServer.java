@@ -1,6 +1,5 @@
 package nocomment.master.network;
 
-import nocomment.master.NoComment;
 import nocomment.master.Server;
 import nocomment.master.World;
 
@@ -105,7 +104,7 @@ public enum NoCommentServer {
         while (true) {
             Socket s = ss.accept();
             System.out.println("Server accepted a socket");
-            NoComment.executor.execute(() -> handleNewSocket(s));
+            new Thread(() -> handleNewSocket(s)).start();
         }
     }
 }
