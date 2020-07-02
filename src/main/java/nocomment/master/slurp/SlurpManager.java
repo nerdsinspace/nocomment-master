@@ -53,7 +53,7 @@ public class SlurpManager {
             while (true) {
                 ingestIntoClusterHit();
                 scanClusterHit();
-                Thread.sleep(10000);
+                Thread.sleep(250);
             }
         } catch (InterruptedException | ExecutionException ex) {
             throw new RuntimeException(ex);
