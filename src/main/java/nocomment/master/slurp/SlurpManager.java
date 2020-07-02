@@ -144,7 +144,7 @@ public class SlurpManager {
             }
         });
         long now = System.currentTimeMillis();
-        clusterHit.values().removeIf(ts -> ts < now - RENEW_INTERVAL);
+        clusterHit.values().removeIf(ts -> ts < now - RENEW_AGE);
     }
 
     public void clusterUpdate(ChunkPos cpos) {
