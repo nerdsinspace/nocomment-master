@@ -17,7 +17,15 @@ public class LoggingExecutor implements Executor {
     public static Runnable wrap(Runnable runnable) {
         return () -> {
             try {
-                runnable.run();
+                try {
+                    runnable.run();
+                } catch (OutOfMemoryError oom) {
+                    try {
+                        oom.printStackTrace();
+                        System.out.println("OUT OF MEMORY! EXITING!");
+                    } catch (Throwable th) {}
+                    System.exit(1);
+                }
             } catch (Throwable th) {
                 th.printStackTrace();
                 throw th;
