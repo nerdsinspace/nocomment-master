@@ -82,7 +82,6 @@ public class SlurpManager {
         }
         ChunkPos cpos = candidates.get();
         if (cpos.distSq() < MIN_DIST_SQ_CHUNKS) {
-            System.out.println(cpos + " is too close");
             return;
         }
         System.out.println("Beginning slurp on chunk " + cpos);
