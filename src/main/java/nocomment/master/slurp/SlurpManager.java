@@ -17,6 +17,7 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class SlurpManager {
     private static final long SIGN_AGE = TimeUnit.DAYS.toMillis(3);
@@ -138,29 +139,30 @@ public class SlurpManager {
     }
 
     private void ingestIntoClusterHit() throws InterruptedException {
-        List<ChunkPosWithTimestamp> list = new ArrayList<>(ingest.size());
-        list.add(ingest.take()); // blockingly take at least one
-        ingest.drainTo(list); // non blockingly take any remainings
+        List<ChunkPosWithTimestamp> tmpBuffer = new ArrayList<>(ingest.size());
+        tmpBuffer.add(ingest.take()); // blockingly take at least one
+        ingest.drainTo(tmpBuffer); // non blockingly take any remainings
+        Map<ChunkPos, Long> chunkTimestamps = tmpBuffer.stream().collect(Collectors.groupingBy(cpwt -> cpwt.pos, Collectors.reducing(0L, cpwt -> cpwt.timestamp, Math::max)));
         // first remove non cluster members, because otherwise clusterHit would get HUGE, instantly
         // (it would get like, every path taken by everyone for a day)
         // and that would suck to sort by distance
         try (Connection connection = Database.getConnection()) {
             synchronized (ingestLock) {
                 long now = System.currentTimeMillis();
-                Iterator<ChunkPosWithTimestamp> it = list.iterator();
+                Iterator<ChunkPos> it = chunkTimestamps.keySet().iterator();
                 while (it.hasNext()) {
-                    ChunkPosWithTimestamp cpwt = it.next();
-                    if (clusterHit.containsKey(cpwt.pos)) {
+                    ChunkPos cpos = it.next();
+                    if (clusterHit.containsKey(cpos)) {
                         continue; // this pos has already passed this check previously
                     }
-                    Long confirmedAt = clusterNonmembershipConfirmedAtCache.get(cpwt.pos);
+                    Long confirmedAt = clusterNonmembershipConfirmedAtCache.get(cpos);
                     if (confirmedAt != null && confirmedAt > now - CLUSTER_DATA_CACHE_DURATION) {
                         it.remove();
                         continue;
                     }
-                    if (!DBSCAN.INSTANCE.fetch(world.server.serverID, world.dimension, cpwt.pos.x, cpwt.pos.z, connection).isPresent()) {
+                    if (!DBSCAN.INSTANCE.fetch(world.server.serverID, world.dimension, cpos.x, cpos.z, connection).isPresent()) {
                         it.remove();
-                        clusterNonmembershipConfirmedAtCache.put(cpwt.pos, now);
+                        clusterNonmembershipConfirmedAtCache.put(cpos, now);
                     }
                 }
             }
@@ -169,10 +171,10 @@ public class SlurpManager {
             throw new RuntimeException(ex);
         }
         // no need for a lock on clusterHit, since this is the only function that touches it, and this function is single threaded
-        list.forEach(cpwt -> {
+        chunkTimestamps.forEach((pos, timestamp) -> {
             for (int dx = -4; dx <= 4; dx++) {
                 for (int dz = -4; dz <= 4; dz++) {
-                    clusterHit.merge(cpwt.pos.add(dx, dz), cpwt.timestamp, Math::max);
+                    clusterHit.merge(pos.add(dx, dz), timestamp, Math::max);
                 }
             }
         });
