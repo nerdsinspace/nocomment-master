@@ -71,10 +71,10 @@ public class ChunkManager {
             synchronized (this) {
                 cache.get(pos).complete(ret);
                 if (num++ > MAX_SIZE) { // obv can't use cache.size
-                    cache.keySet().stream()
-                            .sorted(Comparator.comparingLong(lastAccessed::get))
-                            .filter(cpos -> cache.get(cpos).isDone())
-                            .findFirst()
+                    cache.entrySet().stream()
+                            .filter(entry -> entry.getValue().isDone())
+                            .map(Map.Entry::getKey)
+                            .min(Comparator.comparingLong(lastAccessed::get))
                             .ifPresent(cache::remove);
                 }
             }
