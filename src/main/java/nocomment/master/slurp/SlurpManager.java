@@ -10,6 +10,8 @@ import nocomment.master.util.ChunkPos;
 import nocomment.master.util.LoggingExecutor;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
@@ -90,17 +92,48 @@ public class SlurpManager {
         int[] data = chunkManager.getChunk(cpos).get();
         int[][] offsetsToMeme = {{4, 4}, {4, 12}, {12, 4}, {12, 12}};
         for (int[] offset : offsetsToMeme) {
-            BlockPos pos;
-            int y = 254;
+            int x = cpos.getXStart() + offset[0];
+            int z = cpos.getZStart() + offset[1];
+            BlockPos pos = new BlockPos(x, 254, z);
             do {
-                pos = new BlockPos(cpos.getXStart() + offset[0], y, cpos.getZStart() + offset[1]);
                 if (!isAir(expected(pos, data))) {
                     break;
                 }
-                y--;
-            } while (y > 1);
+                pos = pos.add(0, -1, 0);
+            } while (pos.y > 1);
             askFor(pos, 57, now - RENEW_AGE);
             askFor(pos.add(0, 1, 0), 58, now - RENEW_AGE);
+
+            // also keep up to date any sky structures / sky bases...
+            highestNonAirYCoordAsOfLastTimeWeChecked(x, z).ifPresent(y -> {
+                // no need to check if y==pos.y, if it is equal it's fine since it'll dedup on prio and constant now-renew_age
+                BlockPos skybase = new BlockPos(x, y, z);
+                askFor(skybase, 58, now - RENEW_AGE); // slightly less important
+                askFor(skybase.add(0, 1, 0), 59, now - RENEW_AGE);
+            });
+        }
+    }
+
+    private OptionalInt highestNonAirYCoordAsOfLastTimeWeChecked(int x, int z) {
+        // this will include any "manual" slurping i've done in singleplayer
+        // ALL skybases should be caught by this, if we've slurped them at any point in history, I think?
+        try (Connection connection = Database.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("SELECT MAX(y) AS max_y FROM (SELECT block_state, y, ROW_NUMBER() OVER (PARTITION BY y ORDER BY created_at DESC) AS age FROM blocks WHERE x = ? AND z = ?) tmp WHERE tmp.age = 1 AND tmp.block_state <> 0")) {
+            stmt.setInt(1, x);
+            stmt.setInt(2, z);
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (!rs.next()) {
+                    return OptionalInt.empty();
+                }
+                int y = rs.getInt("max_y");
+                if (rs.wasNull()) {
+                    return OptionalInt.empty();
+                }
+                return OptionalInt.of(y);
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
         }
     }
 
