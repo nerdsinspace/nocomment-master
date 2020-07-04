@@ -62,6 +62,10 @@ public class ChunkPos {
         return distSq(SPAWN);
     }
 
+    public BlockPos origin() {
+        return new BlockPos(getXStart(), 0, getZStart());
+    }
+
     public ChunkPos add(int dx, int dz) {
         return new ChunkPos(this.x + dx, this.z + dz);
     }

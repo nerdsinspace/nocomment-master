@@ -28,6 +28,7 @@ public class SlurpManager {
     private static final long CHECK_MAX_GAP = TimeUnit.SECONDS.toMillis(30);
     private static final long CLUSTER_DATA_CACHE_DURATION = TimeUnit.DAYS.toMillis(1);
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
+    private static final long NUM_RENEWALS = 4;
     public final World world;
     private final ChunkManager chunkManager = new ChunkManager();
     private final Map<ChunkPos, ResumeDataForChunk> askedAndGotUnloadedResponse = new HashMap<>();
@@ -38,7 +39,7 @@ public class SlurpManager {
     private final Map<ChunkPos, Long> clusterNonmembershipConfirmedAtCache = new HashMap<>();
     private final Map<ChunkPos, Long> clusterHit = new HashMap<>();
     private final Map<ChunkPos, Long> renewalSchedule = new HashMap<>();
-
+    private final Map<ChunkPos, int[][]> heightMapCache = new HashMap<>();
 
     public SlurpManager(World world) {
         this.world = world;
@@ -48,19 +49,10 @@ public class SlurpManager {
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneAsks), 24, 24, TimeUnit.HOURS);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneClusterData), 1, 1, TimeUnit.HOURS);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneBlocks), 40, 60, TimeUnit.MINUTES);
-        NoComment.executor.execute(this::ingestConsumer);
-    }
-
-    private void ingestConsumer() {
-        try {
-            while (true) {
-                ingestIntoClusterHit();
-                scanClusterHit();
-                Thread.sleep(250);
-            }
-        } catch (InterruptedException | ExecutionException ex) {
-            throw new RuntimeException(ex);
-        }
+        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> {
+            ingestIntoClusterHit();
+            scanClusterHit();
+        }), 10000, 250, TimeUnit.MILLISECONDS);
     }
 
     private synchronized void pruneBlocks() {
@@ -70,7 +62,7 @@ public class SlurpManager {
         System.out.println("Took " + (System.currentTimeMillis() - now) + "ms to prune allAsks keySet. Size went from " + beforeSz + " to " + allAsks.size());
     }
 
-    private void scanClusterHit() throws InterruptedException, ExecutionException {
+    private void scanClusterHit() {
         long now = System.currentTimeMillis();
         renewalSchedule.values().removeIf(ts -> ts < now);
         Optional<ChunkPos> candidates = clusterHit.entrySet()
@@ -90,47 +82,77 @@ public class SlurpManager {
         System.out.println("Beginning slurp on chunk " + cpos);
         // again, no need for a lock on renewalSchedule since only this touches it
         renewalSchedule.put(cpos, now + RENEW_INTERVAL);
-        int[] data = chunkManager.getChunk(cpos).get();
-        int[][] offsetsToMeme = {{4, 4}, {4, 12}, {12, 4}, {12, 12}};
-        for (int[] offset : offsetsToMeme) {
-            int x = cpos.getXStart() + offset[0];
-            int z = cpos.getZStart() + offset[1];
-            BlockPos pos = new BlockPos(x, 254, z);
-            do {
-                if (!isAir(expected(pos, data))) {
-                    break;
-                }
-                pos = pos.add(0, -1, 0);
-            } while (pos.y > 1);
+        int[][] heightMap = heightMapCache.computeIfAbsent(cpos, this::heightMap);
+        Random random = new Random();
+        for (int i = 0; i < NUM_RENEWALS; i++) {
+            int dx = random.nextInt(16);
+            int dz = random.nextInt(16);
+            int x = cpos.getXStart() + dx;
+            int z = cpos.getZStart() + dz;
+            BlockPos pos = new BlockPos(x, heightMap[dx][dz], z);
             askFor(pos, 57, now - RENEW_AGE);
             askFor(pos.add(0, 1, 0), 58, now - RENEW_AGE);
 
             // also keep up to date any sky structures / sky bases...
-            highestNonAirYCoordAsOfLastTimeWeChecked(x, z).ifPresent(y -> {
+            interestingYCoordsFromLastTime(x, z).forEach(y -> {
                 // no need to check if y==pos.y, if it is equal it's fine since it'll dedup on prio and constant now-renew_age
                 BlockPos skybase = new BlockPos(x, y, z);
-                askFor(skybase, 58, now - RENEW_AGE); // slightly less important
-                askFor(skybase.add(0, 1, 0), 59, now - RENEW_AGE);
+                if (random.nextBoolean()) { // :zany_face:
+                    askFor(skybase, 58, now - RENEW_AGE); // slightly less important
+                }
+                // the cool part is that both cases (max and min) will overlap in the common case with the standard heightmap coords :)
+                // so this is zero cost (except on decorator mismatch) other than when it's a true base to renew :)
+                if (random.nextBoolean()) { // :woozy_face:
+                    askFor(skybase.add(0, 1, 0), 59, now - RENEW_AGE);
+                }
             });
         }
+        // also one more just for fun
+        askFor(cpos.origin().add(random.nextInt(16), random.nextInt(256), random.nextInt(16)), 60, now - RENEW_AGE);
     }
 
-    private OptionalInt highestNonAirYCoordAsOfLastTimeWeChecked(int x, int z) {
+    private int[][] heightMap(ChunkPos cpos) {
+        // return: the Y coordinates of the first non-air block. 0 if fully air
+        int[][] ret = new int[16][16];
+        int[] data;
+        try {
+            data = chunkManager.getChunk(cpos).get();
+        } catch (InterruptedException | ExecutionException ex) {
+            throw new RuntimeException(ex);
+        }
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                for (int y = 255; y >= 0; y--) {
+                    if (!isAir(data[y * 256 + x * 16 + z])) {
+                        ret[x][z] = y;
+                        break;
+                    }
+                }
+            }
+        }
+        return ret;
+    }
+
+    private List<Integer> interestingYCoordsFromLastTime(int x, int z) {
         // this will include any "manual" slurping i've done in singleplayer
         // ALL skybases should be caught by this, if we've slurped them at any point in history, I think?
         try (Connection connection = Database.getConnection();
-             PreparedStatement stmt = connection.prepareStatement("SELECT MAX(y) AS max_y FROM (SELECT block_state, y, ROW_NUMBER() OVER (PARTITION BY y ORDER BY created_at DESC) AS age FROM blocks WHERE x = ? AND z = ?) tmp WHERE tmp.age = 1 AND tmp.block_state <> 0")) {
+             PreparedStatement stmt = connection.prepareStatement("WITH col AS (SELECT block_state, y, ROW_NUMBER() OVER (PARTITION BY y ORDER BY created_at DESC) AS age FROM blocks WHERE x = ? AND z = ?) SELECT (SELECT MAX(y) FROM col WHERE age = 1 AND block_state <> 0) AS max_y, (SELECT MIN(y) FROM col WHERE age = 1 AND block_state = 0) AS min_y")) {
             stmt.setInt(1, x);
             stmt.setInt(2, z);
             try (ResultSet rs = stmt.executeQuery()) {
-                if (!rs.next()) {
-                    return OptionalInt.empty();
+                List<Integer> ret = new ArrayList<>();
+                if (rs.next()) {
+                    int maxY = rs.getInt("max_y");
+                    if (!rs.wasNull()) {
+                        ret.add(maxY);
+                    }
+                    int minY = rs.getInt("min_y");
+                    if (!rs.wasNull()) {
+                        ret.add(minY - 1); // the caller does (y, y+1), and we want the air and the block below it, so we start at that non-air block which is at y-1
+                    }
                 }
-                int y = rs.getInt("max_y");
-                if (rs.wasNull()) {
-                    return OptionalInt.empty();
-                }
-                return OptionalInt.of(y);
+                return ret;
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -138,9 +160,13 @@ public class SlurpManager {
         }
     }
 
-    private void ingestIntoClusterHit() throws InterruptedException {
+    private void ingestIntoClusterHit() {
         List<ChunkPosWithTimestamp> tmpBuffer = new ArrayList<>(ingest.size());
-        tmpBuffer.add(ingest.take()); // blockingly take at least one
+        try {
+            tmpBuffer.add(ingest.take()); // blockingly take at least one
+        } catch (InterruptedException ex) {
+            throw new RuntimeException(ex);
+        }
         ingest.drainTo(tmpBuffer); // non blockingly take any remainings
         Map<ChunkPos, Long> chunkTimestamps = tmpBuffer.stream().collect(Collectors.groupingBy(cpwt -> cpwt.pos, Collectors.reducing(0L, cpwt -> cpwt.timestamp, Math::max)));
         // first remove non cluster members, because otherwise clusterHit would get HUGE, instantly

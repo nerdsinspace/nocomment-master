@@ -14,12 +14,22 @@ public class Maintenance {
         scheduleReindex("track_endings");
         //scheduleReindex("player_sessions_range");
         scheduleReindex("player_sessions_by_leave");
-        /*scheduleReindex("dbscan_pkey");
+        scheduleReindex("dbscan_pkey");
         scheduleReindex("dbscan_cluster_roots");
         scheduleReindex("dbscan_ingest");
         scheduleReindex("dbscan_process");
         scheduleReindex("dbscan_disjoint_traversal");
-        scheduleReindex("dbscan_to_update_pkey", 3600);*/
+        scheduleReindex("dbscan_to_update_by_schedule", 3600);
+        scheduleReindex("dbscan_to_update_pkey", 3600);
+        scheduleReindex("chat_by_time");
+        scheduleReindex("signs_by_loc");
+        scheduleReindex("notes_server_id_dimension_x_z_key");
+        scheduleReindex("blocks_by_loc");
+        scheduleReindex("blocks_by_time");
+        scheduleReindex("blocks_by_chunk");
+        scheduleReindex("associations_cluster_id");
+        scheduleReindex("associations_player_and_cluster");
+        scheduleReindex("associations_player_id");
     }
 
     private static void scheduleReindex(String indexName) {
