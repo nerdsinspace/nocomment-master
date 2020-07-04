@@ -137,9 +137,11 @@ public class SlurpManager {
         // this will include any "manual" slurping i've done in singleplayer
         // ALL skybases should be caught by this, if we've slurped them at any point in history, I think?
         try (Connection connection = Database.getConnection();
-             PreparedStatement stmt = connection.prepareStatement("WITH col AS (SELECT block_state, y, ROW_NUMBER() OVER (PARTITION BY y ORDER BY created_at DESC) AS age FROM blocks WHERE x = ? AND z = ?) SELECT (SELECT MAX(y) FROM col WHERE age = 1 AND block_state <> 0) AS max_y, (SELECT MIN(y) FROM col WHERE age = 1 AND block_state = 0) AS min_y")) {
+             PreparedStatement stmt = connection.prepareStatement("WITH col AS (SELECT block_state, y, ROW_NUMBER() OVER (PARTITION BY y ORDER BY created_at DESC) AS age FROM blocks WHERE x = ? AND z = ? AND dimension = ? AND server_id = ?) SELECT (SELECT MAX(y) FROM col WHERE age = 1 AND block_state <> 0) AS max_y, (SELECT MIN(y) FROM col WHERE age = 1 AND block_state = 0) AS min_y")) {
             stmt.setInt(1, x);
             stmt.setInt(2, z);
+            stmt.setShort(3, world.dimension);
+            stmt.setShort(4, world.server.serverID);
             try (ResultSet rs = stmt.executeQuery()) {
                 List<Integer> ret = new ArrayList<>();
                 if (rs.next()) {
