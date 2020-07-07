@@ -408,3 +408,18 @@ CREATE TABLE chat
 CREATE INDEX chat_by_time
     ON chat (server_id, created_at);
 
+CREATE TABLE generator_cache
+(
+    data      BYTEA    NOT NULL,
+    x         INTEGER  NOT NULL,
+    z         INTEGER  NOT NULL,
+    dimension SMALLINT NOT NULL,
+    server_id SMALLINT NOT NULL,
+
+    FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
+        ON UPDATE RESTRICT ON DELETE RESTRICT,
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX generator_cache_by_loc ON generator_cache (server_id, dimension, x, z);

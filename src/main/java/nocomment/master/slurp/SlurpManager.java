@@ -1,5 +1,6 @@
 package nocomment.master.slurp;
 
+import com.sun.istack.internal.Nullable;
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.clustering.DBSCAN;
@@ -30,7 +31,7 @@ public class SlurpManager {
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
     private static final long NUM_RENEWALS = 4;
     public final World world;
-    private final ChunkManager chunkManager = new ChunkManager();
+    private final ChunkManager chunkManager;
     private final Map<ChunkPos, ResumeDataForChunk> askedAndGotUnloadedResponse = new HashMap<>();
     private final Map<BlockPos, AskStatus> allAsks = new HashMap<>();
     private final Set<BlockPos> signsAskedFor = new HashSet<>();
@@ -45,6 +46,11 @@ public class SlurpManager {
         this.world = world;
         if (world.dimension != 0) {
             throw new IllegalArgumentException("Only overworld for the moment");
+        }
+        if (world.server.hostname.equals("2b2t.org")) {
+            this.chunkManager = new ChunkManager();
+        } else {
+            this.chunkManager = null;
         }
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneAsks), 24, 24, TimeUnit.HOURS);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneClusterData), 1, 1, TimeUnit.HOURS);
@@ -83,16 +89,18 @@ public class SlurpManager {
         System.out.println("Beginning slurp on chunk " + cpos);
         // again, no need for a lock on renewalSchedule since only this touches it
         renewalSchedule.put(cpos, now + RENEW_INTERVAL);
-        int[][] heightMap = heightMapCache.computeIfAbsent(cpos, this::heightMap);
         Random random = new Random();
         for (int i = 0; i < NUM_RENEWALS; i++) {
             int dx = random.nextInt(16);
             int dz = random.nextInt(16);
             int x = cpos.getXStart() + dx;
             int z = cpos.getZStart() + dz;
-            BlockPos pos = new BlockPos(x, heightMap[dx][dz], z);
-            askFor(pos, 57, now - RENEW_AGE);
-            askFor(pos.add(0, 1, 0), 58, now - RENEW_AGE);
+
+            if (this.chunkManager != null) { // only if we have chunk generation can we do heightmap based queries
+                BlockPos pos = new BlockPos(x, heightMapCache.computeIfAbsent(cpos, this::heightMap)[dx][dz], z);
+                askFor(pos, 57, now - RENEW_AGE);
+                askFor(pos.add(0, 1, 0), 58, now - RENEW_AGE);
+            }
 
             // also keep up to date any sky structures / sky bases...
             interestingYCoordsFromLastTime(x, z).forEach(y -> {
@@ -252,7 +260,7 @@ public class SlurpManager {
         return askedAndGotUnloadedResponse.computeIfAbsent(cpos, cpos0 -> new ResumeDataForChunk());
     }
 
-    private synchronized void blockRecv(BlockPos pos, OptionalInt state, boolean updated, int[] chunkData) {
+    private synchronized void blockRecv(BlockPos pos, OptionalInt state, boolean updated, @Nullable int[] chunkData) {
         ChunkPos cpos = new ChunkPos(pos);
         ResumeDataForChunk data = getData(cpos);
 
@@ -280,6 +288,7 @@ public class SlurpManager {
             System.out.println("Shulker (blockstate " + blockState + ") at " + pos);
         }
         int expected = expected(pos, chunkData);
+        allAsks.get(pos).response = state;
         // important to remember that there are FOUR things at play here:
         // previous (stored in DB)
         // current
@@ -296,7 +305,7 @@ public class SlurpManager {
             expand = true;
             expandBrush = true;
         } else { // either previous is null, or previous==current
-            if (blockState != expected) {
+            if (chunkData != null && blockState != expected) { // only if we actually have chunkData
                 if (!(isStone(blockState) && isStone(expected))) { // stone variants are a troll, don't expand them
                     expand = true;
                 }
@@ -315,7 +324,6 @@ public class SlurpManager {
                 }
             }
         }
-        allAsks.get(pos).response = state;
     }
 
     private static long calcNewer(long interval) {
@@ -328,7 +336,9 @@ public class SlurpManager {
         if (stat != null && stat.response.isPresent()) {
             return stat.response.getAsInt();
         }
-
+        if (chunkData == null) {
+            return -1;
+        }
         int x = pos.x & 0x0f;
         int y = pos.y & 0xff;
         int z = pos.z & 0x0f;
@@ -395,7 +405,13 @@ public class SlurpManager {
     }
 
     private void doRawAsk(long mustBeNewerThan, BlockPos pos, int priority) {
-        world.blockCheckManager.requestBlockState(mustBeNewerThan, pos, priority, (state, updated) -> chunkManager.getChunk(new ChunkPos(pos)).thenAcceptAsync(chunkData -> blockRecv(pos, state, updated, chunkData), NoComment.executor));
+        world.blockCheckManager.requestBlockState(mustBeNewerThan, pos, priority, (state, updated) -> {
+            if (chunkManager == null) {
+                blockRecv(pos, state, updated, null);
+            } else {
+                chunkManager.getChunk(new ChunkPos(pos)).thenAcceptAsync(chunkData -> blockRecv(pos, state, updated, chunkData), NoComment.executor);
+            }
+        });
     }
 
     private void doRawSign(long mustBeNewerThan, BlockPos pos) {
