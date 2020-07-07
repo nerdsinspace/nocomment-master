@@ -15,6 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 public class BlockCheckManager {
     public final World world;
@@ -91,7 +92,6 @@ public class BlockCheckManager {
     private synchronized void prune() {
         long now = System.currentTimeMillis();
         observedUnloaded.values().removeIf(aLong -> aLong < now - TimeUnit.SECONDS.toMillis(10));
-
     }
 
     public synchronized boolean hasBeenRemoved(BlockPos pos) {
@@ -107,7 +107,8 @@ public class BlockCheckManager {
         long now = System.currentTimeMillis();
         int beforeSz = cacheSize();
         synchronized (pruneLock) {
-            statuses.values().forEach(m -> {
+            int maybeNotNotActually = 0;
+            for (Map<BlockPos, BlockCheckStatus> m : statuses.values()) {
                 Iterator<BlockCheckStatus> it = m.values().iterator();
                 while (it.hasNext()) {
                     BlockCheckStatus bcs = it.next();
@@ -115,21 +116,24 @@ public class BlockCheckManager {
                         synchronized (bcs) {
                             if (bcs.actuallyPrunable(now)) {
                                 it.remove(); // must call remove within bcs lock!!
+                            } else {
+                                maybeNotNotActually++;
                             }
                         }
                     }
                 }
-            });
+            }
             statuses.values().removeIf(Map::isEmpty); // any chunk with no remaining checks can be removed, just to save some ram lol
+            Map<Integer, Long> countByPriority = statuses.values().stream().map(Map::values).flatMap(Collection::stream).collect(Collectors.groupingBy(bcs -> bcs.highestSubmittedPriority, Collectors.counting()));
+            System.out.println("Block prune in block check manager took " + (System.currentTimeMillis() - now) + "ms. Cache size went from " + beforeSz + " to " + cacheSize() + ". Maybe but not actually: " + maybeNotNotActually + ". Count by priority: " + countByPriority);
         }
-        System.out.println("Block prune in block check manager took " + (System.currentTimeMillis() - now) + "ms. Cache size went from " + beforeSz + " to " + cacheSize());
     }
 
     public void requestBlockState(long mustBeNewerThan, BlockPos pos, int priority, BlockListener onCompleted) {
         NoComment.executor.execute(() -> {
             synchronized (BlockCheckManager.this) { // i hate myself
                 synchronized (pruneLock) {
-                    get(pos).requested(mustBeNewerThan, priority, onCompleted); // this is fine since requested holds no locks
+                    get(pos).requested(mustBeNewerThan, priority, onCompleted); // this is fine since requested holds no lock                                                           s
                 }
             }
         });

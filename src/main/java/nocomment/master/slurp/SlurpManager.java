@@ -59,7 +59,8 @@ public class SlurpManager {
         int beforeSz = allAsks.size();
         long now = System.currentTimeMillis();
         allAsks.entrySet().removeIf(ask -> ask.getValue().lastDirectAsk < now - BlockCheckManager.PRUNE_AGE && world.blockCheckManager.hasBeenRemoved(ask.getKey()));
-        System.out.println("Took " + (System.currentTimeMillis() - now) + "ms to prune allAsks keySet. Size went from " + beforeSz + " to " + allAsks.size());
+        int total = askedAndGotUnloadedResponse.values().stream().mapToInt(rd -> rd.failedSignChecks.size() + rd.failedBlockChecks.size()).sum();
+        System.out.println("Took " + (System.currentTimeMillis() - now) + "ms to prune allAsks keySet. Size went from " + beforeSz + " to " + allAsks.size() + ". HMC: " + heightMapCache.size() + ". CNCAC: " + clusterNonmembershipConfirmedAtCache.size() + ". CH: " + clusterHit.size() + ". RS: " + renewalSchedule.size() + ". SAF: " + signsAskedFor.size() + ". AAGUR" + askedAndGotUnloadedResponse.size() + ". AAGURT: " + total);
     }
 
     private void scanClusterHit() {
@@ -271,8 +272,8 @@ public class SlurpManager {
         int blockState = state.getAsInt();
         if (isSign(blockState)) {
             if (signsAskedFor.add(pos)) {
-                System.out.println("Asking for sign at " + pos);
-                doRawSign(signBrushNewer(), pos);
+                System.out.println("NOT asking for sign at " + pos);
+                //doRawSign(signBrushNewer(), pos);
             }
         }
         if (isShulker(blockState)) {
@@ -296,7 +297,7 @@ public class SlurpManager {
             expandBrush = true;
         } else { // either previous is null, or previous==current
             if (blockState != expected) {
-                if (!(isStone(blockState) && isStone(expected))) {// stone variants are a troll, don't expand them
+                if (!(isStone(blockState) && isStone(expected))) { // stone variants are a troll, don't expand them
                     expand = true;
                 }
             }
