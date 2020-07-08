@@ -52,7 +52,7 @@ public class SlurpManager {
         } else {
             this.chunkManager = null;
         }
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneAsks), 24, 24, TimeUnit.HOURS);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneAsks), 24 * 60 + 25, 24 * 60, TimeUnit.MINUTES);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneClusterData), 1, 1, TimeUnit.HOURS);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneBlocks), 40, 60, TimeUnit.MINUTES);
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> {
@@ -76,9 +76,8 @@ public class SlurpManager {
                 .stream()
                 .filter(entry -> entry.getValue() > now - CHECK_MAX_GAP)
                 .map(Map.Entry::getKey)
-                .sorted(Comparator.<ChunkPos>comparingLong(ChunkPos::distSq).reversed())
                 .filter(cpos -> !(renewalSchedule.containsKey(cpos)))
-                .findFirst();
+                .max(Comparator.comparingLong(ChunkPos::distSq));
         if (!candidates.isPresent()) {
             return;
         }
@@ -228,6 +227,7 @@ public class SlurpManager {
     private synchronized void pruneAsks() {
         // re-paint-bucket everything
         allAsks.values().forEach(stat -> stat.response = OptionalInt.empty());
+        askedAndGotUnloadedResponse.clear();
     }
 
     private void pruneClusterData() {
