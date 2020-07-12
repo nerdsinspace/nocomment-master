@@ -227,7 +227,10 @@ public class SlurpManager {
 
     private synchronized void pruneAsks() {
         // re-paint-bucket everything
-        allAsks.values().forEach(stat -> stat.response = OptionalInt.empty());
+        allAsks.values().forEach(stat -> {
+            stat.response = OptionalInt.empty();
+            stat.clearedManually = true;
+        });
         askedAndGotUnloadedResponse.clear();
     }
 
@@ -386,15 +389,22 @@ public class SlurpManager {
             return;
         }
         AskStatus cur = allAsks.get(pos);
-        if (cur != null) {
-            if (cur.highestPriorityAskedAt <= priority && cur.mustBeNewerThan >= mustBeNewerThan) {
-                return;
+        outer:
+        {
+            if (cur != null) {
+                if (cur.highestPriorityAskedAt <= priority && cur.mustBeNewerThan >= mustBeNewerThan) {
+                    if (cur.clearedManually) {
+                        cur.clearedManually = false;
+                        break outer;
+                    }
+                    return;
+                }
+            } else {
+                cur = new AskStatus();
             }
-        } else {
-            cur = new AskStatus();
+            cur.highestPriorityAskedAt = priority;
+            cur.mustBeNewerThan = mustBeNewerThan;
         }
-        cur.highestPriorityAskedAt = priority;
-        cur.mustBeNewerThan = mustBeNewerThan;
         cur.response = OptionalInt.empty();
         cur.lastDirectAsk = System.currentTimeMillis();
         allAsks.put(pos, cur);
@@ -435,6 +445,7 @@ public class SlurpManager {
         long mustBeNewerThan;
         OptionalInt response;
         long lastDirectAsk;
+        boolean clearedManually;
     }
 
     private static class ChunkPosWithTimestamp {
