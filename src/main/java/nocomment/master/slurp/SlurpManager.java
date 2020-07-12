@@ -1,6 +1,5 @@
 package nocomment.master.slurp;
 
-import com.sun.istack.internal.Nullable;
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.clustering.DBSCAN;
@@ -64,9 +63,11 @@ public class SlurpManager {
     private synchronized void pruneBlocks() {
         int beforeSz = allAsks.size();
         long now = System.currentTimeMillis();
-        allAsks.entrySet().removeIf(ask -> ask.getValue().lastDirectAsk < now - BlockCheckManager.PRUNE_AGE && world.blockCheckManager.hasBeenRemoved(ask.getKey()));
+        synchronized (world.blockCheckManager) {
+            allAsks.entrySet().removeIf(ask -> ask.getValue().lastDirectAsk < now - BlockCheckManager.PRUNE_AGE && world.blockCheckManager.hasBeenRemoved(ask.getKey()));
+        }
         int total = askedAndGotUnloadedResponse.values().stream().mapToInt(rd -> rd.failedSignChecks.size() + rd.failedBlockChecks.size()).sum();
-        System.out.println("Took " + (System.currentTimeMillis() - now) + "ms to prune allAsks keySet. Size went from " + beforeSz + " to " + allAsks.size() + ". HMC: " + heightMapCache.size() + ". CNCAC: " + clusterNonmembershipConfirmedAtCache.size() + ". CH: " + clusterHit.size() + ". RS: " + renewalSchedule.size() + ". SAF: " + signsAskedFor.size() + ". AAGUR" + askedAndGotUnloadedResponse.size() + ". AAGURT: " + total);
+        System.out.println("Took " + (System.currentTimeMillis() - now) + "ms to prune allAsks keySet. Size went from " + beforeSz + " to " + allAsks.size() + ". HMC: " + heightMapCache.size() + ". CNCAC: " + clusterNonmembershipConfirmedAtCache.size() + ". CH: " + clusterHit.size() + ". RS: " + renewalSchedule.size() + ". SAF: " + signsAskedFor.size() + ". AAGUR: " + askedAndGotUnloadedResponse.size() + ". AAGURT: " + total);
     }
 
     private void scanClusterHit() {
@@ -260,7 +261,7 @@ public class SlurpManager {
         return askedAndGotUnloadedResponse.computeIfAbsent(cpos, cpos0 -> new ResumeDataForChunk());
     }
 
-    private synchronized void blockRecv(BlockPos pos, OptionalInt state, boolean updated, @Nullable int[] chunkData) {
+    private synchronized void blockRecv(BlockPos pos, OptionalInt state, boolean updated, int[] chunkData) {
         ChunkPos cpos = new ChunkPos(pos);
         ResumeDataForChunk data = getData(cpos);
 
@@ -378,10 +379,6 @@ public class SlurpManager {
 
     private static boolean isShulker(int blockState) {
         return SHULKER_BLOCK_STATES.contains(blockState);
-    }
-
-    private static long signBrushNewer() {
-        return System.currentTimeMillis() - SIGN_AGE;
     }
 
     private synchronized void askFor(BlockPos pos, int priority, long mustBeNewerThan) {
