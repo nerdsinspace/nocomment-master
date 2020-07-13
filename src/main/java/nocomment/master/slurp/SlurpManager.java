@@ -109,6 +109,10 @@ public class SlurpManager {
                 if (random.nextBoolean()) { // :zany_face:
                     askFor(skybase, 58, now - RENEW_AGE); // slightly less important
                 }
+                if (random.nextBoolean()) { // :yum:
+                    // randomly grab something a little ways above or below, just for fun
+                    askFor(skybase.add(0, (random.nextBoolean() ? 1 : -1) * (2 + random.nextInt(4)), 0), 60, now - RENEW_AGE);
+                }
                 // the cool part is that both cases (max and min) will overlap in the common case with the standard heightmap coords :)
                 // so this is zero cost (except on decorator mismatch) other than when it's a true base to renew :)
                 if (random.nextBoolean()) { // :woozy_face:
