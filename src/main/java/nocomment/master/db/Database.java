@@ -38,35 +38,25 @@ public class Database {
         }
     }
 
-    static void saveHit(Hit hit) {
-        if (NoComment.DRY_RUN) {
-            throw new IllegalStateException();
-        }
-        try (Connection connection = pool.getConnection()) {
-            connection.setAutoCommit(false);
-            try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO hits (created_at, x, z, dimension, server_id, track_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id")) {
-                stmt.setLong(1, hit.createdAt);
-                stmt.setInt(2, hit.pos.x);
-                stmt.setInt(3, hit.pos.z);
-                stmt.setShort(4, hit.dimension);
-                stmt.setShort(5, hit.serverID);
-                if (hit.getTrackID().isPresent()) {
-                    stmt.setInt(6, hit.getTrackID().getAsInt());
-                } else {
-                    stmt.setNull(6, Types.INTEGER);
-                }
-                try (ResultSet rs = stmt.executeQuery()) {
-                    rs.next();
-                    hit.setHitID(rs.getLong("id"));
-                }
-            }
+    static void saveHit(Hit hit, Connection connection) throws SQLException {
+        try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO hits (created_at, x, z, dimension, server_id, track_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id")) {
+            stmt.setLong(1, hit.createdAt);
+            stmt.setInt(2, hit.pos.x);
+            stmt.setInt(3, hit.pos.z);
+            stmt.setShort(4, hit.dimension);
+            stmt.setShort(5, hit.serverID);
             if (hit.getTrackID().isPresent()) {
-                updateTrackWithMostRecentHit(hit, connection);
+                stmt.setInt(6, hit.getTrackID().getAsInt());
+            } else {
+                stmt.setNull(6, Types.INTEGER);
             }
-            connection.commit();
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            throw new RuntimeException(ex);
+            try (ResultSet rs = stmt.executeQuery()) {
+                rs.next();
+                hit.setHitID(rs.getLong("id"));
+            }
+        }
+        if (hit.getTrackID().isPresent()) {
+            updateTrackWithMostRecentHit(hit, connection);
         }
     }
 
@@ -253,7 +243,7 @@ public class Database {
 
     public static int createTrack(Hit initialHit, OptionalInt prevTrackID) {
         // make sure that the initialHit has an assigned hit ID
-        initialHit.saveToDB();
+        initialHit.saveToDBBlocking();
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("INSERT INTO tracks (first_hit_id, last_hit_id, updated_at, prev_track_id, dimension, server_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id")) {
             stmt.setLong(1, initialHit.getHitID());
@@ -276,7 +266,7 @@ public class Database {
         }
     }
 
-    static void addHitToTrack(Hit hit) {
+    static void alterHitToBeWithinTrack(Hit hit) {
         try (Connection connection = pool.getConnection()) {
             connection.setAutoCommit(false);
             updateTrackWithMostRecentHit(hit, connection);
