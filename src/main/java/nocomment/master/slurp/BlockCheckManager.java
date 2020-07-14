@@ -30,6 +30,8 @@ public class BlockCheckManager {
     // to avoid overwhelming the main executor with literally thousands of DB queries for blocks and signs from the past
     public static Executor checkStatusExecutor = new LoggingExecutor(Executors.newFixedThreadPool(4));
 
+    public static Executor unloadObservationExecutor = new LoggingExecutor(Executors.newFixedThreadPool(4));
+
     public BlockCheckManager(World world) {
         this.world = world;
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::update), 0, 250, TimeUnit.MILLISECONDS);
@@ -82,10 +84,10 @@ public class BlockCheckManager {
         }
         // wrap in executor to prevent stupid deadlock again
         List<BlockCheckStatus> s = new ArrayList<>(statuses.get(pos).values());
-        NoComment.executor.execute(() -> s.forEach(status -> status.onResponseInternal(OptionalInt.empty(), now)));
+        unloadObservationExecutor.execute(() -> s.forEach(status -> status.onResponseInternal(OptionalInt.empty(), now)));
     }
 
-    private synchronized void loaded(ChunkPos pos) {
+    public synchronized void loaded(ChunkPos pos) {
         observedUnloaded.remove(pos);
     }
 

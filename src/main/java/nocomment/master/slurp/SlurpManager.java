@@ -247,6 +247,7 @@ public class SlurpManager {
     }
 
     public void arbitraryHit(ChunkPos cpos) {
+        world.blockCheckManager.loaded(cpos);
         arbitraryHit(cpos, false);
     }
 
