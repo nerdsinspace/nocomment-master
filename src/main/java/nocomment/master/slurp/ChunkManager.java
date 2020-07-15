@@ -3,6 +3,7 @@ package nocomment.master.slurp;
 import nocomment.master.NoComment;
 import nocomment.master.util.ChunkPos;
 
+import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -48,7 +49,7 @@ public class ChunkManager {
 
     private void fetchLoop() throws IOException, InterruptedException {
         Socket s = new Socket("localhost", 5021);
-        DataInputStream in = new DataInputStream(s.getInputStream());
+        DataInputStream in = new DataInputStream(new BufferedInputStream(s.getInputStream()));
         DataOutputStream out = new DataOutputStream(s.getOutputStream());
         int num = 0;
         while (true) {
@@ -58,7 +59,7 @@ public class ChunkManager {
                 Thread.sleep(5);
             }
             ChunkPos pos = queue.peek();
-            System.out.println("Requesting pos from world gen: " + pos);
+            //System.out.println("Requesting pos from world gen: " + pos);
             out.writeInt(pos.x);
             out.writeInt(pos.z);
             out.flush();
@@ -66,8 +67,8 @@ public class ChunkManager {
             for (int i = 0; i < ret.length; i++) {
                 ret[i] = in.readInt();
             }
-            System.out.println("Received chunk from world gen: " + pos);
-            System.out.println("Cache map size is " + cache.size() + " and total age is " + num);
+            //System.out.println("Received chunk from world gen: " + pos);
+            //System.out.println("Cache map size is " + cache.size() + " and total age is " + num);
             synchronized (this) {
                 cache.get(pos).complete(ret);
                 if (num++ > MAX_SIZE) { // obv can't use cache.size
