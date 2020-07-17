@@ -231,10 +231,7 @@ public class SlurpManager {
 
     private synchronized void pruneAsks() {
         // re-paint-bucket everything
-        allAsks.values().forEach(stat -> {
-            stat.response = OptionalInt.empty();
-            stat.clearedManually = true;
-        });
+        allAsks.clear();
         askedAndGotUnloadedResponse.clear();
     }
 
@@ -276,8 +273,10 @@ public class SlurpManager {
         if (!state.isPresent()) {
             // a miss
             // mark it as such, and we'll retry if we ever see this chunk reloaded! :)
-            data.failedBlockChecks.put(pos, new FailedAsk(allAsks.get(pos)));
-            allAsks.get(pos).response = OptionalInt.empty();
+            if (allAsks.containsKey(pos)) {
+                data.failedBlockChecks.put(pos, new FailedAsk(allAsks.get(pos)));
+                allAsks.get(pos).response = OptionalInt.empty();
+            }
             return;
         }
         // a hit
@@ -297,7 +296,9 @@ public class SlurpManager {
             System.out.println("Shulker (blockstate " + blockState + ") at " + pos);
         }
         int expected = expected(pos, chunkData);
-        allAsks.get(pos).response = state;
+        if (allAsks.containsKey(pos)) {
+            allAsks.get(pos).response = state;
+        }
         // important to remember that there are FOUR things at play here:
         // previous (stored in DB)
         // current
@@ -394,22 +395,15 @@ public class SlurpManager {
             return;
         }
         AskStatus cur = allAsks.get(pos);
-        outer:
-        {
-            if (cur != null) {
-                if (cur.highestPriorityAskedAt <= priority && cur.mustBeNewerThan >= mustBeNewerThan) {
-                    if (cur.clearedManually) {
-                        cur.clearedManually = false;
-                        break outer;
-                    }
-                    return;
-                }
-            } else {
-                cur = new AskStatus();
+        if (cur != null) {
+            if (cur.highestPriorityAskedAt <= priority && cur.mustBeNewerThan >= mustBeNewerThan) {
+                return;
             }
-            cur.highestPriorityAskedAt = priority;
-            cur.mustBeNewerThan = mustBeNewerThan;
+        } else {
+            cur = new AskStatus();
         }
+        cur.highestPriorityAskedAt = priority;
+        cur.mustBeNewerThan = mustBeNewerThan;
         cur.response = OptionalInt.empty();
         cur.lastDirectAsk = System.currentTimeMillis();
         allAsks.put(pos, cur);
@@ -450,7 +444,6 @@ public class SlurpManager {
         long mustBeNewerThan;
         OptionalInt response;
         long lastDirectAsk;
-        boolean clearedManually;
     }
 
     private static class ChunkPosWithTimestamp {
