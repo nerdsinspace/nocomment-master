@@ -321,6 +321,9 @@ public enum DBSCAN {
                 connection.commit();
             }
         }
+        try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET root_updated_at = last_init_hit WHERE root_updated_at IS NULL AND cluster_parent IS NULL AND disjoint_rank > 0")) {
+            stmt.executeUpdate();
+        }
         connection.commit();
         System.out.println("DBSCAN merger committing");
     }
