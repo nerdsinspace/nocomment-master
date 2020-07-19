@@ -1,6 +1,5 @@
 package nocomment.master.slurp;
 
-import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.clustering.DBSCAN;
 import nocomment.master.db.Database;
@@ -14,9 +13,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 public class SlurpManager {
@@ -30,6 +27,7 @@ public class SlurpManager {
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
     private static final long NUM_RENEWALS = 4;
     public final World world;
+    private final Executor blockRecvExecutor = new LoggingExecutor(Executors.newSingleThreadExecutor()); // blockRecv is synchronized so we only need one
     private final ChunkManager chunkManager;
     private final Map<ChunkPos, ResumeDataForChunk> askedAndGotUnloadedResponse = new HashMap<>();
     private final Map<BlockPos, AskStatus> allAsks = new HashMap<>();
@@ -413,9 +411,9 @@ public class SlurpManager {
     private void doRawAsk(long mustBeNewerThan, BlockPos pos, int priority) {
         world.blockCheckManager.requestBlockState(mustBeNewerThan, pos, priority, (state, updated) -> {
             if (chunkManager == null) {
-                blockRecv(pos, state, updated, null);
+                blockRecvExecutor.execute(() -> blockRecv(pos, state, updated, null));
             } else {
-                chunkManager.getChunk(new ChunkPos(pos)).thenAcceptAsync(chunkData -> blockRecv(pos, state, updated, chunkData), NoComment.executor);
+                chunkManager.getChunk(new ChunkPos(pos)).thenAcceptAsync(chunkData -> blockRecv(pos, state, updated, chunkData), blockRecvExecutor);
             }
         });
     }
