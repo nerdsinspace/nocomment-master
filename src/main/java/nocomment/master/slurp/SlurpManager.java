@@ -34,6 +34,7 @@ public class SlurpManager {
     private final Set<BlockPos> signsAskedFor = new HashSet<>();
     private final LinkedBlockingQueue<ChunkPosWithTimestamp> ingest = new LinkedBlockingQueue<>();
     private final Object ingestLock = new Object();
+    private final Set<ChunkPos> clusterMembershipConfirmed = new HashSet<>();
     private final Map<ChunkPos, Long> clusterNonmembershipConfirmedAtCache = new HashMap<>();
     private final Map<ChunkPos, Long> clusterHit = new HashMap<>();
     private final Map<ChunkPos, Long> renewalSchedule = new HashMap<>();
@@ -65,7 +66,7 @@ public class SlurpManager {
             allAsks.entrySet().removeIf(ask -> ask.getValue().lastDirectAsk < now - BlockCheckManager.PRUNE_AGE && world.blockCheckManager.hasBeenRemoved(ask.getKey()));
         }
         int total = askedAndGotUnloadedResponse.values().stream().mapToInt(rd -> rd.failedSignChecks.size() + rd.failedBlockChecks.size()).sum();
-        System.out.println("Took " + (System.currentTimeMillis() - now) + "ms to prune allAsks keySet. Size went from " + beforeSz + " to " + allAsks.size() + ". HMC: " + heightMapCache.size() + ". CNCAC: " + clusterNonmembershipConfirmedAtCache.size() + ". CH: " + clusterHit.size() + ". RS: " + renewalSchedule.size() + ". SAF: " + signsAskedFor.size() + ". AAGUR: " + askedAndGotUnloadedResponse.size() + ". AAGURT: " + total);
+        System.out.println("Took " + (System.currentTimeMillis() - now) + "ms to prune allAsks keySet. Size went from " + beforeSz + " to " + allAsks.size() + ". HMC: " + heightMapCache.size() + ". CMC: " + clusterMembershipConfirmed.size() + ". CNCAC: " + clusterNonmembershipConfirmedAtCache.size() + ". CH: " + clusterHit.size() + ". RS: " + renewalSchedule.size() + ". SAF: " + signsAskedFor.size() + ". AAGUR: " + askedAndGotUnloadedResponse.size() + ". AAGURT: " + total);
     }
 
     private void scanClusterHit() {
@@ -88,38 +89,46 @@ public class SlurpManager {
         // again, no need for a lock on renewalSchedule since only this touches it
         renewalSchedule.put(cpos, now + RENEW_INTERVAL);
         Random random = new Random();
-        for (int i = 0; i < NUM_RENEWALS; i++) {
-            int dx = random.nextInt(16);
-            int dz = random.nextInt(16);
-            int x = cpos.getXStart() + dx;
-            int z = cpos.getZStart() + dz;
+        // blockingly fetch heightmap in the enclosing scope
+        // only if we have chunk generation can we do heightmap based queries
+        Optional<int[][]> heightMapOpt = Optional.ofNullable(this.chunkManager).map($ -> heightMapCache.computeIfAbsent(cpos, this::heightMap));
+        // first, send a random check with high priority
+        askFor(cpos.origin().add(random.nextInt(16), random.nextInt(256), random.nextInt(16)), 56, now - RENEW_AGE);
+        // after 2 seconds, we will know if it succeeded or is unloaded
+        // so, only send the rest after 2 seconds
+        // either it'll work fine (just delayed), or we'll save a dozen or so checks because it'll run up against BlockCheckManager's observedUnloaded cache!
+        TrackyTrackyManager.scheduler.schedule(LoggingExecutor.wrap(() -> {
+            for (int i = 0; i < NUM_RENEWALS; i++) {
+                int dx = random.nextInt(16);
+                int dz = random.nextInt(16);
+                int x = cpos.getXStart() + dx;
+                int z = cpos.getZStart() + dz;
 
-            if (this.chunkManager != null) { // only if we have chunk generation can we do heightmap based queries
-                BlockPos pos = new BlockPos(x, heightMapCache.computeIfAbsent(cpos, this::heightMap)[dx][dz], z);
-                askFor(pos, 57, now - RENEW_AGE);
-                askFor(pos.add(0, 1, 0), 58, now - RENEW_AGE);
+                heightMapOpt.ifPresent(heightMap -> {
+                    BlockPos pos = new BlockPos(x, heightMap[dx][dz], z);
+                    askFor(pos, 57, now - RENEW_AGE);
+                    askFor(pos.add(0, 1, 0), 58, now - RENEW_AGE);
+                });
+
+                // also keep up to date any sky structures / sky bases...
+                interestingYCoordsFromLastTime(x, z).forEach(y -> {
+                    // no need to check if y==pos.y, if it is equal it's fine since it'll dedup on prio and constant now-renew_age
+                    BlockPos skybase = new BlockPos(x, y, z);
+                    if (random.nextBoolean()) { // :zany_face:
+                        askFor(skybase, 58, now - RENEW_AGE); // slightly less important
+                    }
+                    if (random.nextBoolean()) { // :yum:
+                        // randomly grab something a little ways above or below, just for fun
+                        askFor(skybase.add(0, (random.nextBoolean() ? 1 : -1) * (2 + random.nextInt(4)), 0), 60, now - RENEW_AGE);
+                    }
+                    // the cool part is that both cases (max and min) will overlap in the common case with the standard heightmap coords :)
+                    // so this is zero cost (except on decorator mismatch) other than when it's a true base to renew :)
+                    if (random.nextBoolean()) { // :woozy_face:
+                        askFor(skybase.add(0, 1, 0), 59, now - RENEW_AGE);
+                    }
+                });
             }
-
-            // also keep up to date any sky structures / sky bases...
-            interestingYCoordsFromLastTime(x, z).forEach(y -> {
-                // no need to check if y==pos.y, if it is equal it's fine since it'll dedup on prio and constant now-renew_age
-                BlockPos skybase = new BlockPos(x, y, z);
-                if (random.nextBoolean()) { // :zany_face:
-                    askFor(skybase, 58, now - RENEW_AGE); // slightly less important
-                }
-                if (random.nextBoolean()) { // :yum:
-                    // randomly grab something a little ways above or below, just for fun
-                    askFor(skybase.add(0, (random.nextBoolean() ? 1 : -1) * (2 + random.nextInt(4)), 0), 60, now - RENEW_AGE);
-                }
-                // the cool part is that both cases (max and min) will overlap in the common case with the standard heightmap coords :)
-                // so this is zero cost (except on decorator mismatch) other than when it's a true base to renew :)
-                if (random.nextBoolean()) { // :woozy_face:
-                    askFor(skybase.add(0, 1, 0), 59, now - RENEW_AGE);
-                }
-            });
-        }
-        // also one more just for fun
-        askFor(cpos.origin().add(random.nextInt(16), random.nextInt(256), random.nextInt(16)), 60, now - RENEW_AGE);
+        }), 2, TimeUnit.SECONDS);
     }
 
     private int[][] heightMap(ChunkPos cpos) {
@@ -191,15 +200,20 @@ public class SlurpManager {
                 Iterator<ChunkPos> it = chunkTimestamps.keySet().iterator();
                 while (it.hasNext()) {
                     ChunkPos cpos = it.next();
-                    if (clusterHit.containsKey(cpos)) {
+                    if (clusterMembershipConfirmed.contains(cpos)) {
                         continue; // this pos has already passed this check previously
+                    }
+                    if (clusterHit.containsKey(cpos)) {
+                        continue; // a nearby chunk has passed, so allow some expansion
                     }
                     Long confirmedAt = clusterNonmembershipConfirmedAtCache.get(cpos);
                     if (confirmedAt != null && confirmedAt > now - CLUSTER_DATA_CACHE_DURATION) {
                         it.remove();
                         continue;
                     }
-                    if (!DBSCAN.INSTANCE.fetch(world.server.serverID, world.dimension, cpos.x, cpos.z, connection).isPresent()) {
+                    if (DBSCAN.INSTANCE.clusterMemberWithinRenderDistance(world.server.serverID, world.dimension, cpos.x, cpos.z, connection)) {
+                        clusterMembershipConfirmed.add(cpos);
+                    } else {
                         it.remove();
                         clusterNonmembershipConfirmedAtCache.put(cpos, now);
                     }
@@ -221,9 +235,13 @@ public class SlurpManager {
         clusterHit.values().removeIf(ts -> ts < now - RENEW_AGE);
     }
 
-    public void clusterUpdate(ChunkPos cpos) {
+    public void clusterUpdate(ChunkPos cpos) { // dbscan informing us of a cluster update
         synchronized (ingestLock) {
-            clusterNonmembershipConfirmedAtCache.remove(cpos);
+            for (int dx = -4; dx <= 4; dx++) {
+                for (int dz = -4; dz <= 4; dz++) { // due to our ranged check we need to invalidate EVERY nearby CNCAC member
+                    clusterNonmembershipConfirmedAtCache.remove(cpos.add(dx, dz));
+                }
+            }
         }
     }
 
@@ -247,7 +265,7 @@ public class SlurpManager {
     }
 
     private synchronized void arbitraryHit(ChunkPos cpos, boolean internal) {
-        if (internal || DBSCAN.INSTANCE.aggregateEligible(cpos)) {
+        if (DBSCAN.INSTANCE.aggregateEligible(cpos)) {
             ingest.add(new ChunkPosWithTimestamp(cpos));
         }
         ResumeDataForChunk data = askedAndGotUnloadedResponse.remove(cpos);
