@@ -58,7 +58,7 @@ CREATE TABLE player_sessions
 );
 CREATE INDEX player_sessions_range
     ON player_sessions
-        USING GiST (range);
+        USING GiST (server_id, range);
 CREATE INDEX player_sessions_by_leave
     ON player_sessions (server_id, player_id, UPPER(range));
 
