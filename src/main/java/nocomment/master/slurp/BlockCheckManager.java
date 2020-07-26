@@ -62,9 +62,17 @@ public class BlockCheckManager {
         }
     }
 
+    public enum BlockEventType {
+        UNLOADED,
+        FIRST_TIME,
+        MATCHES_PREV,
+        UPDATED,
+        CACHED
+    }
+
     @FunctionalInterface
     public interface BlockListener {
-        void accept(OptionalInt state, boolean updated);
+        void accept(OptionalInt state, BlockEventType type);
     }
 
     private synchronized BlockCheckStatus get(BlockPos pos) {
@@ -207,7 +215,7 @@ public class BlockCheckManager {
             // first, check if cached loaded (e.g. from db)
             if (blockState.isPresent() && responseAt > mustBeNewerThan) {
                 OptionalInt state = blockState;
-                NoComment.executor.execute(() -> listener.accept(state, false));
+                NoComment.executor.execute(() -> listener.accept(state, BlockEventType.CACHED));
                 return;
             }
             // then, check if cached unloaded
@@ -216,7 +224,7 @@ public class BlockCheckManager {
                 // if this is unloaded, since the newer than, and not older than a real response
                 // then that's what we do
                 onResponseInternal(OptionalInt.empty(), unloadedAt.getAsLong());
-                NoComment.executor.execute(() -> listener.accept(OptionalInt.empty(), false));
+                NoComment.executor.execute(() -> listener.accept(OptionalInt.empty(), BlockEventType.UNLOADED));
                 return;
             }
             listeners.add(listener);
@@ -248,7 +256,16 @@ public class BlockCheckManager {
             if (responseAt >= timestamp) {
                 return;
             }
-            boolean updated = state.isPresent() && blockState.isPresent() && blockState.getAsInt() != state.getAsInt();
+            BlockEventType type;
+            if (!state.isPresent()) {
+                type = BlockEventType.UNLOADED;
+            } else if (!blockState.isPresent()) {
+                type = BlockEventType.FIRST_TIME;
+            } else if (state.getAsInt() == blockState.getAsInt()) {
+                type = BlockEventType.MATCHES_PREV;
+            } else {
+                type = BlockEventType.UPDATED;
+            }
             if (state.isPresent()) {
                 responseAt = timestamp;
                 blockState = state;
@@ -258,7 +275,7 @@ public class BlockCheckManager {
             inFlight.forEach(PriorityDispatchable::cancel); // unneeded
             inFlight.clear();
             for (BlockListener listener : listeners) {
-                NoComment.executor.execute(() -> listener.accept(state, updated));
+                NoComment.executor.execute(() -> listener.accept(state, type));
             }
             listeners.clear();
         }

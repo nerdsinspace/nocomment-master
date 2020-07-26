@@ -282,7 +282,7 @@ public class SlurpManager {
         return askedAndGotUnloadedResponse.computeIfAbsent(cpos, cpos0 -> new ResumeDataForChunk());
     }
 
-    private synchronized void blockRecv(BlockPos pos, OptionalInt state, boolean updated, int[] chunkData) {
+    private synchronized void blockRecv(BlockPos pos, OptionalInt state, BlockCheckManager.BlockEventType type, int[] chunkData) {
         ChunkPos cpos = new ChunkPos(pos);
         ResumeDataForChunk data = getData(cpos);
 
@@ -327,10 +327,15 @@ public class SlurpManager {
         boolean expand = false;
         boolean expandBrush = false;
         // if "updated" is true, we will always expand in brush mode, because that means the actual world changed
-        if (updated) {
+        if (type == BlockCheckManager.BlockEventType.UPDATED) {
+            System.out.println("Expanding " + pos + " in brush mode");
             expand = true;
             expandBrush = true;
         } else { // either previous is null, or previous==current
+            if (type == BlockCheckManager.BlockEventType.FIRST_TIME) {
+                // first time matching graduates expand to expandBrush but it doesn't change something that matches generator
+                expandBrush = true;
+            }
             if (chunkData != null && blockState != expected) { // only if we actually have chunkData
                 if (!(isStone(blockState) && isStone(expected))) { // stone variants are a troll, don't expand them
                     expand = true;
@@ -339,9 +344,6 @@ public class SlurpManager {
             // if current == expected, and updated is false, then there is absolutely no new information here
         }
         if (expand) {
-            if (expandBrush) {
-                System.out.println("Expanding " + pos + " in brush mode");
-            }
             for (int x = -1; x <= 1; x++) {
                 for (int y = -1; y <= 1; y++) {
                     for (int z = -1; z <= 1; z++) {
@@ -427,11 +429,11 @@ public class SlurpManager {
     }
 
     private void doRawAsk(long mustBeNewerThan, BlockPos pos, int priority) {
-        world.blockCheckManager.requestBlockState(mustBeNewerThan, pos, priority, (state, updated) -> {
+        world.blockCheckManager.requestBlockState(mustBeNewerThan, pos, priority, (state, type) -> {
             if (chunkManager == null) {
-                blockRecvExecutor.execute(() -> blockRecv(pos, state, updated, null));
+                blockRecvExecutor.execute(() -> blockRecv(pos, state, type, null));
             } else {
-                chunkManager.getChunk(new ChunkPos(pos)).thenAcceptAsync(chunkData -> blockRecv(pos, state, updated, chunkData), blockRecvExecutor);
+                chunkManager.getChunk(new ChunkPos(pos)).thenAcceptAsync(chunkData -> blockRecv(pos, state, type, chunkData), blockRecvExecutor);
             }
         });
     }
