@@ -92,11 +92,12 @@ enum Aggregator {
         System.out.println("DBSCAN aggregator triggered");
         try (Connection connection = Database.getConnection()) {
             connection.setAutoCommit(false);
-            long lastProcessedHitID;
+            long lastProcessedHitID = 0;
             try (PreparedStatement stmt = connection.prepareStatement("SELECT last_processed_hit_id FROM dbscan_progress");
                  ResultSet rs = stmt.executeQuery()) {
-                rs.next();
-                lastProcessedHitID = rs.getLong("last_processed_hit_id");
+                if (rs.next()) {
+                    lastProcessedHitID = rs.getLong("last_processed_hit_id");
+                }
             }
             long lastRealHitID;
             try (PreparedStatement stmt = connection.prepareStatement("SELECT MAX(id) AS max_id FROM hits");

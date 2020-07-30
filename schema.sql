@@ -83,7 +83,7 @@ CREATE INDEX hits_loc_interesting
     ON hits (x, z) WHERE ABS(x) > 100 AND ABS(z) > 100 AND ABS(ABS(x) - ABS(z)) > 100 AND
                          x :: bigint * x :: bigint + z :: bigint * z :: bigint > 1000 * 1000;
 
-CREATE UNLOGGED TABLE last_by_server
+CREATE TABLE last_by_server
 (
     server_id  SMALLINT PRIMARY KEY,
     created_at BIGINT NOT NULL,
@@ -177,7 +177,7 @@ ALTER TABLE tracks
     CLUSTER ON track_endings;
 CLUSTER tracks;
 
-CREATE UNLOGGED TABLE dbscan
+CREATE TABLE dbscan
 (
     id              SERIAL PRIMARY KEY,
 
@@ -252,15 +252,12 @@ CREATE AGGREGATE range_union_cardinality (int8range) (
     finalfunc = _range_union_cardinality
     );
 
-CREATE UNLOGGED TABLE dbscan_progress
+CREATE TABLE dbscan_progress
 (
     last_processed_hit_id BIGINT NOT NULL
 );
 
-INSERT INTO dbscan_progress (last_processed_hit_id)
-VALUES (0);
-
-CREATE UNLOGGED TABLE dbscan_to_update
+CREATE TABLE dbscan_to_update
 (
     dbscan_id       INTEGER PRIMARY KEY,
     updatable_lower BIGINT NOT NULL,
@@ -304,9 +301,6 @@ CREATE UNLOGGED TABLE track_associator_progress
 (
     max_updated_at_processed BIGINT NOT NULL
 );
-
-INSERT INTO track_associator_progress
-VALUES (0);
 
 CREATE TABLE blocks
 (

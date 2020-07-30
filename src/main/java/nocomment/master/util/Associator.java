@@ -53,11 +53,12 @@ public enum Associator {
     public boolean run() {
         try (Connection connection = Database.getConnection()) {
             connection.setAutoCommit(false);
-            long prevFence;
+            long prevFence = 0;
             try (PreparedStatement stmt = connection.prepareStatement("SELECT max_updated_at_processed FROM track_associator_progress");
                  ResultSet rs = stmt.executeQuery()) {
-                rs.next();
-                prevFence = rs.getLong("max_updated_at_processed");
+                if (rs.next()) {
+                    prevFence = rs.getLong("max_updated_at_processed");
+                }
             }
             if (prevFence == 0) {
                 // calculate it for real
