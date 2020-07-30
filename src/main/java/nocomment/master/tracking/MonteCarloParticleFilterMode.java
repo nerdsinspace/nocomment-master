@@ -1,5 +1,6 @@
 package nocomment.master.tracking;
 
+import io.prometheus.client.Counter;
 import nocomment.master.util.ChunkPos;
 import nocomment.master.util.LoggingExecutor;
 
@@ -12,6 +13,26 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class MonteCarloParticleFilterMode extends AbstractFilterMode {
+
+    private static final Counter failures = Counter.build()
+            .name("monte_carlo_failures_total")
+            .help("Steps with no hits nor misses")
+            .register();
+
+    private static final Counter timeouts = Counter.build()
+            .name("monte_carlo_timeouts_total")
+            .help("Filters killed for 120 seconds of no responses")
+            .register();
+
+    private static final Counter noGuesses = Counter.build()
+            .name("monte_carlo_no_guesses_total")
+            .help("Filters killed for no guesses")
+            .register();
+
+    private static final Counter missesCtr = Counter.build()
+            .name("monte_carlo_misses_total")
+            .help("Steps with no hits, just misses")
+            .register();
 
     private static final boolean GUI = false;
     private static final int M = 1000;
@@ -43,9 +64,11 @@ public class MonteCarloParticleFilterMode extends AbstractFilterMode {
     @Override
     public List<ChunkPos> updateStep(List<ChunkPos> hits, List<ChunkPos> misses) {
         if (hits.isEmpty() && misses.isEmpty()) {
+            failures.inc();
             System.out.println("Maybe offline monte :(");
             // maybe we're offline
             if (iterationsWithoutAnything++ > 120) {
+                timeouts.inc();
                 System.out.println("Offine for 120 seconds, killing track");
                 // the bot itself going offline then coming back online will resume the paused filters
                 return null;
@@ -73,6 +96,7 @@ public class MonteCarloParticleFilterMode extends AbstractFilterMode {
                 }
             }
             //System.out.println("Warning: got no hits");
+            missesCtr.inc();
             numGuesses += 7;
             iterationsWithoutHits++;
             if (iterationsWithoutHits >= 5) {
@@ -88,6 +112,7 @@ public class MonteCarloParticleFilterMode extends AbstractFilterMode {
         this.renderMisses = misses;
         List<ChunkPos> guesses = guessLocation(numGuesses);
         if (guesses.isEmpty()) {
+            noGuesses.inc();
             return null;
         }
         return guesses;

@@ -1,5 +1,6 @@
 package nocomment.master.slurp;
 
+import io.prometheus.client.Histogram;
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.db.Database;
@@ -18,6 +19,10 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 public class BlockCheckManager {
+    private static final Histogram blockPruneLatencies = Histogram.build()
+            .name("block_prune_latencies")
+            .help("Block prune latencies")
+            .register();
     public final World world;
     private final Map<ChunkPos, Map<BlockPos, BlockCheckStatus>> statuses = new HashMap<>();
     private final Map<ChunkPos, Long> observedUnloaded = new HashMap<>();
@@ -28,14 +33,14 @@ public class BlockCheckManager {
     // check status are spammed WAY too fast
     // this executor is for database fetches from blocks or signs
     // to avoid overwhelming the main executor with literally thousands of DB queries for blocks and signs from the past
-    public static Executor checkStatusExecutor = new LoggingExecutor(Executors.newFixedThreadPool(4));
+    public static Executor checkStatusExecutor = new LoggingExecutor(Executors.newFixedThreadPool(4), "check_status");
 
-    public static Executor unloadObservationExecutor = new LoggingExecutor(Executors.newFixedThreadPool(4));
+    public static Executor unloadObservationExecutor = new LoggingExecutor(Executors.newFixedThreadPool(4), "unload_observation");
 
     public BlockCheckManager(World world) {
         this.world = world;
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::update), 0, 250, TimeUnit.MILLISECONDS);
-        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::blockPrune), 30, 60, TimeUnit.MINUTES);
+        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> blockPruneLatencies.time(this::blockPrune)), 30, 60, TimeUnit.MINUTES);
     }
 
     private void update() {

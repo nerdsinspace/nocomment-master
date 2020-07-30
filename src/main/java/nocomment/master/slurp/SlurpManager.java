@@ -1,5 +1,8 @@
 package nocomment.master.slurp;
 
+import io.prometheus.client.Counter;
+import io.prometheus.client.Gauge;
+import io.prometheus.client.Histogram;
 import nocomment.master.World;
 import nocomment.master.clustering.DBSCAN;
 import nocomment.master.db.Database;
@@ -17,6 +20,23 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 public class SlurpManager {
+    private static final Gauge slurpData = Gauge.build()
+            .name("slurp_data")
+            .help("Sizes of various slurp data structures")
+            .labelNames("field")
+            .register();
+    private static final Counter slurpedChunks = Counter.build()
+            .name("slurped_chunks_total")
+            .help("Number of chunks we've seeded slurping in")
+            .register();
+    private static final Histogram asksPruneLatencies = Histogram.build()
+            .name("slurp_asks_prune_latencies")
+            .help("Asks prune latencies")
+            .register();
+    private static final Histogram metricsUpdateLatencies = Histogram.build()
+            .name("slurp_metrics_update_latencies")
+            .help("Metrics update latencies")
+            .register();
     private static final long SIGN_AGE = TimeUnit.DAYS.toMillis(3);
     private static final long BRUSH_AGE = TimeUnit.MINUTES.toMillis(30);
     private static final long EXPAND_AGE = TimeUnit.DAYS.toMillis(21);
@@ -27,7 +47,7 @@ public class SlurpManager {
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
     private static final long NUM_RENEWALS = 4;
     public final World world;
-    private final Executor blockRecvExecutor = new LoggingExecutor(Executors.newSingleThreadExecutor()); // blockRecv is synchronized so we only need one
+    private final Executor blockRecvExecutor = new LoggingExecutor(Executors.newSingleThreadExecutor(), "block_recv"); // blockRecv is synchronized so we only need one
     private final ChunkManager chunkManager;
     private final Map<ChunkPos, ResumeDataForChunk> askedAndGotUnloadedResponse = new HashMap<>();
     private final Map<BlockPos, AskStatus> allAsks = new HashMap<>();
@@ -57,16 +77,35 @@ public class SlurpManager {
             ingestIntoClusterHit();
             scanClusterHit();
         }), 10000, 250, TimeUnit.MILLISECONDS);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::updateMetrics), 0, 1, TimeUnit.SECONDS);
     }
 
     private synchronized void pruneBlocks() {
         int beforeSz = allAsks.size();
         long now = System.currentTimeMillis();
+        Histogram.Timer timer = asksPruneLatencies.startTimer();
         synchronized (world.blockCheckManager) {
             allAsks.entrySet().removeIf(ask -> ask.getValue().lastDirectAsk < now - BlockCheckManager.PRUNE_AGE && world.blockCheckManager.hasBeenRemoved(ask.getKey()));
         }
+        timer.observeDuration();
+        long mid = System.currentTimeMillis();
         int total = askedAndGotUnloadedResponse.values().stream().mapToInt(rd -> rd.failedSignChecks.size() + rd.failedBlockChecks.size()).sum();
-        System.out.println("Took " + (System.currentTimeMillis() - now) + "ms to prune allAsks keySet. Size went from " + beforeSz + " to " + allAsks.size() + ". HMC: " + heightMapCache.size() + ". CMC: " + clusterMembershipConfirmed.size() + ". CNCAC: " + clusterNonmembershipConfirmedAtCache.size() + ". CH: " + clusterHit.size() + ". RS: " + renewalSchedule.size() + ". SAF: " + signsAskedFor.size() + ". AAGUR: " + askedAndGotUnloadedResponse.size() + ". AAGURT: " + total);
+        System.out.println("Took " + (mid - now) + "ms to prune allAsks keySet. Took " + (System.currentTimeMillis() - mid) + "ms to check AAGURT. Size went from " + beforeSz + " to " + allAsks.size() + ". HMC: " + heightMapCache.size() + ". CMC: " + clusterMembershipConfirmed.size() + ". CNCAC: " + clusterNonmembershipConfirmedAtCache.size() + ". CH: " + clusterHit.size() + ". RS: " + renewalSchedule.size() + ". SAF: " + signsAskedFor.size() + ". AAGUR: " + askedAndGotUnloadedResponse.size() + ". AAGURT: " + total);
+    }
+
+    private synchronized void updateMetrics() {
+        Histogram.Timer timer = metricsUpdateLatencies.startTimer();
+        slurpData.labels("all_asks").set(allAsks.size());
+        slurpData.labels("height_map_cache").set(heightMapCache.size());
+        slurpData.labels("cluster_membership_confirmed").set(clusterMembershipConfirmed.size());
+        slurpData.labels("cluster_nonmembership_confirmed_at_cache").set(clusterNonmembershipConfirmedAtCache.size());
+        slurpData.labels("cluster_hit").set(clusterHit.size());
+        slurpData.labels("renewal_schedule").set(renewalSchedule.size());
+        // signs :(
+        slurpData.labels("asked_and_got_unloaded_response").set(askedAndGotUnloadedResponse.size());
+        int total = askedAndGotUnloadedResponse.values().stream().mapToInt(rd -> rd.failedSignChecks.size() + rd.failedBlockChecks.size()).sum();
+        slurpData.labels("asked_and_got_unloaded_response_total").set(total);
+        timer.observeDuration();
     }
 
     private void scanClusterHit() {
@@ -86,6 +125,7 @@ public class SlurpManager {
             return;
         }
         System.out.println("Beginning slurp on chunk " + cpos);
+        slurpedChunks.inc();
         // again, no need for a lock on renewalSchedule since only this touches it
         renewalSchedule.put(cpos, now + RENEW_INTERVAL);
         Random random = new Random();
@@ -259,12 +299,12 @@ public class SlurpManager {
         }
     }
 
-    public void arbitraryHit(ChunkPos cpos) {
+    public void arbitraryHitExternal(ChunkPos cpos) {
         world.blockCheckManager.loaded(cpos);
-        arbitraryHit(cpos, false);
+        arbitraryHit(cpos);
     }
 
-    private synchronized void arbitraryHit(ChunkPos cpos, boolean internal) {
+    private synchronized void arbitraryHit(ChunkPos cpos) {
         if (DBSCAN.INSTANCE.aggregateEligible(cpos)) {
             ingest.add(new ChunkPosWithTimestamp(cpos));
         }
@@ -298,7 +338,7 @@ public class SlurpManager {
         // a hit
         // first, fixup unloaded responses
         data.failedBlockChecks.remove(pos); // don't double ask
-        arbitraryHit(cpos, true); // ask for the OTHER pending checks on this chunk
+        arbitraryHit(cpos); // ask for the OTHER pending checks on this chunk
 
         // now, what were we expecting?
         int blockState = state.getAsInt();
@@ -381,7 +421,7 @@ public class SlurpManager {
             return;
         }
         getData(cpos).failedSignChecks.remove(pos); // success
-        arbitraryHit(cpos, true);
+        arbitraryHit(cpos);
     }
 
     private static boolean isSign(int blockState) {

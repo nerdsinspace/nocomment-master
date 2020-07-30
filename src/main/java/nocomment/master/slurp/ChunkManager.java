@@ -1,5 +1,7 @@
 package nocomment.master.slurp;
 
+import io.prometheus.client.Counter;
+import io.prometheus.client.Gauge;
 import nocomment.master.NoComment;
 import nocomment.master.util.ChunkPos;
 
@@ -16,16 +18,39 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 public class ChunkManager {
+    private static final Gauge chunkCache = Gauge.build()
+            .name("chunk_manager_cache")
+            .help("Number of chunk positions by state")
+            .labelNames("state")
+            .register();
+
+    private static final Counter chunkRequests = Counter.build()
+            .name("chunk_manager_requests_total")
+            .help("Number of chunks requested")
+            .register();
+
+    private static final Counter chunkResponses = Counter.build()
+            .name("chunk_manager_responses_total")
+            .help("Number of chunks received")
+            .register();
+
     private final int MAX_SIZE = 2048; // about 500MB RAM
     private final Map<ChunkPos, Long> lastAccessed = new HashMap<>();
     private final Map<ChunkPos, CompletableFuture<int[]>> cache = new HashMap<>();
     private final LinkedBlockingQueue<ChunkPos> queue = new LinkedBlockingQueue<>();
 
     public synchronized CompletableFuture<int[]> getChunk(ChunkPos pos) {
+        chunkRequests.inc();
         lastAccessed.put(pos, System.currentTimeMillis());
         return cache.computeIfAbsent(pos, $ -> {
             queue.add(pos);
-            return new CompletableFuture<>(); // this is OK since we hold the lock until after it's inserted
+            chunkCache.labels("queued").inc();
+            CompletableFuture<int[]> ret = new CompletableFuture<>(); // this is OK since we hold the lock until after it's inserted
+            ret.thenAccept(ignored -> {
+                chunkCache.labels("queued").dec();
+                chunkCache.labels("done").inc();
+            });
+            return ret;
         });
     }
 
@@ -69,6 +94,7 @@ public class ChunkManager {
             }
             //System.out.println("Received chunk from world gen: " + pos);
             //System.out.println("Cache map size is " + cache.size() + " and total age is " + num);
+            chunkResponses.inc();
             synchronized (this) {
                 cache.get(pos).complete(ret);
                 if (num++ > MAX_SIZE) { // obv can't use cache.size
@@ -76,7 +102,10 @@ public class ChunkManager {
                             .filter(entry -> entry.getValue().isDone())
                             .map(Map.Entry::getKey)
                             .min(Comparator.comparingLong(lastAccessed::get))
-                            .ifPresent(cache::remove);
+                            .ifPresent(key -> {
+                                chunkCache.labels("done").dec();
+                                cache.remove(key);
+                            });
                 }
             }
             queue.poll();

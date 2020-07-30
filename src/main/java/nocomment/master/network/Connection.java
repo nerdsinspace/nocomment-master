@@ -1,5 +1,6 @@
 package nocomment.master.network;
 
+import io.prometheus.client.Gauge;
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.db.Database;
@@ -22,6 +23,12 @@ import java.util.function.Consumer;
  * When a client changes dimension or server, it will drop the connection and make a new one.
  */
 public abstract class Connection {
+
+    private static final Gauge activeConnections = Gauge.build()
+            .name("active_connections")
+            .help("Number of active and valid connections")
+            .labelNames("dimension", "server", "identity")
+            .register();
 
     private static final long MIN_READ_INTERVAL_MS = TimeUnit.SECONDS.toMillis(5);
 
@@ -54,6 +61,8 @@ public abstract class Connection {
             clearRecentChecks();
             Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
         }), 0, 1, TimeUnit.SECONDS);
+        Gauge.Child ctr = activeConnections.labels(world.dim(), world.server.hostname, playerID + "");
+        ctr.inc();
         while (true) {
             try {
                 read();
@@ -63,6 +72,7 @@ public abstract class Connection {
                 closeUnderlying();
                 world.connectionClosed(this); // redistribute tasks to the other connections
                 future.cancel(false);
+                ctr.dec();
                 break;
             }
         }

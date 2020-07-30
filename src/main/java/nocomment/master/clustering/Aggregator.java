@@ -1,5 +1,6 @@
 package nocomment.master.clustering;
 
+import io.prometheus.client.Gauge;
 import nocomment.master.db.Database;
 import nocomment.master.util.ChunkPos;
 
@@ -12,6 +13,10 @@ import java.util.concurrent.TimeUnit;
 
 enum Aggregator {
     INSTANCE;
+    private static final Gauge aggregatorLag = Gauge.build()
+            .name("aggregator_lag")
+            .help("Hits not yet aggregated")
+            .register();
     private static final long DBSCAN_TIMESTAMP_INTERVAL = TimeUnit.HOURS.toMillis(1);
     private static final long MAX_GAP = TimeUnit.MINUTES.toMillis(2);
     private static final long MIN_DURATION_FOR_IGNORE = DBSCAN.MIN_OCCUPANCY_DURATION;
@@ -77,11 +82,7 @@ enum Aggregator {
         Set<String> marked = new HashSet<>();
         long start = System.currentTimeMillis();
         long num = 0;
-        while (true) {
-            if (!aggregateHits(marked)) {
-                // done
-                break;
-            }
+        while (aggregateHits(marked)) {
             num += LIMIT_SZ;
             System.out.println("MS per was approx " + (double) (System.currentTimeMillis() - start) / (double) num);
         }
@@ -104,6 +105,7 @@ enum Aggregator {
                 lastRealHitID = rs.getLong("max_id");
             }
             long lag = lastRealHitID - lastProcessedHitID;
+            aggregatorLag.set(lag);
             if (lag < 10000) {
                 System.out.println("DBSCAN aggregator not running, only " + lag + " hits behind real time");
                 return false;

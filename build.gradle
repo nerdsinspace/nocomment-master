@@ -23,4 +23,7 @@ jar {
 dependencies {
     compile 'org.postgresql:postgresql:42.2.0'
     compile 'org.apache.commons:commons-dbcp2:2.7.0'
+    compile 'io.prometheus:simpleclient:0.9.0'
+    compile 'io.prometheus:simpleclient_hotspot:0.9.0'
+    compile 'io.prometheus:simpleclient_httpserver:0.9.0'
 }

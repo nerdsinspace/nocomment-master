@@ -1,45 +1,66 @@
 package nocomment.master.util;
 
+import io.prometheus.client.Counter;
+import io.prometheus.client.Gauge;
+import io.prometheus.client.Histogram;
 import nocomment.master.tracking.TrackyTrackyManager;
 
-import java.util.Random;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
 public class LoggingExecutor implements Executor {
+    private static final Gauge globalThreads = Gauge.build()
+            .name("global_threads")
+            .help("Number of executing threads globally")
+            .register();
+    private static final Counter loggingExecutorExceptions = Counter.build()
+            .name("executor_exceptions_total")
+            .help("Number of executor exceptions globally")
+            .register();
+
+    private static final Gauge pooledThreads = Gauge.build()
+            .name("pooled_threads")
+            .help("Number of threads by state by pool")
+            .labelNames("pool", "state")
+            .register();
+
+    private static final Histogram poolLatencies = Histogram.build()
+            .name("pool_latencies")
+            .help("Pool latencies")
+            .labelNames("pool")
+            .register();
+
     private final Executor internal;
+    private final String name;
 
-    public LoggingExecutor(Executor internal) {
+    public LoggingExecutor(Executor internal, String name) {
         this.internal = internal;
+        this.name = name;
+
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(wrap(this::checkHealth), 0, 100, TimeUnit.MILLISECONDS);
     }
 
-    public LoggingExecutor(Executor internal, long warnAfter) {
-        this(internal);
-
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(wrap(() -> checkHealth(warnAfter)), 0, 100, TimeUnit.MILLISECONDS);
-    }
-
-    private void checkHealth(long warnAfter) {
-        long now = System.currentTimeMillis();
-        execute(() -> {
-            long then = System.currentTimeMillis();
-            long duration = then - now;
-            if (duration > warnAfter) {
-                System.out.println("Warning: executor lag is " + duration + "ms which is more than " + warnAfter + "ms");
-            }
-            if (new Random().nextInt(100) == 0) {
-                System.out.println("Executor delay is " + duration + "ms");
-            }
-        });
+    private void checkHealth() {
+        Histogram.Timer timer = poolLatencies.labels(name).startTimer();
+        execute(timer::observeDuration);
     }
 
     @Override
     public void execute(Runnable command) {
-        internal.execute(wrap(command));
+        pooledThreads.labels(name, "queued").inc();
+        Runnable wrapped = wrap(command);
+        internal.execute(() -> {
+            pooledThreads.labels(name, "queued").dec();
+            pooledThreads.labels(name, "executing").inc();
+            wrapped.run();
+            pooledThreads.labels(name, "executing").dec();
+            pooledThreads.labels(name, "done").inc();
+        });
     }
 
     public static Runnable wrap(Runnable runnable) {
         return () -> {
+            globalThreads.inc(); // includes scheduled execution!
             try {
                 try {
                     runnable.run();
@@ -51,8 +72,11 @@ public class LoggingExecutor implements Executor {
                     System.exit(1);
                 }
             } catch (Throwable th) {
+                loggingExecutorExceptions.inc();
                 th.printStackTrace();
                 throw th;
+            } finally {
+                globalThreads.dec();
             }
         };
     }

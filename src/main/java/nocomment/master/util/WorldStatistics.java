@@ -1,5 +1,8 @@
 package nocomment.master.util;
 
+import io.prometheus.client.Counter;
+import io.prometheus.client.Histogram;
+import nocomment.master.World;
 import nocomment.master.task.Task;
 
 import java.util.*;
@@ -7,9 +10,38 @@ import java.util.concurrent.TimeUnit;
 
 public class WorldStatistics {
 
+    private static final Counter taskOutcomes = Counter.build()
+            .name("task_outcomes_total")
+            .help("Outcomes of task based chunk checks")
+            .labelNames("dimension", "priority", "outcome")
+            .register();
+
+    private static final Counter taskDispatches = Counter.build()
+            .name("task_dispatches_total")
+            .help("Dispatches of task based chunk checks")
+            .labelNames("dimension", "priority")
+            .register();
+
+    private static final Histogram taskLatencies = Histogram.build()
+            .name("task_latencies")
+            .help("Task latencies")
+            .labelNames("dimension", "priority")
+            .register();
+
+    private static final Counter blockOutcomes = Counter.build()
+            .name("block_outcomes_total")
+            .help("Outcomes of block checks")
+            .labelNames("dimension", "priority", "outcome")
+            .register();
+
+    private final World world;
     private final Map<Integer, PriorityLevelStats> stats = new HashMap<>();
     private int numSignHits;
     private int numSignMisses;
+
+    public WorldStatistics(World world) {
+        this.world = world;
+    }
 
     private PriorityLevelStats stats(int priority) {
         if (!Thread.holdsLock(this)) {
@@ -120,29 +152,45 @@ public class WorldStatistics {
 
             private long dispatchedAt;
             private long completedAt;
+
+            private double elapsedSeconds() {
+                return (completedAt - dispatchedAt) / 1000d;
+            }
         }
     }
 
     public synchronized void hitReceived(int priority) {
         stats(priority).numTaskHits++;
+
+        taskOutcomes.labels(world.dim(), priority + "", "hit").inc();
     }
 
     public synchronized void taskCompleted(Task task) {
         PriorityLevelStats stats = stats(task.priority);
         stats.numTaskChecksCompleted += task.count;
-        stats.timingData.add(stats.new TaskTimingData(task));
+        PriorityLevelStats.TaskTimingData data = stats.new TaskTimingData(task);
+        stats.timingData.add(data);
+
+        taskOutcomes.labels(world.dim(), task.priority + "", "done").inc(task.count);
+        taskLatencies.labels(world.dim(), task.priority + "").observe(data.elapsedSeconds());
     }
 
     public synchronized void taskDispatched(int priority, int count) {
         stats(priority).numTaskChecksDispatched += count;
+
+        taskDispatches.labels(world.dim(), priority + "").inc(count);
     }
 
     public synchronized void blockReceived(int priority) {
         stats(priority).numBlockHits++;
+
+        blockOutcomes.labels(world.dim(), priority + "", "hit").inc();
     }
 
     public synchronized void blockUnloaded(int priority) {
         stats(priority).numBlockMisses++;
+
+        blockOutcomes.labels(world.dim(), priority + "", "miss").inc();
     }
 
     public synchronized void signHit() {

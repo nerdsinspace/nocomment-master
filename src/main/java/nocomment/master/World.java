@@ -37,7 +37,7 @@ public class World {
         this.blockCheckManager = new BlockCheckManager(this);
         this.taskSendSignal = new LinkedBlockingQueue<>();
         this.signManager = new SignManager(this);
-        this.stats = new WorldStatistics();
+        this.stats = new WorldStatistics(this);
         if (dimension == 0) {
             this.slurpManager = new SlurpManager(this);
         } else {
@@ -183,7 +183,7 @@ public class World {
         NoComment.executor.execute(() -> {
             stats.hitReceived(prio);
             if (slurpManager != null) {
-                slurpManager.arbitraryHit(pos); // notify slurper that a filter has hit this chunk
+                slurpManager.arbitraryHitExternal(pos); // notify slurper that a filter has hit this chunk
             }
         });
     }
@@ -192,5 +192,9 @@ public class World {
         if (slurpManager != null) {
             slurpManager.clusterUpdate(cpos);
         }
+    }
+
+    public String dim() {
+        return dimension + "";
     }
 }
