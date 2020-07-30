@@ -83,7 +83,7 @@ CREATE INDEX hits_loc_interesting
     ON hits (x, z) WHERE ABS(x) > 100 AND ABS(z) > 100 AND ABS(ABS(x) - ABS(z)) > 100 AND
                          x :: bigint * x :: bigint + z :: bigint * z :: bigint > 1000 * 1000;
 
-CREATE TABLE last_by_server
+CREATE UNLOGGED TABLE last_by_server
 (
     server_id  SMALLINT PRIMARY KEY,
     created_at BIGINT NOT NULL,
@@ -177,7 +177,7 @@ ALTER TABLE tracks
     CLUSTER ON track_endings;
 CLUSTER tracks;
 
-CREATE TABLE dbscan
+CREATE UNLOGGED TABLE dbscan
 (
     id              SERIAL PRIMARY KEY,
 
@@ -252,7 +252,7 @@ CREATE AGGREGATE range_union_cardinality (int8range) (
     finalfunc = _range_union_cardinality
     );
 
-CREATE TABLE dbscan_progress
+CREATE UNLOGGED TABLE dbscan_progress
 (
     last_processed_hit_id BIGINT NOT NULL
 );
@@ -260,7 +260,7 @@ CREATE TABLE dbscan_progress
 INSERT INTO dbscan_progress (last_processed_hit_id)
 VALUES (0);
 
-CREATE TABLE dbscan_to_update
+CREATE UNLOGGED TABLE dbscan_to_update
 (
     dbscan_id       INTEGER PRIMARY KEY,
     updatable_lower BIGINT NOT NULL,
@@ -272,7 +272,7 @@ CREATE TABLE dbscan_to_update
 
 CREATE INDEX dbscan_to_update_by_schedule ON dbscan_to_update (LEAST(updatable_lower, updatable_upper));
 
-CREATE TABLE associations
+CREATE UNLOGGED TABLE associations
 (
     cluster_id  INTEGER          NOT NULL,
     player_id   INTEGER          NOT NULL,
@@ -300,7 +300,7 @@ FROM (SELECT cluster_id, player_id, SUM(association) AS association
       GROUP BY player_id, cluster_id) tmp
          INNER JOIN players ON players.id = tmp.player_id);
 
-CREATE TABLE track_associator_progress
+CREATE UNLOGGED TABLE track_associator_progress
 (
     max_updated_at_processed BIGINT NOT NULL
 );
@@ -335,7 +335,7 @@ CREATE INDEX blocks_by_chunk
 
 CREATE TYPE statuses_enum AS ENUM ('OFFLINE', 'QUEUE', 'ONLINE');
 
-CREATE TABLE statuses
+CREATE UNLOGGED TABLE statuses
 (
     player_id   INTEGER       NOT NULL,
     curr_status statuses_enum NOT NULL,
