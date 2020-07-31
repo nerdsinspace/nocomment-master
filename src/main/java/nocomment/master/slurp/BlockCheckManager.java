@@ -181,8 +181,8 @@ public class BlockCheckManager {
             connection.setAutoCommit(false);
             for (BlockCheckStatus stat : statuses) {
                 stat.checkDatabase(stmt);
-                checksRan.inc();
             }
+            checksRan.inc(statuses.size());
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
