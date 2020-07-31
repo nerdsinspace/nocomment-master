@@ -51,6 +51,7 @@ public class SlurpManager {
     private static final long CLUSTER_DATA_CACHE_DURATION = TimeUnit.DAYS.toMillis(1);
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
     private static final long NUM_RENEWALS = 4;
+    private static final int MAX_CHECK_STATUS_QUEUE_LENGTH = 5000;
     public final World world;
     private final Executor blockRecvExecutor = new LoggingExecutor(Executors.newSingleThreadExecutor(), "block_recv"); // blockRecv is synchronized so we only need one
     private final ChunkManager chunkManager;
@@ -114,6 +115,13 @@ public class SlurpManager {
     }
 
     private void scanClusterHit() {
+        if (BlockCheckManager.checkStatusQueue.size() > MAX_CHECK_STATUS_QUEUE_LENGTH) {
+            slurpDelay.labels("check_queue_length").inc();
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ex) {}
+            return; // don't add fuel to the fire
+        }
         long now = System.currentTimeMillis();
         renewalSchedule.values().removeIf(ts -> ts < now);
         Optional<ChunkPos> candidates = clusterHit.entrySet()
@@ -335,16 +343,23 @@ public class SlurpManager {
         return askedAndGotUnloadedResponse.computeIfAbsent(cpos, cpos0 -> new ResumeDataForChunk());
     }
 
-    private synchronized void blockRecv(BlockPos pos, OptionalInt state, BlockCheckManager.BlockEventType type, int[] chunkData) {
+    private synchronized void blockRecv(BlockPos pos, OptionalInt state, BlockCheckManager.BlockEventType type, long timestamp, int[] chunkData) {
+        AskStatus askStat = allAsks.get(pos);
+        if (askStat != null) {
+            if (askStat.receivedAt == timestamp) {
+                return;
+            }
+            askStat.receivedAt = timestamp;
+        }
         ChunkPos cpos = new ChunkPos(pos);
         ResumeDataForChunk data = getData(cpos);
 
         if (!state.isPresent()) {
             // a miss
             // mark it as such, and we'll retry if we ever see this chunk reloaded! :)
-            if (allAsks.containsKey(pos)) {
-                data.failedBlockChecks.put(pos, new FailedAsk(allAsks.get(pos)));
-                allAsks.get(pos).response = OptionalInt.empty();
+            if (askStat != null) {
+                data.failedBlockChecks.put(pos, new FailedAsk(askStat));
+                askStat.response = OptionalInt.empty();
             }
             return;
         }
@@ -367,8 +382,8 @@ public class SlurpManager {
             //System.out.println("Shulker (blockstate " + blockState + ") at " + pos);
         }
         int expected = expected(pos, chunkData);
-        if (allAsks.containsKey(pos)) {
-            allAsks.get(pos).response = state;
+        if (askStat != null) {
+            askStat.response = state;
         }
         // important to remember that there are FOUR things at play here:
         // previous (stored in DB)
@@ -484,11 +499,11 @@ public class SlurpManager {
     }
 
     private void doRawAsk(long mustBeNewerThan, BlockPos pos, int priority) {
-        world.blockCheckManager.requestBlockState(mustBeNewerThan, pos, priority, (state, type) -> {
+        world.blockCheckManager.requestBlockState(mustBeNewerThan, pos, priority, (state, type, timestamp) -> {
             if (chunkManager == null) {
-                blockRecvExecutor.execute(() -> blockRecv(pos, state, type, null));
+                blockRecvExecutor.execute(() -> blockRecv(pos, state, type, timestamp, null));
             } else {
-                chunkManager.getChunk(new ChunkPos(pos)).thenAcceptAsync(chunkData -> blockRecv(pos, state, type, chunkData), blockRecvExecutor);
+                chunkManager.getChunk(new ChunkPos(pos)).thenAcceptAsync(chunkData -> blockRecv(pos, state, type, timestamp, chunkData), blockRecvExecutor);
             }
         });
     }
@@ -517,6 +532,7 @@ public class SlurpManager {
         long mustBeNewerThan;
         OptionalInt response;
         long lastDirectAsk;
+        long receivedAt;
     }
 
     private static class ChunkPosWithTimestamp {

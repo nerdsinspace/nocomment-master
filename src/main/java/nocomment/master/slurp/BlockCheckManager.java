@@ -1,5 +1,7 @@
 package nocomment.master.slurp;
 
+import io.prometheus.client.Counter;
+import io.prometheus.client.Gauge;
 import io.prometheus.client.Histogram;
 import nocomment.master.NoComment;
 import nocomment.master.World;
@@ -23,6 +25,14 @@ public class BlockCheckManager {
             .name("block_prune_latencies")
             .help("Block prune latencies")
             .register();
+    private static final Gauge checkStatusQueueLength = Gauge.build()
+            .name("check_status_queue_length")
+            .help("Length of the check status queue")
+            .register();
+    private static final Counter checksRan = Counter.build()
+            .name("checks_ran_total")
+            .help("Number of checks we have run")
+            .register();
     public final World world;
     private final Map<ChunkPos, Map<BlockPos, BlockCheckStatus>> statuses = new HashMap<>();
     private final Map<ChunkPos, Long> observedUnloaded = new HashMap<>();
@@ -33,7 +43,9 @@ public class BlockCheckManager {
     // check status are spammed WAY too fast
     // this executor is for database fetches from blocks or signs
     // to avoid overwhelming the main executor with literally thousands of DB queries for blocks and signs from the past
-    public static Executor checkStatusExecutor = new LoggingExecutor(Executors.newFixedThreadPool(4), "check_status");
+    public static LinkedBlockingQueue<BlockCheckStatus> checkStatusQueue = new LinkedBlockingQueue<>();
+    private static LinkedBlockingQueue<Runnable> checkStatusExecutorQueue = new LinkedBlockingQueue<>();
+    public static Executor checkStatusExecutor = new LoggingExecutor(new ThreadPoolExecutor(4, 4, 0L, TimeUnit.MILLISECONDS, checkStatusExecutorQueue), "check_status");
 
     public static Executor unloadObservationExecutor = new LoggingExecutor(Executors.newFixedThreadPool(4), "unload_observation");
 
@@ -77,7 +89,7 @@ public class BlockCheckManager {
 
     @FunctionalInterface
     public interface BlockListener {
-        void accept(OptionalInt state, BlockEventType type);
+        void accept(OptionalInt state, BlockEventType type, long timestamp);
     }
 
     private synchronized BlockCheckStatus get(BlockPos pos) {
@@ -154,6 +166,29 @@ public class BlockCheckManager {
         });
     }
 
+    private static void checkStatusConsumer() {
+        if (checkStatusQueue.isEmpty()) {
+            return;
+        }
+        List<BlockCheckStatus> statuses = new ArrayList<>(100);
+        checkStatusQueue.drainTo(statuses, 100);
+        checkStatusQueueLength.set(checkStatusQueue.size());
+        if (statuses.isEmpty()) {
+            return;
+        }
+        try (Connection connection = Database.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("SELECT block_state, created_at FROM blocks WHERE x = ? AND y = ? AND z = ? AND dimension = ? AND server_id = ? ORDER BY created_at DESC LIMIT 1")) {
+            connection.setAutoCommit(false);
+            for (BlockCheckStatus stat : statuses) {
+                stat.checkDatabase(stmt);
+                checksRan.inc();
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
     public class BlockCheckStatus {
         public final BlockPos pos;
         private int highestSubmittedPriority = Integer.MAX_VALUE;
@@ -171,7 +206,11 @@ public class BlockCheckManager {
             this.blockState = OptionalInt.empty();
             this.checkedDatabaseYet = new CompletableFuture<>();
             lastActivity = System.currentTimeMillis();
-            checkStatusExecutor.execute(this::checkDatabase);
+            checkStatusQueue.add(this);
+            checkStatusQueueLength.set(checkStatusQueue.size());
+            if (checkStatusExecutorQueue.size() < 10) {
+                checkStatusExecutor.execute(BlockCheckManager::checkStatusConsumer);
+            }
             if (!Thread.holdsLock(BlockCheckManager.this)) {
                 throw new IllegalStateException();
             }
@@ -188,9 +227,8 @@ public class BlockCheckManager {
             return maybePrunable(now) && inFlight.isEmpty() && listeners.isEmpty();
         }
 
-        private synchronized void checkDatabase() { // this synchronized is just for peace of mind, it should never actually become necessary
-            try (Connection connection = Database.getConnection();
-                 PreparedStatement stmt = connection.prepareStatement("SELECT block_state, created_at FROM blocks WHERE x = ? AND y = ? AND z = ? AND dimension = ? AND server_id = ? ORDER BY created_at DESC LIMIT 1")) {
+        private synchronized void checkDatabase(PreparedStatement stmt) throws SQLException { // this synchronized is just for peace of mind, it should never actually become necessary
+            try {
                 stmt.setInt(1, pos.x);
                 stmt.setShort(2, (short) pos.y);
                 stmt.setInt(3, pos.z);
@@ -202,9 +240,6 @@ public class BlockCheckManager {
                         responseAt = rs.getLong("created_at");
                     }
                 }
-            } catch (SQLException ex) {
-                ex.printStackTrace();
-                throw new RuntimeException(ex);
             } finally {
                 checkedDatabaseYet.complete(true);
             }
@@ -220,7 +255,7 @@ public class BlockCheckManager {
             // first, check if cached loaded (e.g. from db)
             if (blockState.isPresent() && responseAt > mustBeNewerThan) {
                 OptionalInt state = blockState;
-                NoComment.executor.execute(() -> listener.accept(state, BlockEventType.CACHED));
+                NoComment.executor.execute(() -> listener.accept(state, BlockEventType.CACHED, responseAt));
                 return;
             }
             // then, check if cached unloaded
@@ -229,7 +264,7 @@ public class BlockCheckManager {
                 // if this is unloaded, since the newer than, and not older than a real response
                 // then that's what we do
                 onResponseInternal(OptionalInt.empty(), unloadedAt.getAsLong());
-                NoComment.executor.execute(() -> listener.accept(OptionalInt.empty(), BlockEventType.UNLOADED));
+                NoComment.executor.execute(() -> listener.accept(OptionalInt.empty(), BlockEventType.UNLOADED, unloadedAt.getAsLong()));
                 return;
             }
             listeners.add(listener);
@@ -280,7 +315,7 @@ public class BlockCheckManager {
             inFlight.forEach(PriorityDispatchable::cancel); // unneeded
             inFlight.clear();
             for (BlockListener listener : listeners) {
-                NoComment.executor.execute(() -> listener.accept(state, type));
+                NoComment.executor.execute(() -> listener.accept(state, type, timestamp));
             }
             listeners.clear();
         }

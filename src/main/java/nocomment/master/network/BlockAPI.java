@@ -36,7 +36,7 @@ public class BlockAPI {
                 case 0: {
                     int priority = in.readInt();
                     long mustBeNewerThan = in.readLong();
-                    bcm.requestBlockState(mustBeNewerThan, new BlockPos(x, y, z), priority, (opt, type) -> queue.add(out -> {
+                    bcm.requestBlockState(mustBeNewerThan, new BlockPos(x, y, z), priority, (opt, type, timestamp) -> queue.add(out -> {
                         out.writeByte(0);
                         out.writeInt(x);
                         out.writeInt(y);
