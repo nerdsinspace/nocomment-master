@@ -15,6 +15,7 @@ public class StationaryFilterMode extends AbstractFilterMode {
     private int hitCount;
     private int clock;
     private int totalClock;
+    private int iterationsWithoutAnything;
     private final ChunkPos pos;
     private final Track parent;
 
@@ -28,6 +29,14 @@ public class StationaryFilterMode extends AbstractFilterMode {
     public List<ChunkPos> updateStep(List<ChunkPos> hits, List<ChunkPos> misses) {
         hits.retainAll(Collections.singleton(pos));
         misses.retainAll(Collections.singleton(pos));
+        if (hits.isEmpty() && misses.isEmpty()) {
+            if (iterationsWithoutAnything++ > 120) {
+                System.out.println("Offine for 120 seconds, killing track");
+                return null;
+            }
+        } else {
+            iterationsWithoutAnything = 0;
+        }
         if (!misses.isEmpty()) {
             return null;
         }

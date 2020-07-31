@@ -23,7 +23,7 @@ public class FilterModeTransitionController {
         switch (currMode) {
             case STATIONARY_FILTER: {
                 // the only transition for stationary filter is if it misses
-                if (newGuesses == null) { // let it make the decision tho
+                if (newGuesses == null && !misses.isEmpty()) {
                     // most recent hit is guaranteed to be the stationary chunk check location
                     return swap(FilterModeEnum.MONTE_CARLO_PARTICLE_FILTER);
                 }

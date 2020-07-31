@@ -29,6 +29,11 @@ public class SlurpManager {
             .name("slurped_chunks_total")
             .help("Number of chunks we've seeded slurping in")
             .register();
+    private static final Counter slurpDelay = Counter.build()
+            .name("slurped_delay_total")
+            .help("Number of times seeding a chunk has been delayed")
+            .labelNames("reason")
+            .register();
     private static final Histogram asksPruneLatencies = Histogram.build()
             .name("slurp_asks_prune_latencies")
             .help("Asks prune latencies")
@@ -76,7 +81,7 @@ public class SlurpManager {
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> {
             ingestIntoClusterHit();
             scanClusterHit();
-        }), 10000, 250, TimeUnit.MILLISECONDS);
+        }), 10000, 10, TimeUnit.MILLISECONDS);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::updateMetrics), 0, 1, TimeUnit.SECONDS);
     }
 
@@ -118,13 +123,21 @@ public class SlurpManager {
                 .filter(cpos -> !(renewalSchedule.containsKey(cpos)))
                 .max(Comparator.comparingLong(ChunkPos::distSq));
         if (!candidates.isPresent()) {
+            slurpDelay.labels("renewal_schedule").inc();
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ex) {}
             return;
         }
         ChunkPos cpos = candidates.get();
         if (cpos.distSq() < MIN_DIST_SQ_CHUNKS) {
+            slurpDelay.labels("too_close").inc();
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ex) {}
             return;
         }
-        System.out.println("Beginning slurp on chunk " + cpos);
+        //System.out.println("Beginning slurp on chunk " + cpos);
         slurpedChunks.inc();
         // again, no need for a lock on renewalSchedule since only this touches it
         renewalSchedule.put(cpos, now + RENEW_INTERVAL);
@@ -338,7 +351,7 @@ public class SlurpManager {
         // a hit
         // first, fixup unloaded responses
         data.failedBlockChecks.remove(pos); // don't double ask
-        if (type != BlockCheckManager.BlockEventType.CACHED) {
+        if (type != BlockCheckManager.BlockEventType.CACHED || (System.currentTimeMillis() / 600000L) % 2 == 0) {
             arbitraryHit(cpos); // ask for the OTHER pending checks on this chunk
         }
 
@@ -346,12 +359,12 @@ public class SlurpManager {
         int blockState = state.getAsInt();
         if (isSign(blockState)) {
             if (signsAskedFor.add(pos)) {
-                System.out.println("NOT asking for sign at " + pos);
+                //System.out.println("NOT asking for sign at " + pos);
                 //doRawSign(signBrushNewer(), pos);
             }
         }
         if (isShulker(blockState)) {
-            System.out.println("Shulker (blockstate " + blockState + ") at " + pos);
+            //System.out.println("Shulker (blockstate " + blockState + ") at " + pos);
         }
         int expected = expected(pos, chunkData);
         if (allAsks.containsKey(pos)) {
@@ -370,7 +383,7 @@ public class SlurpManager {
         boolean expandBrush = false;
         // if "updated" is true, we will always expand in brush mode, because that means the actual world changed
         if (type == BlockCheckManager.BlockEventType.UPDATED) {
-            System.out.println("Expanding " + pos + " in brush mode");
+            //System.out.println("Expanding " + pos + " in brush mode");
             expand = true;
             expandBrush = true;
         } else { // either previous is null, or previous==current

@@ -1,5 +1,6 @@
 package nocomment.master.tracking;
 
+import io.prometheus.client.Gauge;
 import nocomment.master.NoComment;
 import nocomment.master.Server;
 import nocomment.master.db.Database;
@@ -10,6 +11,12 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class OnlinePlayerTracker {
+    private static final Gauge onlinePlayers = Gauge.build()
+            .name("online_players")
+            .help("Number of online players")
+            .labelNames("server")
+            .register();
+
     public final Server server;
     private Set<OnlinePlayer> onlinePlayerSet;
     private static final long REMOVAL_QUELL_DURATION_MS = TimeUnit.SECONDS.toMillis(30);
@@ -57,6 +64,7 @@ public class OnlinePlayerTracker {
             Database.removePlayers(server.serverID, toRemove, now);
         }
         onlinePlayerSet = current;
+        onlinePlayers.labels(server.hostname).set(onlinePlayerSet.size());
     }
 
     private static List<Integer> minus(Set<OnlinePlayer> a, Set<OnlinePlayer> b) {
