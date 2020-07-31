@@ -338,7 +338,9 @@ public class SlurpManager {
         // a hit
         // first, fixup unloaded responses
         data.failedBlockChecks.remove(pos); // don't double ask
-        arbitraryHit(cpos); // ask for the OTHER pending checks on this chunk
+        if (type != BlockCheckManager.BlockEventType.CACHED) {
+            arbitraryHit(cpos); // ask for the OTHER pending checks on this chunk
+        }
 
         // now, what were we expecting?
         int blockState = state.getAsInt();
