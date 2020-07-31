@@ -351,7 +351,7 @@ public class SlurpManager {
         // a hit
         // first, fixup unloaded responses
         data.failedBlockChecks.remove(pos); // don't double ask
-        if (type != BlockCheckManager.BlockEventType.CACHED || (System.currentTimeMillis() / 600000L) % 2 == 0) {
+        if (type != BlockCheckManager.BlockEventType.CACHED) {
             arbitraryHit(cpos); // ask for the OTHER pending checks on this chunk
         }
 
