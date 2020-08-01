@@ -249,10 +249,9 @@ public class BlockCheckManager {
 
         private synchronized void checkDatabase(PreparedStatement stmt) throws SQLException { // this synchronized is just for peace of mind, it should never actually become necessary
             try {
-                BlockPos pos = BlockPos.fromLong(bpos);
-                stmt.setInt(1, pos.x);
-                stmt.setShort(2, (short) pos.y);
-                stmt.setInt(3, pos.z);
+                stmt.setInt(1, pos().x);
+                stmt.setShort(2, (short) pos().y);
+                stmt.setInt(3, pos().z);
                 stmt.setShort(4, world.dimension);
                 stmt.setShort(5, world.server.serverID);
                 try (ResultSet rs = stmt.executeQuery()) {
@@ -343,6 +342,10 @@ public class BlockCheckManager {
             listeners.clear();
         }
 
+        public final BlockPos pos() {
+            return BlockPos.fromLong(bpos);
+        }
+
         private class ResultToInsert {
             private final int blockState;
             private final long timestamp;
@@ -353,10 +356,9 @@ public class BlockCheckManager {
             }
 
             private void setupStatement(PreparedStatement stmt) throws SQLException {
-                BlockPos pos = BlockPos.fromLong(bpos);
-                stmt.setInt(1, pos.x);
-                stmt.setShort(2, (short) pos.y);
-                stmt.setInt(3, pos.z);
+                stmt.setInt(1, pos().x);
+                stmt.setShort(2, (short) pos().y);
+                stmt.setInt(3, pos().z);
                 stmt.setInt(4, blockState);
                 stmt.setLong(5, timestamp);
                 stmt.setShort(6, world.dimension);

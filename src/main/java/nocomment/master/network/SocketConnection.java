@@ -49,9 +49,9 @@ public class SocketConnection extends Connection {
     protected void dispatchBlockCheck(BlockCheck check) {
         queue.add(out -> {
             out.writeByte(1);
-            out.writeInt(check.pos.x);
-            out.writeInt(check.pos.y);
-            out.writeInt(check.pos.z);
+            out.writeInt(check.pos().x);
+            out.writeInt(check.pos().y);
+            out.writeInt(check.pos().z);
             out.writeInt(check.priority);
         });
     }

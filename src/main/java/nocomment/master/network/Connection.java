@@ -93,12 +93,12 @@ public abstract class Connection {
     }
 
     public synchronized void acceptBlockCheck(BlockCheck check) {
-        BlockCheck curr = checks.get(check.pos);
+        BlockCheck curr = checks.get(check.pos());
         if (curr != null && check.priority >= curr.priority) {
             // if this check is higher (worse) priority than what we currently have, don't spam them with another copy
             return;
         }
-        checks.put(check.pos, check);
+        checks.put(check.pos(), check);
         dispatchBlockCheck(check);
     }
 
