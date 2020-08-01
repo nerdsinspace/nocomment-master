@@ -13,6 +13,7 @@ import java.net.Socket;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -76,7 +77,6 @@ public class ChunkManager {
         Socket s = new Socket("localhost", 5021);
         DataInputStream in = new DataInputStream(new BufferedInputStream(s.getInputStream()));
         DataOutputStream out = new DataOutputStream(s.getOutputStream());
-        int num = 0;
         while (true) {
             while (queue.isEmpty()) {
                 // there is no blocking wait to wait until a queue is nonempty, without actually popping the head
@@ -97,15 +97,15 @@ public class ChunkManager {
             chunkResponses.inc();
             synchronized (this) {
                 cache.get(pos).complete(ret);
-                if (num++ > MAX_SIZE) { // obv can't use cache.size
-                    cache.entrySet().stream()
+                while (cache.size() - queue.size() > MAX_SIZE) { // obv can't use cache.size
+                    Optional<ChunkPos> toPrune = cache.entrySet().stream()
                             .filter(entry -> entry.getValue().isDone())
                             .map(Map.Entry::getKey)
-                            .min(Comparator.comparingLong(lastAccessed::get))
-                            .ifPresent(key -> {
-                                chunkCache.labels("done").dec();
-                                cache.remove(key);
-                            });
+                            .min(Comparator.comparingLong(lastAccessed::get));
+                    if (!toPrune.isPresent()) {
+                        break;
+                    }
+                    cache.remove(toPrune.get());
                 }
             }
             queue.poll();
