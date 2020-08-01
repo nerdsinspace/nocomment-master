@@ -9,7 +9,10 @@ import nocomment.master.slurp.BlockCheck;
 import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.task.Task;
 import nocomment.master.tracking.TrackyTrackyManager;
-import nocomment.master.util.*;
+import nocomment.master.util.BlockPos;
+import nocomment.master.util.ChunkPos;
+import nocomment.master.util.LoggingExecutor;
+import nocomment.master.util.OnlinePlayer;
 
 import java.io.IOException;
 import java.util.*;
@@ -282,10 +285,10 @@ public abstract class Connection {
     @Override
     public String toString() {
         String ret = getUUID() + " " + tasks.size() + " tasks, " + sumHigherPriority(Integer.MAX_VALUE) + " checks, " + taskIDSeq + " task ID, " + onlinePlayerSet.size() + " online players reported, " + (System.currentTimeMillis() - mostRecentRead) + "ms since most recent read";
-        OptionalLong join = Staggerer.currentSessionJoinedAt(getIdentity(), world.server.serverID);
+        /*OptionalLong join = Staggerer.currentSessionJoinedAt(getIdentity(), world.server.serverID);
         if (join.isPresent()) {
             ret += ", " + (System.currentTimeMillis() - join.getAsLong()) / (double) TimeUnit.HOURS.toMillis(1) + "hours since server join";
-        }
+        }*/
         return ret;
     }
 }

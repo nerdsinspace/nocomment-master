@@ -29,6 +29,10 @@ public class SlurpManager {
             .name("slurped_chunks_total")
             .help("Number of chunks we've seeded slurping in")
             .register();
+    private static final Counter slurpChunkSeeds = Counter.build()
+            .name("slurp_chunk_seeds_total")
+            .help("Number of seed blocks we have checked in total")
+            .register();
     private static final Counter slurpDelay = Counter.build()
             .name("slurped_delay_total")
             .help("Number of times seeding a chunk has been delayed")
@@ -155,6 +159,7 @@ public class SlurpManager {
         Optional<int[][]> heightMapOpt = Optional.ofNullable(this.chunkManager).map($ -> heightMapCache.computeIfAbsent(cpos, this::heightMap));
         // first, send a random check with high priority
         askFor(cpos.origin().add(random.nextInt(16), random.nextInt(256), random.nextInt(16)), 56, now - RENEW_AGE);
+        slurpChunkSeeds.inc();
         // after 2 seconds, we will know if it succeeded or is unloaded
         // so, only send the rest after 2 seconds
         // either it'll work fine (just delayed), or we'll save a dozen or so checks because it'll run up against BlockCheckManager's observedUnloaded cache!
@@ -169,6 +174,7 @@ public class SlurpManager {
                     BlockPos pos = new BlockPos(x, heightMap[dx][dz], z);
                     askFor(pos, 57, now - RENEW_AGE);
                     askFor(pos.add(0, 1, 0), 58, now - RENEW_AGE);
+                    slurpChunkSeeds.inc(2);
                 });
 
                 // also keep up to date any sky structures / sky bases...
@@ -177,15 +183,18 @@ public class SlurpManager {
                     BlockPos skybase = new BlockPos(x, y, z);
                     if (random.nextBoolean()) { // :zany_face:
                         askFor(skybase, 58, now - RENEW_AGE); // slightly less important
+                        slurpChunkSeeds.inc();
                     }
                     if (random.nextBoolean()) { // :yum:
                         // randomly grab something a little ways above or below, just for fun
-                        askFor(skybase.add(0, (random.nextBoolean() ? 1 : -1) * (2 + random.nextInt(4)), 0), 60, now - RENEW_AGE);
+                        askFor(skybase.add(0, (random.nextBoolean() ? 1 : -1) * (2 + random.nextInt(4)), 0), 58, now - RENEW_AGE);
+                        slurpChunkSeeds.inc();
                     }
                     // the cool part is that both cases (max and min) will overlap in the common case with the standard heightmap coords :)
                     // so this is zero cost (except on decorator mismatch) other than when it's a true base to renew :)
                     if (random.nextBoolean()) { // :woozy_face:
-                        askFor(skybase.add(0, 1, 0), 59, now - RENEW_AGE);
+                        askFor(skybase.add(0, 1, 0), 58, now - RENEW_AGE);
+                        slurpChunkSeeds.inc();
                     }
                 });
             }

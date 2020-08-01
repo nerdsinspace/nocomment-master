@@ -1,5 +1,6 @@
 package nocomment.master.util;
 
+import io.prometheus.client.Histogram;
 import nocomment.master.World;
 import nocomment.master.db.Database;
 import nocomment.master.network.Connection;
@@ -15,6 +16,11 @@ import java.util.stream.Collectors;
 
 public class Staggerer {
 
+    private static final Histogram staggererLatencies = Histogram.build()
+            .name("staggerer_latencies")
+            .help("Staggerer latencies")
+            .register();
+
     private static final long AUTO_KICK = TimeUnit.HOURS.toMillis(6);
     private static final long STAGGER = AUTO_KICK / 4; // 90 minutes
     private final World world;
@@ -25,7 +31,7 @@ public class Staggerer {
     }
 
     public void start() {
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::run), 20, 10, TimeUnit.MINUTES);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(() -> staggererLatencies.time(LoggingExecutor.wrap(this::run)), 20, 10, TimeUnit.MINUTES);
     }
 
     private static class QueueStat {
