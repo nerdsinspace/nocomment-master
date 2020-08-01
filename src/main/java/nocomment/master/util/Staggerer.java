@@ -31,7 +31,12 @@ public class Staggerer {
     }
 
     public void start() {
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(() -> staggererLatencies.time(LoggingExecutor.wrap(this::run)), 20, 10, TimeUnit.MINUTES);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(() -> {
+            long start = System.currentTimeMillis();
+            staggererLatencies.time(LoggingExecutor.wrap(this::run));
+            long end = System.currentTimeMillis();
+            System.out.println("Staggerer took " + (end - start) + "ms");
+        }, 20, 10, TimeUnit.MINUTES);
     }
 
     private static class QueueStat {

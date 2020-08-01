@@ -25,11 +25,16 @@ public class ChunkPos {
         this(pos.x >> 4, pos.z >> 4);
     }
 
-    /**
-     * Converts the chunk coordinate pair to a long
-     */
-    public static long asLong(int x, int z) {
-        return (long) x & 4294967295L | ((long) z & 4294967295L) << 32;
+    public static long toLong(int x, int z) {
+        return (long) x & 0xffffffffL | ((long) z & 0xffffffffL) << 32;
+    }
+
+    public long toLong() {
+        return toLong(x, z);
+    }
+
+    public static ChunkPos fromLong(long serialized) {
+        return new ChunkPos((int) serialized, (int) (serialized >> 32));
     }
 
     public int hashCode() {

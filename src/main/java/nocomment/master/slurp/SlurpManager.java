@@ -3,6 +3,9 @@ package nocomment.master.slurp;
 import io.prometheus.client.Counter;
 import io.prometheus.client.Gauge;
 import io.prometheus.client.Histogram;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.objects.ObjectIterator;
 import nocomment.master.World;
 import nocomment.master.clustering.DBSCAN;
 import nocomment.master.db.Database;
@@ -49,8 +52,8 @@ public class SlurpManager {
     private static final long SIGN_AGE = TimeUnit.DAYS.toMillis(3);
     private static final long BRUSH_AGE = TimeUnit.MINUTES.toMillis(30);
     private static final long EXPAND_AGE = TimeUnit.DAYS.toMillis(21);
-    private static final long RENEW_AGE = TimeUnit.MINUTES.toMillis(30);
-    private static final long RENEW_INTERVAL = RENEW_AGE * 2; // 1 hour
+    private static final long RENEW_AGE = TimeUnit.MINUTES.toMillis(15);
+    private static final long RENEW_INTERVAL = RENEW_AGE * 2; // 30 minutes
     private static final long CHECK_MAX_GAP = TimeUnit.SECONDS.toMillis(30);
     private static final long CLUSTER_DATA_CACHE_DURATION = TimeUnit.DAYS.toMillis(1);
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
@@ -60,7 +63,7 @@ public class SlurpManager {
     private final Executor blockRecvExecutor = new LoggingExecutor(Executors.newSingleThreadExecutor(), "block_recv"); // blockRecv is synchronized so we only need one
     private final ChunkManager chunkManager;
     private final Map<ChunkPos, ResumeDataForChunk> askedAndGotUnloadedResponse = new HashMap<>();
-    private final Map<BlockPos, AskStatus> allAsks = new HashMap<>();
+    private final Long2ObjectOpenHashMap<AskStatus> allAsks = new Long2ObjectOpenHashMap<>(); // long = blockpos
     private final Set<BlockPos> signsAskedFor = new HashSet<>();
     private final LinkedBlockingQueue<ChunkPosWithTimestamp> ingest = new LinkedBlockingQueue<>();
     private final Object ingestLock = new Object();
@@ -95,12 +98,18 @@ public class SlurpManager {
         long now = System.currentTimeMillis();
         Histogram.Timer timer = asksPruneLatencies.startTimer();
         synchronized (world.blockCheckManager) {
-            allAsks.entrySet().removeIf(ask -> ask.getValue().lastDirectAsk < now - BlockCheckManager.PRUNE_AGE && world.blockCheckManager.hasBeenRemoved(ask.getKey()));
+            ObjectIterator<Long2ObjectMap.Entry<AskStatus>> it = allAsks.long2ObjectEntrySet().fastIterator();
+            while (it.hasNext()) {
+                Long2ObjectMap.Entry<AskStatus> entry = it.next();
+                if (entry.getValue().lastDirectAsk < now - BlockCheckManager.PRUNE_AGE && world.blockCheckManager.hasBeenRemoved(entry.getLongKey())) {
+                    it.remove();
+                }
+            }
         }
         timer.observeDuration();
         long mid = System.currentTimeMillis();
         int total = askedAndGotUnloadedResponse.values().stream().mapToInt(rd -> rd.failedSignChecks.size() + rd.failedBlockChecks.size()).sum();
-        System.out.println("Took " + (mid - now) + "ms to prune allAsks keySet. Took " + (System.currentTimeMillis() - mid) + "ms to check AAGURT. Size went from " + beforeSz + " to " + allAsks.size() + ". HMC: " + heightMapCache.size() + ". CMC: " + clusterMembershipConfirmed.size() + ". CNCAC: " + clusterNonmembershipConfirmedAtCache.size() + ". CH: " + clusterHit.size() + ". RS: " + renewalSchedule.size() + ". SAF: " + signsAskedFor.size() + ". AAGUR: " + askedAndGotUnloadedResponse.size() + ". AAGURT: " + total);
+        System.out.println("FASTER? Took " + (mid - now) + "ms to prune allAsks keySet. Took " + (System.currentTimeMillis() - mid) + "ms to check AAGURT. Size went from " + beforeSz + " to " + allAsks.size() + ". HMC: " + heightMapCache.size() + ". CMC: " + clusterMembershipConfirmed.size() + ". CNCAC: " + clusterNonmembershipConfirmedAtCache.size() + ". CH: " + clusterHit.size() + ". RS: " + renewalSchedule.size() + ". SAF: " + signsAskedFor.size() + ". AAGUR: " + askedAndGotUnloadedResponse.size() + ". AAGURT: " + total);
     }
 
     private synchronized void updateMetrics() {
@@ -333,7 +342,7 @@ public class SlurpManager {
     }
 
     public void arbitraryHitExternal(ChunkPos cpos) {
-        world.blockCheckManager.loaded(cpos);
+        world.blockCheckManager.loaded(cpos.toLong());
         arbitraryHit(cpos);
     }
 
@@ -347,7 +356,7 @@ public class SlurpManager {
         }
         // bypass allAsks add since we took the data from there in the first place
         // simple retransmit
-        data.failedBlockChecks.forEach((otherPos, failedAsk) -> doRawAsk(failedAsk.mustBeNewerThan, otherPos, failedAsk.priority));
+        data.failedBlockChecks.forEach((otherPos, failedAsk) -> doRawAsk(failedAsk.mustBeNewerThan, BlockPos.fromLong(otherPos), failedAsk.priority));
         data.failedSignChecks.forEach((otherPos, mustBeNewerThan) -> doRawSign(mustBeNewerThan, otherPos));
     }
 
@@ -356,7 +365,7 @@ public class SlurpManager {
     }
 
     private synchronized void blockRecv(BlockPos pos, OptionalInt state, BlockCheckManager.BlockEventType type, long timestamp, int[] chunkData) {
-        AskStatus askStat = allAsks.get(pos);
+        AskStatus askStat = allAsks.get(pos.toLong());
         if (askStat != null) {
             if (askStat.receivedAt == timestamp) {
                 return;
@@ -370,14 +379,14 @@ public class SlurpManager {
             // a miss
             // mark it as such, and we'll retry if we ever see this chunk reloaded! :)
             if (askStat != null) {
-                data.failedBlockChecks.put(pos, new FailedAsk(askStat));
+                data.failedBlockChecks.put(pos.toLong(), new FailedAsk(askStat));
                 askStat.response = OptionalInt.empty();
             }
             return;
         }
         // a hit
         // first, fixup unloaded responses
-        data.failedBlockChecks.remove(pos); // don't double ask
+        data.failedBlockChecks.remove(pos.toLong()); // don't double ask
         if (type != BlockCheckManager.BlockEventType.CACHED) {
             arbitraryHit(cpos); // ask for the OTHER pending checks on this chunk
         }
@@ -442,7 +451,7 @@ public class SlurpManager {
     }
 
     private synchronized int expected(BlockPos pos, int[] chunkData) {
-        AskStatus stat = allAsks.get(pos);
+        AskStatus stat = allAsks.get(pos.toLong());
         if (stat != null && stat.response.isPresent()) {
             return stat.response.getAsInt();
         }
@@ -494,7 +503,7 @@ public class SlurpManager {
         if (pos.y >= 256 || pos.y < 0) {
             return;
         }
-        AskStatus cur = allAsks.get(pos);
+        AskStatus cur = allAsks.get(pos.toLong());
         if (cur != null) {
             if (cur.highestPriorityAskedAt <= priority && cur.mustBeNewerThan >= mustBeNewerThan) {
                 return;
@@ -506,7 +515,7 @@ public class SlurpManager {
         cur.mustBeNewerThan = mustBeNewerThan;
         cur.response = OptionalInt.empty();
         cur.lastDirectAsk = System.currentTimeMillis();
-        allAsks.put(pos, cur);
+        allAsks.put(pos.toLong(), cur);
         doRawAsk(mustBeNewerThan, pos, priority);
     }
 
@@ -535,7 +544,7 @@ public class SlurpManager {
     }
 
     private static class ResumeDataForChunk {
-        Map<BlockPos, FailedAsk> failedBlockChecks = new HashMap<>();
+        Long2ObjectOpenHashMap<FailedAsk> failedBlockChecks = new Long2ObjectOpenHashMap<>();
         Map<BlockPos, Long> failedSignChecks = new HashMap<>();
     }
 

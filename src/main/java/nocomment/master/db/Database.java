@@ -372,12 +372,15 @@ public class Database {
     }
 
     public static OptionalLong sessionJoinedAt(int playerID, short serverID, long wasInAt) {
+        long start = System.currentTimeMillis();
         try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT \"join\" FROM player_sessions WHERE range @> ? AND player_id = ? AND server_id = ?")) {
             stmt.setLong(1, wasInAt);
             stmt.setInt(2, playerID);
             stmt.setShort(3, serverID);
             try (ResultSet rs = stmt.executeQuery()) {
+                long end = System.currentTimeMillis();
+                System.out.println("sessionJoinedAt took " + (end - start) + "ms for " + playerID + " " + serverID + " " + wasInAt);
                 if (rs.next()) {
                     return OptionalLong.of(rs.getLong("join"));
                 } else {

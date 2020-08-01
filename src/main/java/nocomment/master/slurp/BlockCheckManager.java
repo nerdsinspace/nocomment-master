@@ -3,13 +3,17 @@ package nocomment.master.slurp;
 import io.prometheus.client.Counter;
 import io.prometheus.client.Gauge;
 import io.prometheus.client.Histogram;
+import it.unimi.dsi.fastutil.longs.Long2LongMap;
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.objects.ObjectIterator;
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.db.Database;
 import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.BlockPos;
-import nocomment.master.util.ChunkPos;
 import nocomment.master.util.LoggingExecutor;
 
 import java.sql.Connection;
@@ -34,8 +38,8 @@ public class BlockCheckManager {
             .help("Number of checks we have run")
             .register();
     public final World world;
-    private final Map<ChunkPos, Map<BlockPos, BlockCheckStatus>> statuses = new HashMap<>();
-    private final Map<ChunkPos, Long> observedUnloaded = new HashMap<>();
+    private final Long2ObjectOpenHashMap<Long2ObjectOpenHashMap<BlockCheckStatus>> statuses = new Long2ObjectOpenHashMap<>();
+    private final Long2LongOpenHashMap observedUnloaded = new Long2LongOpenHashMap();
     private final LinkedBlockingQueue<BlockCheckStatus.ResultToInsert> results = new LinkedBlockingQueue<>();
     private final Object pruneLock = new Object();
     public static final long PRUNE_AGE = TimeUnit.MINUTES.toMillis(60);
@@ -92,38 +96,46 @@ public class BlockCheckManager {
         void accept(OptionalInt state, BlockEventType type, long timestamp);
     }
 
-    private synchronized BlockCheckStatus get(BlockPos pos) {
-        return statuses.computeIfAbsent(new ChunkPos(pos), cpos -> new HashMap<>()).computeIfAbsent(pos, BlockCheckStatus::new);
+    private synchronized BlockCheckStatus get(long bpos) {
+        return statuses.computeIfAbsent(BlockPos.blockToChunk(bpos), cpos -> new Long2ObjectOpenHashMap<>()).computeIfAbsent(bpos, BlockCheckStatus::new);
     }
 
-    private synchronized OptionalLong isUnloaded(ChunkPos pos) {
-        if (observedUnloaded.containsKey(pos)) {
-            return OptionalLong.of(observedUnloaded.get(pos));
+    private synchronized OptionalLong isUnloaded(long cpos) {
+        if (observedUnloaded.containsKey(cpos)) {
+            return OptionalLong.of(observedUnloaded.get(cpos));
         }
         return OptionalLong.empty();
     }
 
-    private synchronized void unloadedAt(ChunkPos pos, long now) {
-        if (!observedUnloaded.containsKey(pos) || observedUnloaded.get(pos) < now) {
-            observedUnloaded.put(pos, now);
+    private synchronized void unloadedAt(long cpos, long now) {
+        if (!observedUnloaded.containsKey(cpos) || observedUnloaded.get(cpos) < now) {
+            observedUnloaded.put(cpos, now);
         }
         // wrap in executor to prevent stupid deadlock again
-        List<BlockCheckStatus> s = new ArrayList<>(statuses.get(pos).values());
+        List<BlockCheckStatus> s = new ArrayList<>(statuses.get(cpos).values());
         unloadObservationExecutor.execute(() -> s.forEach(status -> status.onResponseInternal(OptionalInt.empty(), now)));
     }
 
-    public synchronized void loaded(ChunkPos pos) {
-        observedUnloaded.remove(pos);
+    public synchronized void loaded(long cpos) {
+        observedUnloaded.remove(cpos);
     }
 
     private synchronized void prune() {
         long now = System.currentTimeMillis();
-        observedUnloaded.values().removeIf(aLong -> aLong < now - TimeUnit.SECONDS.toMillis(10));
+        long fence = now - TimeUnit.SECONDS.toMillis(10);
+        ObjectIterator<Long2LongMap.Entry> it = observedUnloaded.long2LongEntrySet().fastIterator();
+        while (it.hasNext()) {
+            Long2LongMap.Entry entry = it.next();
+            if (entry.getLongValue() < fence) {
+                it.remove();
+            }
+        }
     }
 
-    public synchronized boolean hasBeenRemoved(BlockPos pos) {
-        ChunkPos cpos = new ChunkPos(pos);
-        return !statuses.containsKey(cpos) || !statuses.get(cpos).containsKey(pos);
+    public synchronized boolean hasBeenRemoved(long bpos) {
+        long cpos = BlockPos.blockToChunk(bpos);
+        Long2ObjectOpenHashMap<BlockCheckStatus> thisChunk = statuses.get(cpos);
+        return thisChunk == null || !thisChunk.containsKey(bpos);
     }
 
     private synchronized int cacheSize() {
@@ -135,32 +147,38 @@ public class BlockCheckManager {
         int beforeSz = cacheSize();
         synchronized (pruneLock) {
             int maybeNotNotActually = 0;
-            for (Map<BlockPos, BlockCheckStatus> m : statuses.values()) {
-                Iterator<BlockCheckStatus> it = m.values().iterator();
-                while (it.hasNext()) {
-                    BlockCheckStatus bcs = it.next();
+            ObjectIterator<Long2ObjectMap.Entry<Long2ObjectOpenHashMap<BlockCheckStatus>>> outerIt = statuses.long2ObjectEntrySet().fastIterator();
+            while (outerIt.hasNext()) {
+                Long2ObjectMap.Entry<Long2ObjectOpenHashMap<BlockCheckStatus>> outerEntry = outerIt.next();
+                ObjectIterator<Long2ObjectMap.Entry<BlockCheckStatus>> innerIt = outerEntry.getValue().long2ObjectEntrySet().fastIterator();
+                while (innerIt.hasNext()) {
+                    Long2ObjectMap.Entry<BlockCheckStatus> entry = innerIt.next();
+                    BlockCheckStatus bcs = entry.getValue();
                     if (bcs.maybePrunable(now)) {
                         synchronized (bcs) {
                             if (bcs.actuallyPrunable(now)) {
-                                it.remove(); // must call remove within bcs lock!!
+                                innerIt.remove(); // must call remove within bcs lock!!
                             } else {
                                 maybeNotNotActually++;
                             }
                         }
                     }
                 }
+                if (outerEntry.getValue().isEmpty()) {
+                    outerIt.remove();
+                }
             }
-            statuses.values().removeIf(Map::isEmpty); // any chunk with no remaining checks can be removed, just to save some ram lol
             Map<Integer, Long> countByPriority = statuses.values().stream().map(Map::values).flatMap(Collection::stream).collect(Collectors.groupingBy(bcs -> bcs.highestSubmittedPriority, Collectors.counting()));
-            System.out.println("Block prune in block check manager took " + (System.currentTimeMillis() - now) + "ms. Cache size went from " + beforeSz + " to " + cacheSize() + ". Maybe but not actually: " + maybeNotNotActually + ". Count by priority: " + countByPriority);
+            System.out.println("FASTER? Block prune in block check manager took " + (System.currentTimeMillis() - now) + "ms. Cache size went from " + beforeSz + " to " + cacheSize() + ". Maybe but not actually: " + maybeNotNotActually + ". Count by priority: " + countByPriority);
         }
     }
 
     public void requestBlockState(long mustBeNewerThan, BlockPos pos, int priority, BlockListener onCompleted) {
+        long bpos = pos.toLong();
         NoComment.executor.execute(() -> {
             synchronized (BlockCheckManager.this) { // i hate myself
                 synchronized (pruneLock) {
-                    get(pos).requested(mustBeNewerThan, priority, onCompleted); // this is fine since requested holds no lock                                                           s
+                    get(bpos).requested(mustBeNewerThan, priority, onCompleted); // this is fine since requested holds no lock                                                           s
                 }
             }
         });
@@ -191,6 +209,8 @@ public class BlockCheckManager {
 
     public class BlockCheckStatus {
         public final BlockPos pos;
+        public final long bpos;
+        public final long cpos;
         private int highestSubmittedPriority = Integer.MAX_VALUE;
         private final List<BlockListener> listeners;
         private final List<BlockCheck> inFlight;
@@ -199,9 +219,11 @@ public class BlockCheckManager {
         private CompletableFuture<Boolean> checkedDatabaseYet;
         private long lastActivity;
 
-        private BlockCheckStatus(BlockPos pos) {
+        private BlockCheckStatus(long bpos) {
             this.listeners = new ArrayList<>();
-            this.pos = pos;
+            this.pos = BlockPos.fromLong(bpos);
+            this.bpos = bpos;
+            this.cpos = BlockPos.blockToChunk(bpos);
             this.inFlight = new ArrayList<>();
             this.blockState = OptionalInt.empty();
             this.checkedDatabaseYet = new CompletableFuture<>();
@@ -259,7 +281,7 @@ public class BlockCheckManager {
                 return;
             }
             // then, check if cached unloaded
-            OptionalLong unloadedAt = isUnloaded(new ChunkPos(pos));
+            OptionalLong unloadedAt = isUnloaded(cpos);
             if (unloadedAt.isPresent() && unloadedAt.getAsLong() > mustBeNewerThan && !(blockState.isPresent() && responseAt > unloadedAt.getAsLong())) {
                 // if this is unloaded, since the newer than, and not older than a real response
                 // then that's what we do
@@ -282,9 +304,9 @@ public class BlockCheckManager {
             long now = System.currentTimeMillis();
             if (state.isPresent()) {
                 onResponseInternal(state, now);
-                loaded(new ChunkPos(pos));
+                loaded(cpos);
             } else {
-                unloadedAt(new ChunkPos(pos), now);
+                unloadedAt(cpos, now);
             }
         }
 
