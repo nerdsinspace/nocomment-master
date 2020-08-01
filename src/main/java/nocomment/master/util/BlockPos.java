@@ -1,6 +1,6 @@
 package nocomment.master.util;
 
-public class BlockPos {
+public final class BlockPos {
     public final int x;
     public final int y;
     public final int z;
@@ -15,7 +15,7 @@ public class BlockPos {
 
     @Override
     public int hashCode() {
-        return hash;
+        return this.hash;
     }
 
     private static final int NUM_X_BITS = 26;
@@ -28,6 +28,10 @@ public class BlockPos {
     private static final long Z_MASK = (1L << NUM_Z_BITS) - 1L;
 
     public long toLong() {
+        return toLong(this.x, this.y, this.z);
+    }
+
+    public static long toLong(final int x, final int y, final int z) {
         return ((long) x & X_MASK) << X_SHIFT | ((long) y & Y_MASK) << Y_SHIFT | ((long) z & Z_MASK);
     }
 

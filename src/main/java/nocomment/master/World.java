@@ -14,7 +14,7 @@ import nocomment.master.util.WorldStatistics;
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class World {
+public final class World {
 
     private static final int MAX_BURDEN = 1000; // about 2.3 seconds
     public final Server server;

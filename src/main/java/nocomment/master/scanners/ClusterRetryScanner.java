@@ -11,7 +11,7 @@ import nocomment.master.util.LoggingExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-public class ClusterRetryScanner {
+public final class ClusterRetryScanner {
     private final World world;
     private final int priority;
     private final Consumer<Hit> onHit;
@@ -41,11 +41,7 @@ public class ClusterRetryScanner {
     }
 
     private void submitTask() {
-        ChunkPos pos = HitRetry.INSTANCE.clusterTraverse(world.server.serverID, world.dimension);
-        if (pos == null) {
-            System.out.println("Cancelling cluster retry scanner since there are no clusters to retry!");
-            return;
-        }
+        ChunkPos pos = HitRetry.clusterTraverse(world.server.serverID, world.dimension);
         world.submit(new Task(priority, pos, 0, 0, 1) {
             @Override
             public void hitReceived(Hit hit) {

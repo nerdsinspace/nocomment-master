@@ -356,7 +356,14 @@ public class SlurpManager {
         }
         // bypass allAsks add since we took the data from there in the first place
         // simple retransmit
-        data.failedBlockChecks.forEach((otherPos, failedAsk) -> doRawAsk(failedAsk.mustBeNewerThan, BlockPos.fromLong(otherPos), failedAsk.priority));
+        ObjectIterator<Long2ObjectMap.Entry<FailedAsk>> failedBlockChunksIterator = data.failedBlockChecks.long2ObjectEntrySet().fastIterator();
+        while (failedBlockChunksIterator.hasNext()) {
+            Long2ObjectMap.Entry<FailedAsk> entry = failedBlockChunksIterator.next();
+            long otherPos = entry.getLongKey();
+            FailedAsk failedAsk = entry.getValue();
+
+            doRawAsk(failedAsk.mustBeNewerThan, BlockPos.fromLong(otherPos), failedAsk.priority);
+        }
         data.failedSignChecks.forEach((otherPos, mustBeNewerThan) -> doRawSign(mustBeNewerThan, otherPos));
     }
 

@@ -1,6 +1,9 @@
 package nocomment.master.network;
 
 import io.prometheus.client.Gauge;
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.db.Database;
@@ -40,9 +43,9 @@ public abstract class Connection {
     }
 
     private final World world;
-    private final Map<Integer, Task> tasks = new HashMap<>();
-    private final Map<BlockPos, BlockCheck> checks = new HashMap<>();
-    private final Map<BlockPos, Long> recentCheckTimestamps = new HashMap<>();
+    private final Int2ObjectOpenHashMap<Task> tasks = new Int2ObjectOpenHashMap<>();
+    private final Long2ObjectOpenHashMap<BlockCheck> checks = new Long2ObjectOpenHashMap<>();
+    private final Long2LongOpenHashMap recentCheckTimestamps = new Long2LongOpenHashMap();
     private int taskIDSeq = 0;
     private final Set<OnlinePlayer> onlinePlayerSet = new HashSet<>();
     private final Map<OnlinePlayer, Long> removalTimestamps = new HashMap<>();
@@ -88,17 +91,18 @@ public abstract class Connection {
         recentCheckTimestamps.values().removeIf(ts -> ts < now - 1000);
     }
 
-    public synchronized boolean blockAffinity(BlockPos pos) {
-        return checks.containsKey(pos) || recentCheckTimestamps.containsKey(pos);
+    public synchronized boolean blockAffinity(long bpos) {
+        return checks.containsKey(bpos) || recentCheckTimestamps.containsKey(bpos);
     }
 
     public synchronized void acceptBlockCheck(BlockCheck check) {
-        BlockCheck curr = checks.get(check.pos());
+        long bpos = check.bpos();
+        BlockCheck curr = checks.get(bpos);
         if (curr != null && check.priority >= curr.priority) {
             // if this check is higher (worse) priority than what we currently have, don't spam them with another copy
             return;
         }
-        checks.put(check.pos(), check);
+        checks.put(bpos, check);
         dispatchBlockCheck(check);
     }
 
@@ -150,11 +154,11 @@ public abstract class Connection {
         world.serverUpdate(); // prevent two-way deadlock with the subsequent two functions
     }
 
-    protected void checkCompleted(BlockPos pos, OptionalInt blockState) {
+    protected void checkCompleted(long bpos, OptionalInt blockState) {
         BlockCheck check;
         synchronized (this) {
-            check = checks.remove(pos);
-            recentCheckTimestamps.put(pos, System.currentTimeMillis());
+            check = checks.remove(bpos);
+            recentCheckTimestamps.put(bpos, System.currentTimeMillis());
         }
         if (check != null) {
             // check can be null if we are asked for the same pos twice in a row with increasing priority, and we get two responses with a time delay

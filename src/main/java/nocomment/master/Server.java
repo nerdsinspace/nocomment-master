@@ -11,7 +11,7 @@ import nocomment.master.util.LoggingExecutor;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-public class Server {
+public final class Server {
 
     private static final Map<String, Server> servers = new HashMap<>();
 

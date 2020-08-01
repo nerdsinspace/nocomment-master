@@ -10,7 +10,7 @@ import nocomment.master.util.LoggingExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-public class RingScanner {
+public final class RingScanner {
     private static final int INTERVAL = 9;
     private final World world;
     private final int priority;

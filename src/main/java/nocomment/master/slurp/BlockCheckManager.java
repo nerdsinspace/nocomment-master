@@ -24,7 +24,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
-public class BlockCheckManager {
+public final class BlockCheckManager {
     private static final Histogram blockPruneLatencies = Histogram.build()
             .name("block_prune_latencies")
             .help("Block prune latencies")
@@ -249,9 +249,10 @@ public class BlockCheckManager {
 
         private synchronized void checkDatabase(PreparedStatement stmt) throws SQLException { // this synchronized is just for peace of mind, it should never actually become necessary
             try {
-                stmt.setInt(1, pos().x);
-                stmt.setShort(2, (short) pos().y);
-                stmt.setInt(3, pos().z);
+                final BlockPos pos = pos();
+                stmt.setInt(1, pos.x);
+                stmt.setShort(2, (short) pos.y);
+                stmt.setInt(3, pos.z);
                 stmt.setShort(4, world.dimension);
                 stmt.setShort(5, world.server.serverID);
                 try (ResultSet rs = stmt.executeQuery()) {

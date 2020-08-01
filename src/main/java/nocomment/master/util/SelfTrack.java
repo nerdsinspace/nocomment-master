@@ -1,6 +1,6 @@
 package nocomment.master.util;
 
-public class SelfTrack {
+public final class SelfTrack {
 
     private static final int CHUNK_RADIUS = 7;
 

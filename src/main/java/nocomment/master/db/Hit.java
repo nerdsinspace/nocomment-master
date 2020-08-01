@@ -15,7 +15,7 @@ import java.util.OptionalLong;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-public class Hit {
+public final class Hit {
     public final ChunkPos pos;
     public final short serverID;
     public final short dimension;

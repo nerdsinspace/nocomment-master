@@ -11,7 +11,7 @@ import java.io.IOException;
 import java.net.Socket;
 import java.util.concurrent.LinkedBlockingQueue;
 
-public class BlockAPI {
+public final class BlockAPI {
 
     private final Socket sock;
     private final BlockCheckManager bcm;

@@ -1,6 +1,7 @@
 package nocomment.master.clustering;
 
 import io.prometheus.client.Gauge;
+import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
 import nocomment.master.db.Database;
 import nocomment.master.util.ChunkPos;
 
@@ -23,7 +24,7 @@ enum Aggregator {
     private static final long MIN_DURATION_FOR_NODE = TimeUnit.MINUTES.toMillis(5);
     private static final int LIMIT_SZ = 1000;
 
-    private final Map<Integer, Long> parentAgeCache = new HashMap<>();
+    private final Int2LongOpenHashMap parentAgeCache = new Int2LongOpenHashMap();
 
     private static class PastHit {
         long id;

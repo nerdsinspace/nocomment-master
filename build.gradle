@@ -1,3 +1,12 @@
+import proguard.gradle.ProGuardTask
+
+buildscript {
+    dependencies {
+        classpath 'net.sf.proguard:proguard-gradle:6.2.0'
+        classpath 'net.sf.proguard:proguard-base:6.2.0'
+    }
+}
+
 plugins {
     id 'java'
     id 'com.github.johnrengelman.shadow' version '4.0.4'
@@ -12,6 +21,15 @@ repositories {
     mavenCentral()
 }
 
+dependencies {
+    compile 'org.postgresql:postgresql:42.2.14'
+    compile 'org.apache.commons:commons-dbcp2:2.7.0'
+    compile 'io.prometheus:simpleclient:0.9.0'
+    compile 'io.prometheus:simpleclient_hotspot:0.9.0'
+    compile 'io.prometheus:simpleclient_httpserver:0.9.0'
+    compile 'it.unimi.dsi:fastutil:8.1.0'
+}
+
 jar {
     manifest {
         attributes(
@@ -20,11 +38,27 @@ jar {
     }
 }
 
-dependencies {
-    compile 'org.postgresql:postgresql:42.2.0'
-    compile 'org.apache.commons:commons-dbcp2:2.7.0'
-    compile 'io.prometheus:simpleclient:0.9.0'
-    compile 'io.prometheus:simpleclient_hotspot:0.9.0'
-    compile 'io.prometheus:simpleclient_httpserver:0.9.0'
-    compile 'it.unimi.dsi:fastutil:8.1.0'
+shadowJar {
+    classifier = 'unoptimised'
 }
+
+task('optimize', type: ProGuardTask, dependsOn: shadowJar) {
+    // Base config
+    configuration "${projectDir}/proguard.config"
+
+    // I/O
+    injars tasks.shadowJar.outputs.files
+    outjars "${buildDir}/libs/${project.tasks.jar.archiveName}"
+
+    // Keep
+    keep 'class nocomment.master.NoComment { public static void main(java.lang.String[]); }'
+
+    // Optimization
+    optimizationpasses 10
+
+    // General
+    dontwarn('org.postgresql.**')
+    dontwarn('org.apache.commons.**')
+}
+
+build.finalizedBy('optimize')

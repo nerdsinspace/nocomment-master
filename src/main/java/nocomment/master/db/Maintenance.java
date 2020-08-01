@@ -5,7 +5,7 @@ import nocomment.master.util.LoggingExecutor;
 
 import java.util.concurrent.TimeUnit;
 
-public class Maintenance {
+public final class Maintenance {
     static void scheduleMaintenance() {
         schedule(Database::vacuum, "vacuum", 86400);
         scheduleReindex("hits_by_track_id");

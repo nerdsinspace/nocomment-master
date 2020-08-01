@@ -12,23 +12,22 @@ import java.sql.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-public class Database {
+public final class Database {
 
-    private static BasicDataSource pool;
-
+    private static final BasicDataSource POOL;
     static {
         System.out.println("Connecting to database...");
-        pool = new BasicDataSource();
-        pool.setUsername("nocom");
-        pool.setPassword("6bf40e917cdc202f627398c433899a0cc9aa8880a6dc25aacc4342779eccd227");
-        pool.setDriverClassName("org.postgresql.Driver");
-        pool.setUrl("jdbc:postgresql://localhost:5432/nocom");
-        pool.setInitialSize(1);
-        pool.setMaxTotal(75);
-        pool.setAutoCommitOnReturn(true); // make absolutely sure
-        pool.setDefaultTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-        pool.setRollbackOnReturn(true);
-        pool.setDefaultReadOnly(NoComment.DRY_RUN);
+        POOL = new BasicDataSource();
+        POOL.setUsername("nocom");
+        POOL.setPassword("6bf40e917cdc202f627398c433899a0cc9aa8880a6dc25aacc4342779eccd227");
+        POOL.setDriverClassName("org.postgresql.Driver");
+        POOL.setUrl("jdbc:postgresql://localhost:5432/nocom");
+        POOL.setInitialSize(1);
+        POOL.setMaxTotal(75);
+        POOL.setAutoCommitOnReturn(true); // make absolutely sure
+        POOL.setDefaultTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        POOL.setRollbackOnReturn(true);
+        POOL.setDefaultReadOnly(NoComment.DRY_RUN);
         System.out.println("Connected.");
         if (!NoComment.DRY_RUN) {
             Maintenance.scheduleMaintenance();
@@ -71,7 +70,7 @@ public class Database {
             // might as well crash early
             throw new RuntimeException("lol server clock went backwards");
         }
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("UPDATE player_sessions SET leave = ? WHERE range @> ? AND server_id = ?")) {
             stmt.setLong(1, setLeaveTo);
             stmt.setLong(2, Long.MAX_VALUE - 1); // must be -1 since postgres ranges are exclusive on the upper end
@@ -84,7 +83,7 @@ public class Database {
     }
 
     private static long mostRecentEvent(short serverID) {
-        try (Connection connection = pool.getConnection()) {
+        try (Connection connection = POOL.getConnection()) {
             long mostRecent;
             try (PreparedStatement stmt = connection.prepareStatement("SELECT created_at FROM last_by_server WHERE server_id = ?")) {
                 stmt.setShort(1, serverID);
@@ -110,7 +109,7 @@ public class Database {
 
     private static OptionalInt idForExistingPlayer(OnlinePlayer player) {
         try (
-                Connection connection = pool.getConnection();
+                Connection connection = POOL.getConnection();
                 PreparedStatement stmt = connection.prepareStatement(
                         player.hasUsername() ?
                                 "UPDATE players SET username = ? WHERE uuid = ? RETURNING id"
@@ -142,7 +141,7 @@ public class Database {
         if (existing.isPresent()) {
             return existing.getAsInt();
         }
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("INSERT INTO players (username, uuid) VALUES (?, ?) RETURNING id")) {
             stmt.setString(1, player.username);
             stmt.setObject(2, player.uuid);
@@ -157,7 +156,7 @@ public class Database {
     }
 
     public static OptionalInt getPlayer(String username) {
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT id FROM players WHERE username = ?")) {
             stmt.setString(1, username);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -174,7 +173,7 @@ public class Database {
     }
 
     private static Optional<Short> idForExistingServer(String hostname) {
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT id FROM servers WHERE hostname = ?")) {
             stmt.setString(1, hostname);
             try (ResultSet existing = stmt.executeQuery()) {
@@ -195,7 +194,7 @@ public class Database {
         if (existing.isPresent()) {
             return existing.get();
         }
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("INSERT INTO servers (hostname) VALUES (?) RETURNING id")) {
             stmt.setString(1, hostname);
             try (ResultSet rs = stmt.executeQuery()) {
@@ -209,7 +208,7 @@ public class Database {
     }
 
     public static void addPlayers(short serverID, Collection<Integer> playerIDs, long now) {
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("INSERT INTO player_sessions (player_id, server_id, \"join\", leave) VALUES (?, ?, ?, NULL)")) {
             for (int playerID : playerIDs) {
                 stmt.setInt(1, playerID);
@@ -226,7 +225,7 @@ public class Database {
     }
 
     public static void removePlayers(short serverID, Collection<Integer> playerIDs, long now) {
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("UPDATE player_sessions SET leave = ? WHERE range @> ? AND player_id = ? AND server_id = ?")) {
             for (int playerID : playerIDs) {
                 stmt.setLong(1, now);
@@ -244,7 +243,7 @@ public class Database {
     public static int createTrack(Hit initialHit, OptionalInt prevTrackID) {
         // make sure that the initialHit has an assigned hit ID
         initialHit.saveToDBBlocking();
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("INSERT INTO tracks (first_hit_id, last_hit_id, updated_at, prev_track_id, dimension, server_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id")) {
             stmt.setLong(1, initialHit.getHitID());
             stmt.setLong(2, initialHit.getHitID());
@@ -267,7 +266,7 @@ public class Database {
     }
 
     static void alterHitToBeWithinTrack(Hit hit) {
-        try (Connection connection = pool.getConnection()) {
+        try (Connection connection = POOL.getConnection()) {
             connection.setAutoCommit(false);
             updateTrackWithMostRecentHit(hit, connection);
             try (PreparedStatement stmt = connection.prepareStatement("UPDATE hits SET track_id = ? WHERE id = ?")) {
@@ -294,7 +293,7 @@ public class Database {
     }
 
     public static Set<Integer> trackIDsToResume(Collection<Integer> playerIDs, short serverID) {
-        try (Connection connection = pool.getConnection()) {
+        try (Connection connection = POOL.getConnection()) {
 
             Set<Long> logoutTimestamps = new HashSet<>(); // set because there will be many duplicates
 
@@ -339,7 +338,7 @@ public class Database {
     }
 
     public static List<TrackResume> resumeTracks(Collection<Integer> trackIDs) {
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT hits.x, hits.z, hits.dimension FROM tracks INNER JOIN hits ON hits.id = tracks.last_hit_id WHERE tracks.id = ?")) {
             List<TrackResume> ret = new ArrayList<>();
             for (int trackID : trackIDs) {
@@ -357,7 +356,7 @@ public class Database {
     }
 
     public static int numOnlineAt(short serverID, long timestamp) {
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT COUNT(*) AS cnt FROM player_sessions WHERE range @> ? AND server_id = ?")) {
             stmt.setLong(1, timestamp);
             stmt.setShort(2, serverID);
@@ -373,7 +372,7 @@ public class Database {
 
     public static OptionalLong sessionJoinedAt(int playerID, short serverID, long wasInAt) {
         long start = System.currentTimeMillis();
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT \"join\" FROM player_sessions WHERE range @> ? AND player_id = ? AND server_id = ?")) {
             stmt.setLong(1, wasInAt);
             stmt.setInt(2, playerID);
@@ -411,7 +410,7 @@ public class Database {
     }
 
     private static void pruneStaleStatuses() {
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET curr_status = 'OFFLINE'::statuses_enum, data = NULL, updated_at = ? WHERE updated_at < ? AND curr_status != 'OFFLINE'::statuses_enum")) {
             stmt.setLong(1, System.currentTimeMillis());
             stmt.setLong(2, System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(1));
@@ -424,7 +423,7 @@ public class Database {
 
     public static void updateStatus(int playerID, short serverID, String currStatus, Optional<String> data) {
         long now = System.currentTimeMillis();
-        try (Connection connection = pool.getConnection()) {
+        try (Connection connection = POOL.getConnection()) {
             try (PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET curr_status = ?::statuses_enum, updated_at = ?, data = ? WHERE player_id = ? AND server_id = ?")) {
                 stmt.setString(1, currStatus);
                 stmt.setLong(2, now);
@@ -460,7 +459,7 @@ public class Database {
     }
 
     public static void setDimension(int playerID, short serverID, short dimension) {
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET dimension = ? WHERE player_id = ? AND server_id = ?")) {
             stmt.setShort(1, dimension);
             stmt.setInt(2, playerID);
@@ -473,7 +472,7 @@ public class Database {
     }
 
     public static void saveChat(String chat, short chatType, int playerID, short serverID, long timestamp) {
-        try (Connection connection = pool.getConnection();
+        try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("INSERT INTO chat (data, chat_type, reported_by, created_at, server_id) VALUES (CAST(? AS JSON), ?, ?, ?, ?)")) {
             stmt.setString(1, chat);
             stmt.setShort(2, chatType);
@@ -488,7 +487,7 @@ public class Database {
     }
 
     static void vacuum() {
-        try (Connection connection = pool.getConnection(); PreparedStatement stmt = connection.prepareStatement("VACUUM ANALYZE")) {
+        try (Connection connection = POOL.getConnection(); PreparedStatement stmt = connection.prepareStatement("VACUUM ANALYZE")) {
             stmt.execute();
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -497,7 +496,7 @@ public class Database {
     }
 
     static void reindex(String indexName) {
-        try (Connection connection = pool.getConnection(); PreparedStatement stmt = connection.prepareStatement("REINDEX INDEX CONCURRENTLY " + indexName)) {
+        try (Connection connection = POOL.getConnection(); PreparedStatement stmt = connection.prepareStatement("REINDEX INDEX CONCURRENTLY " + indexName)) {
             stmt.execute();
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -506,6 +505,6 @@ public class Database {
     }
 
     public static Connection getConnection() throws SQLException {
-        return pool.getConnection();
+        return POOL.getConnection();
     }
 }

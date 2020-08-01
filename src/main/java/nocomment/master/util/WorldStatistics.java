@@ -8,7 +8,7 @@ import nocomment.master.task.Task;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-public class WorldStatistics {
+public final class WorldStatistics {
 
     private static final Counter taskOutcomes = Counter.build()
             .name("task_outcomes_total")

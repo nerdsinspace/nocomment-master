@@ -10,11 +10,11 @@ import java.sql.SQLException;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
-public enum HitRetry {
-    INSTANCE;
+public final class HitRetry {
 
-    public ChunkPos clusterTraverse(short serverID, short dimension) {
-        Random rand = new Random();
+    private static final Random RANDOM = new Random();
+
+    public static ChunkPos clusterTraverse(short serverID, short dimension) {
         try (Connection connection = Database.getConnection(); PreparedStatement stmt = connection.prepareStatement("" +
                 "            WITH RECURSIVE initial AS (                                      " +
                 "                SELECT                                                       " +
@@ -66,9 +66,9 @@ public enum HitRetry {
             stmt.setShort(1, serverID);
             stmt.setShort(2, dimension);
             long mustBeNewerThan;
-            if (rand.nextBoolean()) {
+            if (RANDOM.nextBoolean()) {
                 mustBeNewerThan = 0;
-            } else if (rand.nextBoolean()) {
+            } else if (RANDOM.nextBoolean()) {
                 mustBeNewerThan = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30);
             } else {
                 mustBeNewerThan = System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7);

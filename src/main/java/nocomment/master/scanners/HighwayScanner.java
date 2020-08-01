@@ -10,7 +10,7 @@ import nocomment.master.util.LoggingExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-public class HighwayScanner {
+public final class HighwayScanner {
 
     private static final int AXIS_INTERVAL = 9;
     private static final int DIAG_INTERVAL = 7; // overlap because otherwise there's a diagonal catty corner

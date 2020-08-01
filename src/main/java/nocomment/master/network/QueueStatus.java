@@ -9,7 +9,7 @@ import java.net.Socket;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-public class QueueStatus {
+public final class QueueStatus {
 
     // any "queue" messages are about this server
     private static final short QUEUE_SERVER_ID = Database.idForServer("2b2t.org");
@@ -29,7 +29,7 @@ public class QueueStatus {
         }
     }
 
-    private static class QueueDiff {
+    private static final class QueueDiff {
 
         private final int pos;
         private final long start;

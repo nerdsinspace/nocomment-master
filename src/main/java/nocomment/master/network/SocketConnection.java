@@ -47,11 +47,12 @@ public class SocketConnection extends Connection {
 
     @Override
     protected void dispatchBlockCheck(BlockCheck check) {
+        BlockPos pos = check.pos();
         queue.add(out -> {
             out.writeByte(1);
-            out.writeInt(check.pos().x);
-            out.writeInt(check.pos().y);
-            out.writeInt(check.pos().z);
+            out.writeInt(pos.x);
+            out.writeInt(pos.y);
+            out.writeInt(pos.z);
             out.writeInt(check.priority);
         });
     }
@@ -117,7 +118,7 @@ public class SocketConnection extends Connection {
                 int y = in.readInt();
                 int z = in.readInt();
                 OptionalInt blockState = in.readBoolean() ? OptionalInt.of(in.readInt()) : OptionalInt.empty();
-                checkCompleted(new BlockPos(x, y, z), blockState);
+                checkCompleted(BlockPos.toLong(x, y, z), blockState);
                 break;
             }
             case 4: { // sign response

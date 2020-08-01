@@ -6,7 +6,7 @@ import nocomment.master.util.BlockPos;
 
 import java.util.OptionalInt;
 
-public class BlockCheck extends PriorityDispatchable {
+public final class BlockCheck extends PriorityDispatchable {
     private final BlockCheckManager.BlockCheckStatus parent;
 
     BlockCheck(int priority, BlockCheckManager.BlockCheckStatus parent) {
@@ -20,8 +20,12 @@ public class BlockCheck extends PriorityDispatchable {
         }
     }
 
-    public BlockPos pos(){
-        return parent.pos();
+    public BlockPos pos() {
+        return this.parent.pos();
+    }
+
+    public long bpos() {
+        return this.parent.bpos;
     }
 
     @Override
@@ -31,6 +35,6 @@ public class BlockCheck extends PriorityDispatchable {
 
     @Override
     public boolean hasAffinity(Connection connection) {
-        return connection.blockAffinity(pos());
+        return connection.blockAffinity(this.bpos());
     }
 }

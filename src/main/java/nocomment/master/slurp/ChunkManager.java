@@ -18,7 +18,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-public class ChunkManager {
+public final class ChunkManager {
     private static final Gauge chunkCache = Gauge.build()
             .name("chunk_manager_cache")
             .help("Number of chunk positions by state")

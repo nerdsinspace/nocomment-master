@@ -14,7 +14,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class Staggerer {
+public final class Staggerer {
 
     private static final Histogram staggererLatencies = Histogram.build()
             .name("staggerer_latencies")

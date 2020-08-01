@@ -12,7 +12,7 @@ import java.sql.SQLException;
 import java.util.*;
 import java.util.function.Consumer;
 
-public class SignManager {
+public final class SignManager {
     public final World world;
     private final Map<BlockPos, List<Consumer<Optional<byte[]>>>> signListeners;
 

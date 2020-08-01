@@ -8,7 +8,7 @@ import nocomment.master.tracking.TrackyTrackyManager;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
-public class LoggingExecutor implements Executor {
+public final class LoggingExecutor implements Executor {
     private static final Gauge globalThreads = Gauge.build()
             .name("global_threads")
             .help("Number of executing threads globally")

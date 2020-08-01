@@ -9,7 +9,7 @@ import nocomment.master.util.LoggingExecutor;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-public class NoComment {
+public final class NoComment {
 
     public static Executor executor = new LoggingExecutor(Executors.newFixedThreadPool(48), "main");
     public static final boolean DRY_RUN = false;

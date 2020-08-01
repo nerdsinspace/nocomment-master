@@ -3,7 +3,7 @@ package nocomment.master.util;
 /**
  * You'll never guess where this was pasted from
  */
-public class ChunkPos {
+public final class ChunkPos {
 
     public static final ChunkPos SPAWN = new ChunkPos(0, 0);
 

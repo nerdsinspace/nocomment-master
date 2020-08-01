@@ -4,7 +4,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.UUID;
 
-public class OnlinePlayer {
+public final class OnlinePlayer {
     public final UUID uuid;
     public final String username;
 

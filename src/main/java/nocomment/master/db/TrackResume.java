@@ -2,7 +2,7 @@ package nocomment.master.db;
 
 import nocomment.master.util.ChunkPos;
 
-public class TrackResume {
+public final class TrackResume {
     public final ChunkPos pos;
     public final short dimension;
     public final int prevTrackID;

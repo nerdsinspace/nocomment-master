@@ -9,7 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
-public class SpiralScanner {
+public final class SpiralScanner {
     private static final int INTERVAL = 9;
     private final World world;
     private final int priority;
