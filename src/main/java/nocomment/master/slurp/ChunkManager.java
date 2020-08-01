@@ -106,6 +106,7 @@ public class ChunkManager {
                         break;
                     }
                     cache.remove(toPrune.get());
+                    chunkCache.labels("done").dec();
                 }
             }
             queue.poll();

@@ -100,11 +100,11 @@ public class BlockCheckManager {
         return statuses.computeIfAbsent(BlockPos.blockToChunk(bpos), cpos -> new Long2ObjectOpenHashMap<>()).computeIfAbsent(bpos, BlockCheckStatus::new);
     }
 
-    private synchronized OptionalLong isUnloaded(long cpos) {
+    private synchronized long isUnloaded(long cpos) {
         if (observedUnloaded.containsKey(cpos)) {
-            return OptionalLong.of(observedUnloaded.get(cpos));
+            return observedUnloaded.get(cpos);
         }
-        return OptionalLong.empty();
+        return -1;
     }
 
     private synchronized void unloadedAt(long cpos, long now) {
@@ -208,24 +208,22 @@ public class BlockCheckManager {
     }
 
     public class BlockCheckStatus {
-        public final BlockPos pos;
         public final long bpos;
         public final long cpos;
         private int highestSubmittedPriority = Integer.MAX_VALUE;
         private final List<BlockListener> listeners;
         private final List<BlockCheck> inFlight;
-        private OptionalInt blockState;
+        private int blockStateOptional;
+        private boolean blockStateOptionalPresent;
         private long responseAt;
         private CompletableFuture<Boolean> checkedDatabaseYet;
         private long lastActivity;
 
         private BlockCheckStatus(long bpos) {
-            this.listeners = new ArrayList<>();
-            this.pos = BlockPos.fromLong(bpos);
+            this.listeners = new ArrayList<>(0);
             this.bpos = bpos;
             this.cpos = BlockPos.blockToChunk(bpos);
-            this.inFlight = new ArrayList<>();
-            this.blockState = OptionalInt.empty();
+            this.inFlight = new ArrayList<>(0);
             this.checkedDatabaseYet = new CompletableFuture<>();
             lastActivity = System.currentTimeMillis();
             checkStatusQueue.add(this);
@@ -251,6 +249,7 @@ public class BlockCheckManager {
 
         private synchronized void checkDatabase(PreparedStatement stmt) throws SQLException { // this synchronized is just for peace of mind, it should never actually become necessary
             try {
+                BlockPos pos = BlockPos.fromLong(bpos);
                 stmt.setInt(1, pos.x);
                 stmt.setShort(2, (short) pos.y);
                 stmt.setInt(3, pos.z);
@@ -258,7 +257,8 @@ public class BlockCheckManager {
                 stmt.setShort(5, world.server.serverID);
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
-                        blockState = OptionalInt.of(rs.getInt("block_state"));
+                        blockStateOptionalPresent = true;
+                        blockStateOptional = rs.getInt("block_state");
                         responseAt = rs.getLong("created_at");
                     }
                 }
@@ -275,18 +275,18 @@ public class BlockCheckManager {
         private synchronized void requested0(long mustBeNewerThan, int priority, BlockListener listener) {
             lastActivity = System.currentTimeMillis();
             // first, check if cached loaded (e.g. from db)
-            if (blockState.isPresent() && responseAt > mustBeNewerThan) {
-                OptionalInt state = blockState;
+            if (blockStateOptionalPresent && responseAt > mustBeNewerThan) {
+                OptionalInt state = OptionalInt.of(blockStateOptional);
                 NoComment.executor.execute(() -> listener.accept(state, BlockEventType.CACHED, responseAt));
                 return;
             }
             // then, check if cached unloaded
-            OptionalLong unloadedAt = isUnloaded(cpos);
-            if (unloadedAt.isPresent() && unloadedAt.getAsLong() > mustBeNewerThan && !(blockState.isPresent() && responseAt > unloadedAt.getAsLong())) {
+            long unloadedAt = isUnloaded(cpos);
+            if (unloadedAt != -1 && unloadedAt > mustBeNewerThan && !(blockStateOptionalPresent && responseAt > unloadedAt)) {
                 // if this is unloaded, since the newer than, and not older than a real response
                 // then that's what we do
-                onResponseInternal(OptionalInt.empty(), unloadedAt.getAsLong());
-                NoComment.executor.execute(() -> listener.accept(OptionalInt.empty(), BlockEventType.UNLOADED, unloadedAt.getAsLong()));
+                onResponseInternal(OptionalInt.empty(), unloadedAt);
+                NoComment.executor.execute(() -> listener.accept(OptionalInt.empty(), BlockEventType.UNLOADED, unloadedAt));
                 return;
             }
             listeners.add(listener);
@@ -321,16 +321,17 @@ public class BlockCheckManager {
             BlockEventType type;
             if (!state.isPresent()) {
                 type = BlockEventType.UNLOADED;
-            } else if (!blockState.isPresent()) {
+            } else if (!blockStateOptionalPresent) {
                 type = BlockEventType.FIRST_TIME;
-            } else if (state.getAsInt() == blockState.getAsInt()) {
+            } else if (state.getAsInt() == blockStateOptional) {
                 type = BlockEventType.MATCHES_PREV;
             } else {
                 type = BlockEventType.UPDATED;
             }
             if (state.isPresent()) {
                 responseAt = timestamp;
-                blockState = state;
+                blockStateOptionalPresent = true;
+                blockStateOptional = state.getAsInt();
                 results.add(new ResultToInsert(state.getAsInt(), responseAt));
             }
             highestSubmittedPriority = Integer.MAX_VALUE; // reset
@@ -352,6 +353,7 @@ public class BlockCheckManager {
             }
 
             private void setupStatement(PreparedStatement stmt) throws SQLException {
+                BlockPos pos = BlockPos.fromLong(bpos);
                 stmt.setInt(1, pos.x);
                 stmt.setShort(2, (short) pos.y);
                 stmt.setInt(3, pos.z);
