@@ -52,6 +52,8 @@ task('optimize', type: ProGuardTask, dependsOn: shadowJar) {
 
     // Keep
     keep 'class nocomment.master.NoComment { public static void main(java.lang.String[]); }'
+    keep 'class org.apache.commons.logging.** { *; }'
+    keep 'class org.postgresql.** { *; }'
 
     // Optimization
     optimizationpasses 10
