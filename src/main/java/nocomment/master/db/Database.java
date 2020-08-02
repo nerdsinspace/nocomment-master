@@ -34,6 +34,7 @@ public final class Database {
             DBSCAN.INSTANCE.beginIncrementalDBSCANThread();
             Associator.INSTANCE.beginIncrementalAssociatorThread();
             TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(Database::pruneStaleStatuses), 0, 1, TimeUnit.MINUTES);
+            TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(TableSizeMetrics::update), 0, 5, TimeUnit.SECONDS);
         }
     }
 
