@@ -50,10 +50,10 @@ public class SlurpManager {
             .help("Metrics update latencies")
             .register();
     private static final long SIGN_AGE = TimeUnit.DAYS.toMillis(3);
-    private static final long BRUSH_AGE = TimeUnit.MINUTES.toMillis(30);
     private static final long EXPAND_AGE = TimeUnit.DAYS.toMillis(21);
     private static final long RENEW_AGE = TimeUnit.MINUTES.toMillis(15);
     private static final long RENEW_INTERVAL = RENEW_AGE * 2; // 30 minutes
+    private static final long BRUSH_AGE = RENEW_AGE; // it's complicated
     private static final long CHECK_MAX_GAP = TimeUnit.SECONDS.toMillis(30);
     private static final long CLUSTER_DATA_CACHE_DURATION = TimeUnit.DAYS.toMillis(1);
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
@@ -203,6 +203,18 @@ public class SlurpManager {
                     // so this is zero cost (except on decorator mismatch) other than when it's a true base to renew :)
                     if (random.nextBoolean()) { // :woozy_face:
                         toSeed.add(skybase.add(0, 1, 0));
+                    }
+                    // adjacent cantilevers, e.g. map art
+                    if (random.nextBoolean()) { // :catflushed:
+                        int offX = 0;
+                        int offZ = 0;
+                        if (random.nextBoolean()) {
+                            offX = random.nextBoolean() ? 1 : -1;
+                        } else {
+                            offZ = random.nextBoolean() ? 1 : -1;
+                        }
+                        // note: this can cross chunk boundaries but, honestly, that's completely fine
+                        toSeed.add(skybase.add(offX, 0, offZ));
                     }
                 });
             }
