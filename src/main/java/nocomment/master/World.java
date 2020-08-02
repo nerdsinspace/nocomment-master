@@ -18,14 +18,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public final class World {
 
-    private static final Gauge worldTaskQueueLength = Gauge.build()
-            .name("world_task_queue_length")
-            .help("Length of the world task queue")
-            .labelNames("dimension")
-            .register();
-    private static final Gauge worldBlockQueueLength = Gauge.build()
-            .name("world_block_queue_length")
-            .help("Length of the world block queue")
+    private static final Gauge worldQueueLength = Gauge.build()
+            .name("world_queue_length")
+            .help("Length of the world queue")
             .labelNames("dimension")
             .register();
 
@@ -34,10 +29,7 @@ public final class World {
     private final List<Connection> connections;
     private final LinkedBlockingQueue<PriorityDispatchable> toRemove;
     private final Map<Task.InterchangeabilityKey, List<Task>> taskDedup;
-    private final PriorityQueue<PriorityDispatchable> pendingBlocks;
-    private final PriorityQueue<Task> pendingTasks;
-    private final PriorityDispatchableBinaryHeap blocksHeap;
-    private final PriorityDispatchableBinaryHeap tasksHeap;
+    private final PriorityDispatchableBinaryHeap heap;
     public final short dimension;
     public final BlockCheckManager blockCheckManager;
     private final LinkedBlockingQueue<Boolean> taskSendSignal;
@@ -48,10 +40,7 @@ public final class World {
     public World(Server server, short dimension) {
         this.server = server;
         this.connections = new ArrayList<>();
-        this.pendingTasks = new PriorityQueue<>();
-        this.pendingBlocks = new PriorityQueue<>();
-        this.tasksHeap = new PriorityDispatchableBinaryHeap();
-        this.blocksHeap = new PriorityDispatchableBinaryHeap();
+        this.heap = new PriorityDispatchableBinaryHeap();
         this.toRemove = new LinkedBlockingQueue<>();
         this.taskDedup = new HashMap<>();
         this.dimension = dimension;
@@ -89,13 +78,9 @@ public final class World {
 
     public synchronized void submit(PriorityDispatchable dispatch) {
         if (dispatch instanceof Task) {
-            pendingTasks.add((Task) dispatch);
-            tasksHeap.insert(dispatch);
             taskDedup.computeIfAbsent(((Task) dispatch).key(), $ -> new ArrayList<>()).add((Task) dispatch);
-        } else {
-            pendingBlocks.add(dispatch);
-            blocksHeap.insert(dispatch);
         }
+        heap.insert(dispatch);
         worldUpdate();
         // don't server update per-task!
     }
@@ -107,41 +92,16 @@ public final class World {
     }
 
     private synchronized void remove(PriorityDispatchable dispatch) {
-        if (dispatch instanceof Task) {
-            if (!tasksHeap.contains(dispatch)) {
-                return;
-            }
-            pendingTasks.remove(dispatch);
-            tasksHeap.remove(dispatch);
+        if (heap.remove(dispatch)) {
             removeFromDedup(dispatch);
-        } else {
-            if (!blocksHeap.contains(dispatch)) {
-                return;
-            }
-            pendingBlocks.remove(dispatch);
-            blocksHeap.remove(dispatch);
         }
     }
 
     public synchronized Task submitTaskUnlessAlreadyPending(Task task) {
-        Task foundInQueue = null;
-        for (Task dup : pendingTasks) {
-            if (dup.interchangeable(task)) {
-                foundInQueue = dup;
-                break;
-            }
-        }
-        Task foundInMap = null;
         List<Task> options = taskDedup.get(task.key());
         if (options != null) {
-            foundInMap = options.get(0);
-        }
-        if ((foundInQueue == null) != (foundInMap == null)) {
-            throw new IllegalStateException();
-        }
-        if (foundInMap != null) {
-            System.out.println("Already queued. Not adding duplicate task. Queue size is " + pendingTasks.size());
-            return foundInMap;
+            System.out.println("Already queued. Not adding duplicate task. Queue size is " + heap.size());
+            return options.get(0);
         }
         submit(task);
         return task;
@@ -178,40 +138,14 @@ public final class World {
         }
     }
 
-    private PriorityQueue<? extends PriorityDispatchable> pickQueue() {
-        if (pendingBlocks.isEmpty() || (!pendingTasks.isEmpty() && pendingTasks.peek().compareTo(pendingBlocks.peek()) < 0)) {
-            return pendingTasks;
-        } else {
-            return pendingBlocks;
-        }
-    }
-
-    private PriorityDispatchableBinaryHeap pickHeap() {
-        if (blocksHeap.isEmpty() || (!tasksHeap.isEmpty() && tasksHeap.peekLowest().compareTo(blocksHeap.peekLowest()) < 0)) {
-            return tasksHeap;
-        } else {
-            return blocksHeap;
-        }
-    }
-
     private synchronized void sendTasksOnConnections() {
-        worldBlockQueueLength.labels(dim()).set(pendingBlocks.size());
-        worldTaskQueueLength.labels(dim()).set(pendingTasks.size());
-        if (pendingBlocks.size() != blocksHeap.size() || pendingTasks.size() != tasksHeap.size() || pendingBlocks.isEmpty() != blocksHeap.isEmpty() || pendingTasks.isEmpty() != tasksHeap.isEmpty()) {
-            throw new IllegalStateException();
-        }
+        worldQueueLength.labels(dim()).set(heap.size());
         if (connections.isEmpty()) {
             return;
         }
-        while (!pendingTasks.isEmpty() || !pendingBlocks.isEmpty()) {
-            PriorityQueue<? extends PriorityDispatchable> queue = pickQueue();
-            PriorityDispatchableBinaryHeap heap = pickHeap();
-            PriorityDispatchable toDispatch = queue.peek();
-            if (toDispatch != heap.peekLowest()) {
-                throw new IllegalStateException();
-            }
+        while (!heap.isEmpty()) {
+            PriorityDispatchable toDispatch = heap.peekLowest();
             if (toDispatch.isCanceled()) {
-                queue.poll();
                 heap.removeLowest();
                 removeFromDedup(toDispatch);
                 continue;
@@ -220,8 +154,7 @@ public final class World {
             if (conn == null) {
                 break; // can't send anything rn, burden too high on all conns. backpressure time!
             }
-            queue.poll(); // actually take toDispatch off the heap
-            heap.removeLowest();
+            heap.removeLowest(); // actually take toDispatch off the heap
             removeFromDedup(toDispatch);
             toDispatch.dispatch(conn);
         }
@@ -259,9 +192,7 @@ public final class World {
     }
 
     public synchronized Collection<PriorityDispatchable> getPending() {
-        List<PriorityDispatchable> ret = new ArrayList<>(pendingBlocks);
-        ret.addAll(pendingTasks);
-        return ret;
+        return heap.copy();
     }
 
     public synchronized List<Connection> getOpenConnections() {

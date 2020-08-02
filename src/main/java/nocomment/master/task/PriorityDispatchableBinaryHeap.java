@@ -1,6 +1,7 @@
 package nocomment.master.task;
 
 import java.util.Arrays;
+import java.util.Collection;
 
 public final class PriorityDispatchableBinaryHeap {
 
@@ -57,13 +58,13 @@ public final class PriorityDispatchableBinaryHeap {
         }
     }
 
-    public final boolean contains(PriorityDispatchable val) {
-        return val.heapPosition != -1;
-    }
-
-    public final void remove(PriorityDispatchable val) {
+    public final boolean remove(PriorityDispatchable val) {
+        if (val.heapPosition == -1) {
+            return false;
+        }
         update(val, true);
         removeLowest();
+        return true;
     }
 
     public final boolean isEmpty() {
@@ -112,6 +113,10 @@ public final class PriorityDispatchableBinaryHeap {
             index = smallerChild;
         } while ((smallerChild <<= 1) <= size);
         return result;
+    }
+
+    public final Collection<PriorityDispatchable> copy() {
+        return Arrays.asList(array).subList(1, size + 1);
     }
 }
 
