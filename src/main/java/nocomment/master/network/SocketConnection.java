@@ -47,8 +47,8 @@ public class SocketConnection extends Connection {
 
     @Override
     protected void dispatchBlockCheck(BlockCheck check) {
-        BlockPos pos = check.pos();
         queue.add(out -> {
+            BlockPos pos = check.pos();
             out.writeByte(1);
             out.writeInt(pos.x);
             out.writeInt(pos.y);

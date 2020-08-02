@@ -106,7 +106,7 @@ public class WorldTrackyTracky {
             // also, with slightly higher priority, hit the exact location (9 checks)
             grid(priority - 1, 9, 1, pos, hit -> {
                 // if we get a hit in the center 9 checks, then cancel the other 121 checks
-                largerGrid.forEach(Task::cancel);
+                largerGrid.forEach(world::cancelAndRemoveAsync);
 
                 ingestGenericKnownHit(hit, prevTrack);
             });

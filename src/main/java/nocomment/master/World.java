@@ -6,6 +6,7 @@ import nocomment.master.slurp.BlockCheckManager;
 import nocomment.master.slurp.SignManager;
 import nocomment.master.slurp.SlurpManager;
 import nocomment.master.task.PriorityDispatchable;
+import nocomment.master.task.PriorityDispatchableBinaryHeap;
 import nocomment.master.task.Task;
 import nocomment.master.util.BlockPos;
 import nocomment.master.util.ChunkPos;
@@ -28,11 +29,15 @@ public final class World {
             .labelNames("dimension")
             .register();
 
-    private static final int MAX_BURDEN = 1000; // about 2.3 seconds
+    private static final int MAX_BURDEN = 400;
     public final Server server;
     private final List<Connection> connections;
+    private final LinkedBlockingQueue<PriorityDispatchable> toRemove;
+    private final Map<Task.InterchangeabilityKey, List<Task>> taskDedup;
     private final PriorityQueue<PriorityDispatchable> pendingBlocks;
     private final PriorityQueue<Task> pendingTasks;
+    private final PriorityDispatchableBinaryHeap blocksHeap;
+    private final PriorityDispatchableBinaryHeap tasksHeap;
     public final short dimension;
     public final BlockCheckManager blockCheckManager;
     private final LinkedBlockingQueue<Boolean> taskSendSignal;
@@ -45,6 +50,10 @@ public final class World {
         this.connections = new ArrayList<>();
         this.pendingTasks = new PriorityQueue<>();
         this.pendingBlocks = new PriorityQueue<>();
+        this.tasksHeap = new PriorityDispatchableBinaryHeap();
+        this.blocksHeap = new PriorityDispatchableBinaryHeap();
+        this.toRemove = new LinkedBlockingQueue<>();
+        this.taskDedup = new HashMap<>();
         this.dimension = dimension;
         this.blockCheckManager = new BlockCheckManager(this);
         this.taskSendSignal = new LinkedBlockingQueue<>();
@@ -81,22 +90,58 @@ public final class World {
     public synchronized void submit(PriorityDispatchable dispatch) {
         if (dispatch instanceof Task) {
             pendingTasks.add((Task) dispatch);
+            tasksHeap.insert(dispatch);
+            taskDedup.computeIfAbsent(((Task) dispatch).key(), $ -> new ArrayList<>()).add((Task) dispatch);
         } else {
             pendingBlocks.add(dispatch);
+            blocksHeap.insert(dispatch);
         }
         worldUpdate();
         // don't server update per-task!
     }
 
-    public synchronized Task submitTaskUnlessAlreadyPending(Task task) {
-        for (Task dup : pendingTasks) {
-            if (dup.interchangable(task)) {
-                System.out.println("Already queued. Not adding duplicate task. Queue size is " + pendingTasks.size());
-                //pending.remove(dup);
-                //pending.add(new CombinedTask(task, (Task) dup));
-                //return task;
-                return dup;
+    public void cancelAndRemoveAsync(PriorityDispatchable dispatch) {
+        dispatch.cancel();
+        toRemove.add(dispatch);
+        worldUpdate();
+    }
+
+    private synchronized void remove(PriorityDispatchable dispatch) {
+        if (dispatch instanceof Task) {
+            if (!tasksHeap.contains(dispatch)) {
+                return;
             }
+            pendingTasks.remove(dispatch);
+            tasksHeap.remove(dispatch);
+            removeFromDedup(dispatch);
+        } else {
+            if (!blocksHeap.contains(dispatch)) {
+                return;
+            }
+            pendingBlocks.remove(dispatch);
+            blocksHeap.remove(dispatch);
+        }
+    }
+
+    public synchronized Task submitTaskUnlessAlreadyPending(Task task) {
+        Task foundInQueue = null;
+        for (Task dup : pendingTasks) {
+            if (dup.interchangeable(task)) {
+                foundInQueue = dup;
+                break;
+            }
+        }
+        Task foundInMap = null;
+        List<Task> options = taskDedup.get(task.key());
+        if (options != null) {
+            foundInMap = options.get(0);
+        }
+        if ((foundInQueue == null) != (foundInMap == null)) {
+            throw new IllegalStateException();
+        }
+        if (foundInMap != null) {
+            System.out.println("Already queued. Not adding duplicate task. Queue size is " + pendingTasks.size());
+            return foundInMap;
         }
         submit(task);
         return task;
@@ -107,10 +152,29 @@ public final class World {
             while (true) {
                 taskSendSignal.take(); // block
                 taskSendSignal.clear(); // clear all extras
+                consumeRemovalQueue();
                 sendTasksOnConnections();
             }
         } catch (InterruptedException e) {
             e.printStackTrace();
+        }
+    }
+
+    private synchronized void consumeRemovalQueue() {
+        List<PriorityDispatchable> queued = new ArrayList<>(toRemove.size());
+        toRemove.drainTo(queued);
+        queued.forEach(this::remove);
+    }
+
+    private synchronized void removeFromDedup(PriorityDispatchable dispatch) {
+        if (!(dispatch instanceof Task)) {
+            return;
+        }
+        Task task = (Task) dispatch;
+        List<Task> dedup = taskDedup.get(task.key());
+        dedup.remove(task);
+        if (dedup.isEmpty()) {
+            taskDedup.remove(task.key());
         }
     }
 
@@ -122,17 +186,34 @@ public final class World {
         }
     }
 
+    private PriorityDispatchableBinaryHeap pickHeap() {
+        if (blocksHeap.isEmpty() || (!tasksHeap.isEmpty() && tasksHeap.peekLowest().compareTo(blocksHeap.peekLowest()) < 0)) {
+            return tasksHeap;
+        } else {
+            return blocksHeap;
+        }
+    }
+
     private synchronized void sendTasksOnConnections() {
         worldBlockQueueLength.labels(dim()).set(pendingBlocks.size());
         worldTaskQueueLength.labels(dim()).set(pendingTasks.size());
+        if (pendingBlocks.size() != blocksHeap.size() || pendingTasks.size() != tasksHeap.size() || pendingBlocks.isEmpty() != blocksHeap.isEmpty() || pendingTasks.isEmpty() != tasksHeap.isEmpty()) {
+            throw new IllegalStateException();
+        }
         if (connections.isEmpty()) {
             return;
         }
         while (!pendingTasks.isEmpty() || !pendingBlocks.isEmpty()) {
             PriorityQueue<? extends PriorityDispatchable> queue = pickQueue();
+            PriorityDispatchableBinaryHeap heap = pickHeap();
             PriorityDispatchable toDispatch = queue.peek();
+            if (toDispatch != heap.peekLowest()) {
+                throw new IllegalStateException();
+            }
             if (toDispatch.isCanceled()) {
                 queue.poll();
+                heap.removeLowest();
+                removeFromDedup(toDispatch);
                 continue;
             }
             Connection conn = selectConnectionFor(toDispatch);
@@ -140,6 +221,8 @@ public final class World {
                 break; // can't send anything rn, burden too high on all conns. backpressure time!
             }
             queue.poll(); // actually take toDispatch off the heap
+            heap.removeLowest();
+            removeFromDedup(toDispatch);
             toDispatch.dispatch(conn);
         }
     }

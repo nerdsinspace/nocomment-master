@@ -11,7 +11,6 @@ import it.unimi.dsi.fastutil.objects.ObjectIterator;
 import nocomment.master.NoComment;
 import nocomment.master.World;
 import nocomment.master.db.Database;
-import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.BlockPos;
 import nocomment.master.util.LoggingExecutor;
@@ -335,7 +334,7 @@ public final class BlockCheckManager {
                 results.add(new ResultToInsert(state.getAsInt(), responseAt));
             }
             highestSubmittedPriority = Integer.MAX_VALUE; // reset
-            inFlight.forEach(PriorityDispatchable::cancel); // unneeded
+            inFlight.forEach(world::cancelAndRemoveAsync); // unneeded
             inFlight.clear();
             for (BlockListener listener : listeners) {
                 NoComment.executor.execute(() -> listener.accept(state, type, timestamp));

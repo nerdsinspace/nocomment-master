@@ -12,6 +12,8 @@ public abstract class PriorityDispatchable implements Comparable<PriorityDispatc
     private static final AtomicLong globalSeq = new AtomicLong();
     private final long seq = globalSeq.incrementAndGet(); // int would overflow after like a month
 
+    int heapPosition = -1;
+
     public PriorityDispatchable(int priority) {
         this.priority = priority;
     }
@@ -22,7 +24,7 @@ public abstract class PriorityDispatchable implements Comparable<PriorityDispatc
      * Compare by priority, and tiebreak with seq (order of construction, earlier is lower)
      */
     @Override
-    public int compareTo(PriorityDispatchable t) {
+    public final int compareTo(PriorityDispatchable t) {
         if (priority != t.priority) {
             return Integer.compare(priority, t.priority);
         }

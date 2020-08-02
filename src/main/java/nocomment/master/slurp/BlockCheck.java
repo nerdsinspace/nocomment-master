@@ -18,17 +18,24 @@ public final class BlockCheck extends PriorityDispatchable {
             .help("Number of times a block check cancellation has been queried")
             .labelNames("priority", "outcome")
             .register();
-    private final BlockCheckManager.BlockCheckStatus parent;
+    private BlockCheckManager.BlockCheckStatus parent;
+    private final long bpos;
 
     BlockCheck(int priority, BlockCheckManager.BlockCheckStatus parent) {
         super(priority);
         this.parent = parent;
+        this.bpos = parent.bpos;
     }
 
     public void onCompleted(OptionalInt blockState) { // this can be called from any thread at any time
-        if (!super.isCanceled()) {
-            parent.onResponse(blockState);
+        BlockCheckManager.BlockCheckStatus parentRef;
+        synchronized (this) {
+            if (super.isCanceled()) {
+                return;
+            }
+            parentRef = parent;
         }
+        parentRef.onResponse(blockState);
     }
 
     @Override
@@ -38,17 +45,18 @@ public final class BlockCheck extends PriorityDispatchable {
     }
 
     @Override
-    public void cancel() {
+    public synchronized void cancel() {
         blockCheckCancellations.labels(priority + "").inc();
         super.cancel();
+        parent = null;
     }
 
     public BlockPos pos() {
-        return this.parent.pos();
+        return BlockPos.fromLong(bpos);
     }
 
     public long bpos() {
-        return this.parent.bpos;
+        return bpos;
     }
 
     @Override
@@ -58,6 +66,6 @@ public final class BlockCheck extends PriorityDispatchable {
 
     @Override
     public boolean hasAffinity(Connection connection) {
-        return connection.blockAffinity(this.bpos());
+        return connection.blockAffinity(bpos);
     }
 }

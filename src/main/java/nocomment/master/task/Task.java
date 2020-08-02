@@ -15,7 +15,7 @@ public abstract class Task extends PriorityDispatchable {
 
     public Task(int priority, ChunkPos start, int directionX, int directionZ, int count) {
         super(priority);
-        if (count == 0) {
+        if (count <= 0) {
             throw new IllegalArgumentException();
         }
         this.start = start;
@@ -28,8 +28,30 @@ public abstract class Task extends PriorityDispatchable {
 
     public abstract void completed(); // anything not hit is a miss
 
-    public boolean interchangable(Task other) {
+    public boolean interchangeable(Task other) {
         return priority == other.priority && start.equals(other.start) && directionX == other.directionX && directionZ == other.directionZ && count == other.count;
+    }
+
+    public InterchangeabilityKey key() {
+        return new InterchangeabilityKey();
+    }
+
+    public class InterchangeabilityKey {
+        private int hashCode = priority * 39587 + start.hashCode() + directionX * 5349 + directionZ * 34698 + count * 37894;
+
+        private boolean interchangeable(Task other) {
+            return Task.this.interchangeable(other);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            return this == o || (o instanceof InterchangeabilityKey && ((InterchangeabilityKey) o).interchangeable(Task.this));
+        }
+
+        @Override
+        public int hashCode() {
+            return hashCode;
+        }
     }
 
     @Override
