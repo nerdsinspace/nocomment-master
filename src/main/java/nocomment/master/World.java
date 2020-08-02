@@ -1,5 +1,6 @@
 package nocomment.master;
 
+import io.prometheus.client.Gauge;
 import nocomment.master.network.Connection;
 import nocomment.master.slurp.BlockCheckManager;
 import nocomment.master.slurp.SignManager;
@@ -16,10 +17,21 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public final class World {
 
+    private static final Gauge worldTaskQueueLength = Gauge.build()
+            .name("world_task_queue_length")
+            .help("Length of the world task queue")
+            .labelNames("dimension")
+            .register();
+    private static final Gauge worldBlockQueueLength = Gauge.build()
+            .name("world_block_queue_length")
+            .help("Length of the world block queue")
+            .labelNames("dimension")
+            .register();
+
     private static final int MAX_BURDEN = 1000; // about 2.3 seconds
     public final Server server;
     private final List<Connection> connections;
-    private final PriorityQueue<PriorityDispatchable> pendingOther;
+    private final PriorityQueue<PriorityDispatchable> pendingBlocks;
     private final PriorityQueue<Task> pendingTasks;
     public final short dimension;
     public final BlockCheckManager blockCheckManager;
@@ -32,7 +44,7 @@ public final class World {
         this.server = server;
         this.connections = new ArrayList<>();
         this.pendingTasks = new PriorityQueue<>();
-        this.pendingOther = new PriorityQueue<>();
+        this.pendingBlocks = new PriorityQueue<>();
         this.dimension = dimension;
         this.blockCheckManager = new BlockCheckManager(this);
         this.taskSendSignal = new LinkedBlockingQueue<>();
@@ -70,7 +82,7 @@ public final class World {
         if (dispatch instanceof Task) {
             pendingTasks.add((Task) dispatch);
         } else {
-            pendingOther.add(dispatch);
+            pendingBlocks.add(dispatch);
         }
         worldUpdate();
         // don't server update per-task!
@@ -103,18 +115,20 @@ public final class World {
     }
 
     private PriorityQueue<? extends PriorityDispatchable> pickQueue() {
-        if (pendingOther.isEmpty() || (!pendingTasks.isEmpty() && pendingTasks.peek().compareTo(pendingOther.peek()) < 0)) {
+        if (pendingBlocks.isEmpty() || (!pendingTasks.isEmpty() && pendingTasks.peek().compareTo(pendingBlocks.peek()) < 0)) {
             return pendingTasks;
         } else {
-            return pendingOther;
+            return pendingBlocks;
         }
     }
 
     private synchronized void sendTasksOnConnections() {
+        worldBlockQueueLength.labels(dim()).set(pendingBlocks.size());
+        worldTaskQueueLength.labels(dim()).set(pendingTasks.size());
         if (connections.isEmpty()) {
             return;
         }
-        while (!pendingTasks.isEmpty() || !pendingOther.isEmpty()) {
+        while (!pendingTasks.isEmpty() || !pendingBlocks.isEmpty()) {
             PriorityQueue<? extends PriorityDispatchable> queue = pickQueue();
             PriorityDispatchable toDispatch = queue.peek();
             if (toDispatch.isCanceled()) {
@@ -162,7 +176,7 @@ public final class World {
     }
 
     public synchronized Collection<PriorityDispatchable> getPending() {
-        List<PriorityDispatchable> ret = new ArrayList<>(pendingOther);
+        List<PriorityDispatchable> ret = new ArrayList<>(pendingBlocks);
         ret.addAll(pendingTasks);
         return ret;
     }
