@@ -215,7 +215,7 @@ CREATE INDEX dbscan_process
     ON dbscan
         USING GiST (CIRCLE(POINT(x, z), 32)) WHERE is_node;
 CREATE INDEX dbscan_disjoint_traversal
-    ON dbscan (cluster_parent) WHERE cluster_parent IS NOT NULL;
+    ON dbscan (cluster_parent, disjoint_rank, id) WHERE cluster_parent IS NOT NULL;
 
 CREATE OR REPLACE FUNCTION _range_union_cardinality(int8range[])
     RETURNS bigint AS
