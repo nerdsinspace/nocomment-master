@@ -1,5 +1,6 @@
 package nocomment.master.util;
 
+import io.prometheus.client.Counter;
 import io.prometheus.client.Histogram;
 import nocomment.master.World;
 import nocomment.master.db.Database;
@@ -19,6 +20,11 @@ public final class Staggerer {
     private static final Histogram staggererLatencies = Histogram.build()
             .name("staggerer_latencies")
             .help("Staggerer latencies")
+            .register();
+    private static final Counter kicks = Counter.build()
+            .name("stagerer_kicks")
+            .help("Staggerer kicks")
+            .labelNames("dimension", "server", "identity")
             .register();
 
     private static final long AUTO_KICK = TimeUnit.HOURS.toMillis(6);
@@ -137,6 +143,7 @@ public final class Staggerer {
         for (Connection conn : onlineNow) {
             long leaveAt = leaveAtTS.get(conn.getIdentity());
             if (leaveAt < System.currentTimeMillis()) {
+                kicks.labels(world.dim(), world.server.hostname, conn.getIdentity() + "").inc();
                 System.out.println("Therefore, kicking " + conn.getIdentity());
                 conn.dispatchDisconnectRequest();
                 return;
