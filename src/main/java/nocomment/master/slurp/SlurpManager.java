@@ -83,7 +83,7 @@ public class SlurpManager {
         } else {
             this.chunkManager = null;
         }
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneAsks), 24 * 60 + 25, 24 * 60, TimeUnit.MINUTES);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneAsks), 12 * 60 + 25, 12 * 60, TimeUnit.MINUTES);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneClusterData), 1, 1, TimeUnit.HOURS);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneBlocks), 40, 60, TimeUnit.MINUTES);
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> {
