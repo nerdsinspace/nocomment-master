@@ -540,7 +540,7 @@ public class SlurpManager {
 
     private void doRawAsk(long mustBeNewerThan, BlockPos pos, int priority) {
         world.blockCheckManager.requestBlockState(mustBeNewerThan, pos, priority, (state, type, timestamp) -> {
-            if (chunkManager == null) {
+            if (chunkManager == null || !state.isPresent()) {
                 blockRecvExecutor.execute(() -> blockRecv(pos, state, type, timestamp, null));
             } else {
                 chunkManager.getChunk(new ChunkPos(pos)).thenAcceptAsync(chunkData -> blockRecv(pos, state, type, timestamp, chunkData), blockRecvExecutor);
