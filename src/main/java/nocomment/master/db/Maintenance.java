@@ -24,9 +24,9 @@ public final class Maintenance {
         scheduleReindex("chat_by_time");
         scheduleReindex("signs_by_loc");
         scheduleReindex("notes_server_id_dimension_x_z_key");
-        scheduleReindex("blocks_by_loc");
+        /*scheduleReindex("blocks_by_loc");
         scheduleReindex("blocks_by_time");
-        scheduleReindex("blocks_by_chunk");
+        scheduleReindex("blocks_by_chunk");*/
         scheduleReindex("associations_cluster_id");
         scheduleReindex("associations_player_and_cluster");
         scheduleReindex("associations_player_id");
