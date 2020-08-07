@@ -25,10 +25,10 @@ public class Track {
     public final WorldTrackyTracky context;
     private final int trackID;
     private ChunkPos mostRecentHit;
-    private List<ChunkPos> hits = new ArrayList<>();
-    private List<ChunkPos> misses = new ArrayList<>();
+    private final List<ChunkPos> hits = new ArrayList<>();
+    private final List<ChunkPos> misses = new ArrayList<>();
     private ScheduledFuture<?> updater;
-    private FilterModeTransitionController transitionController;
+    private final FilterModeTransitionController transitionController = new FilterModeTransitionController(this);
     private boolean done;
 
     private AbstractFilterMode mode;
@@ -36,8 +36,7 @@ public class Track {
     public Track(Hit hit, WorldTrackyTracky context, OptionalInt prevTrackID) {
         this.context = context;
         this.trackID = Database.createTrack(hit, prevTrackID);
-        hit(hit);
-        this.transitionController = new FilterModeTransitionController(this);
+        this.hit(hit);
     }
 
     public synchronized void start() {

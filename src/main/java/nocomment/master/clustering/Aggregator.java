@@ -40,8 +40,10 @@ enum Aggregator {
         }
     }
 
-    public boolean aggregateEligible(ChunkPos pos) {
-        return Math.abs(pos.x) > 100 && Math.abs(pos.z) > 100 && Math.abs(Math.abs(pos.x) - Math.abs(pos.z)) > 100 && pos.distSq() > 1500L * 1500L;
+    public boolean aggregateEligible(long cpos) {
+        final int x = ChunkPos.decodeX(cpos);
+        final int z = ChunkPos.decodeZ(cpos);
+        return Math.abs(x) > 100 && Math.abs(z) > 100 && Math.abs(Math.abs(x) - Math.abs(z)) > 100 && ChunkPos.distSqSerialized(cpos) > 1500L * 1500L;
     }
 
     private static List<PastHit> query(long startID, Connection connection) throws SQLException {

@@ -33,8 +33,16 @@ public final class ChunkPos {
         return toLong(x, z);
     }
 
+    public static int decodeX(long serialized) {
+        return (int) serialized;
+    }
+
+    public static int decodeZ(long serialized) {
+        return (int) (serialized >> 32);
+    }
+
     public static ChunkPos fromLong(long serialized) {
-        return new ChunkPos((int) serialized, (int) (serialized >> 32));
+        return new ChunkPos(decodeX(serialized), decodeZ(serialized));
     }
 
     public int hashCode() {
@@ -54,17 +62,33 @@ public final class ChunkPos {
         }
     }
 
-    public long distSq(ChunkPos other) {
+    public static long distSq(final int x1, final int z1, final int x2, final int z2) {
         // this could actually overflow int easily
         // world border is 30_000_000/16 chunks, which is about 1.8 million
         // square that? you'll overflow int!
-        long dx = this.x - other.x;
-        long dz = this.z - other.z;
+        long dx = x1 - x2;
+        long dz = z1 - z2;
         return dx * dx + dz * dz;
+    }
+
+    public long distSq(final int x, final int z) {
+        return distSq(this.x, this.z, x, z);
+    }
+
+    public long distSq(ChunkPos other) {
+        return distSq(other.x, other.z);
     }
 
     public long distSq() {
         return distSq(SPAWN);
+    }
+
+    public static long distSqSerialized(long serialized1, long serialized2) {
+        return distSq(decodeX(serialized1), decodeZ(serialized1), decodeX(serialized2), decodeZ(serialized2));
+    }
+
+    public static long distSqSerialized(long serialized) {
+        return SPAWN.distSq(decodeX(serialized), decodeZ(serialized));
     }
 
     public BlockPos origin() {
@@ -73,6 +97,10 @@ public final class ChunkPos {
 
     public ChunkPos add(int dx, int dz) {
         return new ChunkPos(this.x + dx, this.z + dz);
+    }
+
+    public long serializedAdd(int dx, int dz) {
+        return toLong(this.x + dx, this.z + dz);
     }
 
     /**
