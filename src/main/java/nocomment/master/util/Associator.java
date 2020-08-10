@@ -54,10 +54,13 @@ public enum Associator {
         try (Connection connection = Database.getConnection()) {
             connection.setAutoCommit(false);
             long prevFence = 0;
+            boolean needsInsert = false;
             try (PreparedStatement stmt = connection.prepareStatement("SELECT max_updated_at_processed FROM track_associator_progress");
                  ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     prevFence = rs.getLong("max_updated_at_processed");
+                } else {
+                    needsInsert = true;
                 }
             }
             if (prevFence == 0) {
@@ -107,7 +110,10 @@ public enum Associator {
                     }
                 }
             }
-            try (PreparedStatement stmt = connection.prepareStatement("UPDATE track_associator_progress SET max_updated_at_processed = ?")) {
+
+            try (PreparedStatement stmt = connection.prepareStatement(needsInsert ?
+                    "INSERT INTO track_associator_progress (max_updated_at_processed) VALUES (?)"
+                    : "UPDATE track_associator_progress SET max_updated_at_processed = ?")) {
                 stmt.setLong(1, fence);
                 stmt.execute();
             }
