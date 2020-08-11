@@ -141,18 +141,17 @@ public final class Staggerer {
             if (prevLeaveAt != null) {
                 // this is the actual staggering algorithm
                 // it just depends on this for loop being in sorted order from youngest to oldest (aka: last connection first, first connection last)
-                ourLeaveAt = Math.min(prevLeaveAt - STAGGER, ourLeaveAt);
+                long down = prevLeaveAt - STAGGER;
+                if (down < ourLeaveAt) {
+                    leaveAtTS.put(pid, down);
+                    ourLeaveAt = down;
+                }
             }
-            leaveAtTS.put(pid, ourLeaveAt);
             prevLeaveAt = ourLeaveAt;
             System.out.println("Player " + pid + " joined at " + format(joinAt) + " would be kicked at " + format(serverLeaveAt) + " but we'll kick at " + format(ourLeaveAt));
         }
         for (Connection conn : onlineNow) {
-            int pid = conn.getIdentity();
-            long leaveAt = leaveAtTS.get(pid);
-            if (pid == 904 || pid == 33170 || pid == 102440 || pid == 102436) {
-                continue;
-            }
+            long leaveAt = leaveAtTS.get(conn.getIdentity());
             if (leaveAt < System.currentTimeMillis()) {
                 kicks.labels(world.dim(), world.server.hostname, conn.getIdentity() + "").inc();
                 System.out.println("Therefore, kicking " + conn.getIdentity());
