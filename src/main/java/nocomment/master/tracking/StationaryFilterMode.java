@@ -55,7 +55,7 @@ public class StationaryFilterMode extends AbstractFilterMode {
 
     @Override
     public boolean includesBroadly(ChunkPos pos) {
-        return Particle.wouldLoad(pos.x, pos.z, this.pos, 9);
+        return MonteCarloParticleFilterMode.wouldLoadChk(pos.x, pos.z, this.pos, 9);
     }
 
     @Override

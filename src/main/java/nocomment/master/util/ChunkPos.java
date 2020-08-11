@@ -29,6 +29,12 @@ public final class ChunkPos {
         return (long) x & 0xffffffffL | ((long) z & 0xffffffffL) << 32;
     }
 
+    public static long add(long cpos, int dx, int dz) {
+        int x = (int) cpos;
+        int z = (int) (cpos >> 32);
+        return toLong(x + dx, z + dz);
+    }
+
     public long toLong() {
         return toLong(x, z);
     }
@@ -36,6 +42,7 @@ public final class ChunkPos {
     public static ChunkPos fromLong(long serialized) {
         return new ChunkPos((int) serialized, (int) (serialized >> 32));
     }
+
 
     public int hashCode() {
         int i = 1664525 * this.x + 1013904223;

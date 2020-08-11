@@ -50,7 +50,7 @@ public class FilterModeTransitionController {
 
     private boolean allHitsWithin(int range, ChunkPos center) {
         // intentionally 5 not 4 so that we grab ppl who are walking around in just a small area
-        return hist.hitHistory.subList(0, range).stream().flatMap(Collection::stream).allMatch(pos -> Particle.wouldLoad(center.x, center.z, pos, 5));
+        return hist.hitHistory.subList(0, range).stream().flatMap(Collection::stream).allMatch(pos -> MonteCarloParticleFilterMode.wouldLoadChk(center.x, center.z, pos, 5));
     }
 
     private AbstractFilterMode swap(FilterModeEnum mode) {
