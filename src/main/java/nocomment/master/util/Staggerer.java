@@ -28,6 +28,7 @@ public final class Staggerer {
             .register();
 
     private static final long AUTO_KICK = TimeUnit.HOURS.toMillis(6);
+    private static final long CRAP_KICK = TimeUnit.HOURS.toMillis(3);
     private static final long STAGGER = AUTO_KICK / 4; // 90 minutes
     private final World world;
     private final Map<Integer, Long> observedAt = new HashMap<>();
@@ -129,7 +130,13 @@ public final class Staggerer {
         System.out.println(System.currentTimeMillis());
         for (int pid : harem.stream().sorted(Comparator.comparingLong(pid -> -playerJoinTS.get(pid))).collect(Collectors.toList())) {
             long joinAt = playerJoinTS.get(pid);
-            long serverLeaveAt = joinAt + AUTO_KICK;
+            long duration;
+            if (pid == 904 || pid == 33170 || pid == 102440 || pid == 102436) { // jewishbanker oremongoloid xz_9 p7k
+                duration = CRAP_KICK;
+            } else {
+                duration = AUTO_KICK;
+            }
+            long serverLeaveAt = joinAt + duration;
             long ourLeaveAt = serverLeaveAt;
             if (prevLeaveAt != null) {
                 // this is the actual staggering algorithm
