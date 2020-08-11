@@ -148,7 +148,11 @@ public final class Staggerer {
             System.out.println("Player " + pid + " joined at " + format(joinAt) + " would be kicked at " + format(serverLeaveAt) + " but we'll kick at " + format(ourLeaveAt));
         }
         for (Connection conn : onlineNow) {
-            long leaveAt = leaveAtTS.get(conn.getIdentity());
+            int pid = conn.getIdentity();
+            long leaveAt = leaveAtTS.get(pid);
+            if (pid == 904 || pid == 33170 || pid == 102440 || pid == 102436) {
+                continue;
+            }
             if (leaveAt < System.currentTimeMillis()) {
                 kicks.labels(world.dim(), world.server.hostname, conn.getIdentity() + "").inc();
                 System.out.println("Therefore, kicking " + conn.getIdentity());
