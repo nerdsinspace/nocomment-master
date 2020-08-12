@@ -145,8 +145,8 @@ public final class Staggerer {
             System.out.println("Player " + pid + " joined at " + format(joinAt) + " would be kicked at " + format(serverLeaveAt) + " but we'll kick at " + format(ourLeaveAt));
         }
         for (Connection conn : onlineNow) {
-            long leaveAt = leaveAtTS.get(conn.getIdentity());
-            if (leaveAt < System.currentTimeMillis()) {
+            Long leaveAt = leaveAtTS.get(conn.getIdentity());
+            if (leaveAt != null && leaveAt < System.currentTimeMillis()) {
                 kicks.labels(world.dim(), world.server.hostname, conn.getIdentity() + "").inc();
                 System.out.println("Therefore, kicking " + conn.getIdentity());
                 conn.dispatchDisconnectRequest();
