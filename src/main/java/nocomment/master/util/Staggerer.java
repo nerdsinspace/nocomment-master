@@ -30,6 +30,7 @@ public final class Staggerer {
     private static final long AUTO_KICK = TimeUnit.HOURS.toMillis(6);
     private static final long CRAP_KICK = TimeUnit.HOURS.toMillis(3);
     private static final long STAGGER = AUTO_KICK / 4; // 90 minutes
+    private static final long STARTUP = System.currentTimeMillis();
     private final World world;
     private final Map<Integer, Long> observedAt = new HashMap<>();
 
@@ -184,6 +185,9 @@ public final class Staggerer {
             return joinedAt;
         }
         long tentative = timestamp - TimeUnit.SECONDS.toMillis(20);
+        if (tentative < STARTUP) {
+            tentative -= TimeUnit.SECONDS.toMillis(30);
+        }
         OptionalLong whatWeDoHereIsGoBack = currentSessionJoinedAt(playerID, serverID, tentative);
         if (whatWeDoHereIsGoBack.isPresent()) {
             return whatWeDoHereIsGoBack;
