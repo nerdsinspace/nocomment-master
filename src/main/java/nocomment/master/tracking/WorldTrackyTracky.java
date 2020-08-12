@@ -114,7 +114,7 @@ public class WorldTrackyTracky {
             // 3 by 3 grid pattern, we don't care all that much
             // 9 checks
             // plus or minus 144 blocks (9*1*16) in any direction
-            grid(priority, 9, 1, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
+            grid(priority, 8, 1, pos, hit -> ingestGenericKnownHit(hit, prevTrack));
         }
     }
 
