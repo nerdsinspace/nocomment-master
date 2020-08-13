@@ -372,7 +372,7 @@ public enum DBSCAN {
         return OptionalInt.of(neighbors.stream().min(Comparator.comparingDouble(dp -> Math.sqrt((dp.x - x) * (dp.x - x) + (dp.z - z) * (dp.z - z)) * 1.0d / dp.disjointSize)).get().fetchRootReadOnly(connection, cache).id);
     }
 
-    public boolean aggregateEligible(ChunkPos pos) {
-        return Aggregator.INSTANCE.aggregateEligible(pos);
+    public boolean aggregateEligible(long cpos) {
+        return Aggregator.INSTANCE.aggregateEligible(cpos);
     }
 }

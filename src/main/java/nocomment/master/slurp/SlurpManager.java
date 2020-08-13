@@ -3,8 +3,7 @@ package nocomment.master.slurp;
 import io.prometheus.client.Counter;
 import io.prometheus.client.Gauge;
 import io.prometheus.client.Histogram;
-import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.*;
 import it.unimi.dsi.fastutil.objects.ObjectIterator;
 import nocomment.master.World;
 import nocomment.master.clustering.DBSCAN;
@@ -59,19 +58,23 @@ public class SlurpManager {
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
     private static final long NUM_RENEWALS = 4;
     private static final int MAX_CHECK_STATUS_QUEUE_LENGTH = 5000;
+    private static final Random random = new Random();
     public final World world;
     private final Executor blockRecvExecutor = new LoggingExecutor(Executors.newSingleThreadExecutor(), "block_recv"); // blockRecv is synchronized so we only need one
     private final ChunkManager chunkManager;
-    private final Map<ChunkPos, ResumeDataForChunk> askedAndGotUnloadedResponse = new HashMap<>();
+    private final Long2ObjectOpenHashMap<ResumeDataForChunk> askedAndGotUnloadedResponse = new Long2ObjectOpenHashMap<>(); // long = chunkpos
     private final Long2ObjectOpenHashMap<AskStatus> allAsks = new Long2ObjectOpenHashMap<>(); // long = blockpos
     private final Set<BlockPos> signsAskedFor = new HashSet<>();
     private final LinkedBlockingQueue<ChunkPosWithTimestamp> ingest = new LinkedBlockingQueue<>();
     private final Object ingestLock = new Object();
-    private final Set<ChunkPos> clusterMembershipConfirmed = new HashSet<>();
-    private final Map<ChunkPos, Long> clusterNonmembershipConfirmedAtCache = new HashMap<>();
-    private final Map<ChunkPos, Long> clusterHit = new HashMap<>();
-    private final Map<ChunkPos, Long> renewalSchedule = new HashMap<>();
-    private final Map<ChunkPos, int[][]> heightMapCache = new HashMap<>();
+    // long chunkPos
+    private final LongOpenHashSet clusterMembershipConfirmed = new LongOpenHashSet();
+    // long chunkPos, long time
+    private final Long2LongOpenHashMap clusterNonmembershipConfirmedAtCache = new Long2LongOpenHashMap();
+    private final Long2LongOpenHashMap clusterHit = new Long2LongOpenHashMap();
+    private final Long2LongOpenHashMap renewalSchedule = new Long2LongOpenHashMap();
+    // long = chunkPos
+    private final Long2ObjectOpenHashMap<int[][]> heightMapCache = new Long2ObjectOpenHashMap<>();
 
     public SlurpManager(World world) {
         this.world = world;
@@ -137,12 +140,16 @@ public class SlurpManager {
         }
         long now = System.currentTimeMillis();
         renewalSchedule.values().removeIf(ts -> ts < now);
-        Optional<ChunkPos> candidates = clusterHit.entrySet()
+        Optional<Long2LongMap.Entry> candidates = clusterHit.long2LongEntrySet()
                 .stream()
-                .filter(entry -> entry.getValue() > now - CHECK_MAX_GAP)
-                .map(Map.Entry::getKey)
-                .filter(cpos -> !(renewalSchedule.containsKey(cpos)))
-                .max(Comparator.comparingLong(ChunkPos::distSq));
+                .filter(entry -> {
+                    if (entry.getLongValue() < now - CHECK_MAX_GAP) {
+                        return false;
+                    }
+                    long cpos = entry.getLongKey();
+                    return !renewalSchedule.containsKey(cpos);
+                })
+                .max(Comparator.comparingLong(entry -> ChunkPos.distSqSerialized(entry.getLongKey())));
         if (!candidates.isPresent()) {
             slurpDelay.labels("renewal_schedule").inc();
             try {
@@ -150,8 +157,8 @@ public class SlurpManager {
             } catch (InterruptedException ex) {}
             return;
         }
-        ChunkPos cpos = candidates.get();
-        if (cpos.distSq() < MIN_DIST_SQ_CHUNKS) {
+        long cposSerialized = candidates.get().getLongKey();
+        if (ChunkPos.distSqSerialized(cposSerialized) < MIN_DIST_SQ_CHUNKS) {
             slurpDelay.labels("too_close").inc();
             try {
                 Thread.sleep(1000);
@@ -161,12 +168,12 @@ public class SlurpManager {
         //System.out.println("Beginning slurp on chunk " + cpos);
         slurpedChunks.inc();
         // again, no need for a lock on renewalSchedule since only this touches it
-        renewalSchedule.put(cpos, now + RENEW_INTERVAL);
-        Random random = new Random();
+        renewalSchedule.put(cposSerialized, now + RENEW_INTERVAL);
         // blockingly fetch heightmap in the enclosing scope
         // only if we have chunk generation can we do heightmap based queries
-        Optional<int[][]> heightMapOpt = Optional.ofNullable(this.chunkManager).map($ -> heightMapCache.computeIfAbsent(cpos, this::heightMap));
+        int[][] heightMap = this.chunkManager != null ? this.heightMapCache.computeIfAbsent(cposSerialized, this::heightMap) : null;
         // first, send a random check with high priority
+        ChunkPos cpos = ChunkPos.fromLong(cposSerialized);
         askFor(cpos.origin().add(random.nextInt(16), random.nextInt(256), random.nextInt(16)), 56, now - RENEW_AGE);
         slurpChunkSeeds.inc();
         // after 2 seconds, we will know if it succeeded or is unloaded
@@ -180,13 +187,13 @@ public class SlurpManager {
                 int x = cpos.getXStart() + dx;
                 int z = cpos.getZStart() + dz;
 
-                heightMapOpt.ifPresent(heightMap -> {
+                if (heightMap != null) {
                     BlockPos pos = new BlockPos(x, heightMap[dx][dz], z);
                     // exception for the single most important one; the core gets a priority boost
                     askFor(pos, 57, now - RENEW_AGE);
                     toSeed.add(pos);
                     toSeed.add(pos.add(0, 1, 0));
-                });
+                }
 
                 // also keep up to date any sky structures / sky bases...
                 interestingYCoordsFromLastTime(x, z).forEach(y -> {
@@ -225,12 +232,12 @@ public class SlurpManager {
         }), 2, TimeUnit.SECONDS);
     }
 
-    private int[][] heightMap(ChunkPos cpos) {
+    private int[][] heightMap(long cpos) {
         // return: the Y coordinates of the first non-air block. 0 if fully air
         int[][] ret = new int[16][16];
         int[] data;
         try {
-            data = chunkManager.getChunk(cpos).get();
+            data = this.chunkManager.getChunk(cpos).get();
         } catch (InterruptedException | ExecutionException ex) {
             throw new RuntimeException(ex);
         }
@@ -284,7 +291,7 @@ public class SlurpManager {
             throw new RuntimeException(ex);
         }
         ingest.drainTo(tmpBuffer); // non blockingly take any remainings
-        Map<ChunkPos, Long> chunkTimestamps = tmpBuffer.stream().collect(Collectors.groupingBy(cpwt -> cpwt.pos, Collectors.reducing(0L, cpwt -> cpwt.timestamp, Math::max)));
+        Map<ChunkPos, Long> chunkTimestamps = tmpBuffer.stream().collect(Collectors.groupingBy(cpwt -> ChunkPos.fromLong(cpwt.cpos), Collectors.reducing(0L, cpwt -> cpwt.timestamp, Math::max)));
         // first remove non cluster members, because otherwise clusterHit would get HUGE, instantly
         // (it would get like, every path taken by everyone for a day)
         // and that would suck to sort by distance
@@ -293,19 +300,20 @@ public class SlurpManager {
                 long now = System.currentTimeMillis();
                 Iterator<ChunkPos> it = chunkTimestamps.keySet().iterator();
                 while (it.hasNext()) {
-                    ChunkPos cpos = it.next();
+                    ChunkPos pos = it.next();
+                    long cpos = pos.toLong();
                     if (clusterMembershipConfirmed.contains(cpos)) {
                         continue; // this pos has already passed this check previously
                     }
                     if (clusterHit.containsKey(cpos)) {
                         continue; // a nearby chunk has passed, so allow some expansion
                     }
-                    Long confirmedAt = clusterNonmembershipConfirmedAtCache.get(cpos);
-                    if (confirmedAt != null && confirmedAt > now - CLUSTER_DATA_CACHE_DURATION) {
+                    long confirmedAt = clusterNonmembershipConfirmedAtCache.get(cpos);
+                    if (confirmedAt != 0 && confirmedAt > now - CLUSTER_DATA_CACHE_DURATION) {
                         it.remove();
                         continue;
                     }
-                    if (DBSCAN.INSTANCE.clusterMemberWithinRenderDistance(world.server.serverID, world.dimension, cpos.x, cpos.z, connection)) {
+                    if (DBSCAN.INSTANCE.clusterMemberWithinRenderDistance(world.server.serverID, world.dimension, pos.x, pos.z, connection)) {
                         clusterMembershipConfirmed.add(cpos);
                     } else {
                         it.remove();
@@ -319,9 +327,10 @@ public class SlurpManager {
         }
         // no need for a lock on clusterHit, since this is the only function that touches it, and this function is single threaded
         chunkTimestamps.forEach((pos, timestamp) -> {
+            long unboxedTimeStamp = timestamp;
             for (int dx = -4; dx <= 4; dx++) {
                 for (int dz = -4; dz <= 4; dz++) {
-                    clusterHit.merge(pos.add(dx, dz), timestamp, Math::max);
+                    clusterHit.merge(pos.serializedAdd(dx, dz), unboxedTimeStamp, Math::max);
                 }
             }
         });
@@ -333,7 +342,7 @@ public class SlurpManager {
         synchronized (ingestLock) {
             for (int dx = -4; dx <= 4; dx++) {
                 for (int dz = -4; dz <= 4; dz++) { // due to our ranged check we need to invalidate EVERY nearby CNCAC member
-                    clusterNonmembershipConfirmedAtCache.remove(cpos.add(dx, dz));
+                    clusterNonmembershipConfirmedAtCache.remove(cpos.serializedAdd(dx, dz));
                 }
             }
         }
@@ -353,12 +362,13 @@ public class SlurpManager {
         }
     }
 
-    public void arbitraryHitExternal(ChunkPos cpos) {
-        world.blockCheckManager.loaded(cpos.toLong());
+    public void arbitraryHitExternal(ChunkPos pos) {
+        long cpos = pos.toLong();
+        world.blockCheckManager.loaded(cpos);
         arbitraryHit(cpos);
     }
 
-    private synchronized void arbitraryHit(ChunkPos cpos) {
+    private synchronized void arbitraryHit(long cpos) {
         if (DBSCAN.INSTANCE.aggregateEligible(cpos)) {
             ingest.add(new ChunkPosWithTimestamp(cpos));
         }
@@ -379,33 +389,34 @@ public class SlurpManager {
         data.failedSignChecks.forEach((otherPos, mustBeNewerThan) -> doRawSign(mustBeNewerThan, otherPos));
     }
 
-    private synchronized ResumeDataForChunk getData(ChunkPos cpos) {
+    private synchronized ResumeDataForChunk getData(long cpos) {
         return askedAndGotUnloadedResponse.computeIfAbsent(cpos, cpos0 -> new ResumeDataForChunk());
     }
 
     private synchronized void blockRecv(BlockPos pos, OptionalInt state, BlockCheckManager.BlockEventType type, long timestamp, int[] chunkData) {
-        AskStatus askStat = allAsks.get(pos.toLong());
+        long bpos = pos.toLong();
+        AskStatus askStat = allAsks.get(bpos);
         if (askStat != null) {
             if (askStat.receivedAt == timestamp) {
                 return;
             }
             askStat.receivedAt = timestamp;
         }
-        ChunkPos cpos = new ChunkPos(pos);
+        long cpos = BlockPos.blockToChunk(bpos);
         ResumeDataForChunk data = getData(cpos);
 
         if (!state.isPresent()) {
             // a miss
             // mark it as such, and we'll retry if we ever see this chunk reloaded! :)
             if (askStat != null) {
-                data.failedBlockChecks.put(pos.toLong(), new FailedAsk(askStat));
+                data.failedBlockChecks.put(bpos, new FailedAsk(askStat));
                 askStat.response = OptionalInt.empty();
             }
             return;
         }
         // a hit
         // first, fixup unloaded responses
-        data.failedBlockChecks.remove(pos.toLong()); // don't double ask
+        data.failedBlockChecks.remove(bpos); // don't double ask
         if (type != BlockCheckManager.BlockEventType.CACHED) {
             arbitraryHit(cpos); // ask for the OTHER pending checks on this chunk
         }
@@ -421,7 +432,7 @@ public class SlurpManager {
         if (isShulker(blockState)) {
             //System.out.println("Shulker (blockstate " + blockState + ") at " + pos);
         }
-        int expected = expected(pos, chunkData);
+        int expected = expected(bpos, pos, chunkData);
         if (askStat != null) {
             askStat.response = state;
         }
@@ -469,8 +480,8 @@ public class SlurpManager {
         return System.currentTimeMillis() / (interval / 10) * (interval / 10) - interval;
     }
 
-    private synchronized int expected(BlockPos pos, int[] chunkData) {
-        AskStatus stat = allAsks.get(pos.toLong());
+    private synchronized int expected(long bpos, BlockPos pos, int[] chunkData) {
+        AskStatus stat = allAsks.get(bpos);
         if (stat != null && stat.response.isPresent()) {
             return stat.response.getAsInt();
         }
@@ -484,7 +495,7 @@ public class SlurpManager {
     }
 
     private synchronized void signRecv(BlockPos pos, long mustBeNewerThan, Optional<byte[]> nbt) {
-        ChunkPos cpos = new ChunkPos(pos);
+        long cpos = BlockPos.blockToChunk(pos.toLong());
         if (!nbt.isPresent()) {
             // schedule for retry
             getData(cpos).failedSignChecks.put(pos, mustBeNewerThan);
@@ -522,7 +533,8 @@ public class SlurpManager {
         if (pos.y >= 256 || pos.y < 0) {
             return;
         }
-        AskStatus cur = allAsks.get(pos.toLong());
+        long bpos = pos.toLong();
+        AskStatus cur = allAsks.get(bpos);
         if (cur != null) {
             if (cur.highestPriorityAskedAt <= priority && cur.mustBeNewerThan >= mustBeNewerThan) {
                 return;
@@ -534,7 +546,7 @@ public class SlurpManager {
         cur.mustBeNewerThan = mustBeNewerThan;
         cur.response = OptionalInt.empty();
         cur.lastDirectAsk = System.currentTimeMillis();
-        allAsks.put(pos.toLong(), cur);
+        allAsks.put(bpos, cur);
         doRawAsk(mustBeNewerThan, pos, priority);
     }
 
@@ -543,7 +555,7 @@ public class SlurpManager {
             if (chunkManager == null || !state.isPresent()) {
                 blockRecvExecutor.execute(() -> blockRecv(pos, state, type, timestamp, null));
             } else {
-                chunkManager.getChunk(new ChunkPos(pos)).thenAcceptAsync(chunkData -> blockRecv(pos, state, type, timestamp, chunkData), blockRecvExecutor);
+                chunkManager.getChunk(BlockPos.blockToChunk(pos.toLong())).thenAcceptAsync(chunkData -> blockRecv(pos, state, type, timestamp, chunkData), blockRecvExecutor);
             }
         });
     }
@@ -576,11 +588,11 @@ public class SlurpManager {
     }
 
     private static class ChunkPosWithTimestamp {
-        public final ChunkPos pos;
+        public final long cpos;
         public final long timestamp;
 
-        public ChunkPosWithTimestamp(ChunkPos pos) {
-            this.pos = pos;
+        public ChunkPosWithTimestamp(long cpos) {
+            this.cpos = cpos;
             this.timestamp = System.currentTimeMillis();
         }
     }

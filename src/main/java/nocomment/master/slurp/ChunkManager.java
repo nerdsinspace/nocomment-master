@@ -2,6 +2,9 @@ package nocomment.master.slurp;
 
 import io.prometheus.client.Counter;
 import io.prometheus.client.Gauge;
+import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import nocomment.master.NoComment;
 import nocomment.master.util.ChunkPos;
 
@@ -11,8 +14,6 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -36,15 +37,15 @@ public final class ChunkManager {
             .register();
 
     private final int MAX_SIZE = 2048; // about 500MB RAM
-    private final Map<ChunkPos, Long> lastAccessed = new HashMap<>();
-    private final Map<ChunkPos, CompletableFuture<int[]>> cache = new HashMap<>();
-    private final LinkedBlockingQueue<ChunkPos> queue = new LinkedBlockingQueue<>();
+    private final Long2LongOpenHashMap lastAccessed = new Long2LongOpenHashMap(); // ChunkPos, Time
+    private final Long2ObjectOpenHashMap<CompletableFuture<int[]>> cache = new Long2ObjectOpenHashMap<>(); // ChunkPos
+    private final LinkedBlockingQueue<Long> queue = new LinkedBlockingQueue<>();
 
-    public synchronized CompletableFuture<int[]> getChunk(ChunkPos pos) {
+    public synchronized CompletableFuture<int[]> getChunk(long cpos) {
         chunkRequests.inc();
-        lastAccessed.put(pos, System.currentTimeMillis());
-        return cache.computeIfAbsent(pos, $ -> {
-            queue.add(pos);
+        lastAccessed.put(cpos, System.currentTimeMillis());
+        return cache.computeIfAbsent(cpos, $ -> {
+            queue.add(cpos);
             chunkCache.labels("queued").inc();
             CompletableFuture<int[]> ret = new CompletableFuture<>(); // this is OK since we hold the lock until after it's inserted
             ret.thenAccept(ignored -> {
@@ -83,7 +84,8 @@ public final class ChunkManager {
                 // and we don't want to pop the head :(
                 Thread.sleep(5);
             }
-            ChunkPos pos = queue.peek();
+            long cpos = queue.peek();
+            ChunkPos pos = ChunkPos.fromLong(cpos);
             //System.out.println("Requesting pos from world gen: " + pos);
             out.writeInt(pos.x);
             out.writeInt(pos.z);
@@ -96,16 +98,15 @@ public final class ChunkManager {
             //System.out.println("Cache map size is " + cache.size() + " and total age is " + num);
             chunkResponses.inc();
             synchronized (this) {
-                cache.get(pos).complete(ret);
+                cache.get(cpos).complete(ret);
                 while (cache.size() - queue.size() > MAX_SIZE) { // obv can't use cache.size
-                    Optional<ChunkPos> toPrune = cache.entrySet().stream()
+                    Optional<Long2ObjectMap.Entry<CompletableFuture<int[]>>> toPrune = cache.long2ObjectEntrySet().stream()
                             .filter(entry -> entry.getValue().isDone())
-                            .map(Map.Entry::getKey)
-                            .min(Comparator.comparingLong(lastAccessed::get));
+                            .min(Comparator.comparingLong(entry -> lastAccessed.get(entry.getLongKey())));
                     if (!toPrune.isPresent()) {
                         break;
                     }
-                    cache.remove(toPrune.get());
+                    cache.remove(toPrune.get().getLongKey());
                     chunkCache.labels("done").dec();
                 }
             }
