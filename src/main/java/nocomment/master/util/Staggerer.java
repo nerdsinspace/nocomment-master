@@ -128,10 +128,10 @@ public final class Staggerer {
         }
         Map<Integer, Long> leaveAtTS = new HashMap<>();
         Long prevLeaveAt = null;
-        System.out.println(System.currentTimeMillis());
-        for (int pid : harem.stream().sorted(Comparator.comparingLong(pid -> -(playerJoinTS.get(pid) + inDuration(pid)))).collect(Collectors.toList())) {
+        long now = System.currentTimeMillis();
+        for (int pid : harem.stream().sorted(Comparator.comparingLong(pid -> -leaveAt(playerJoinTS.get(pid), pid, now))).collect(Collectors.toList())) {
             long joinAt = playerJoinTS.get(pid);
-            long serverLeaveAt = joinAt + inDuration(pid);
+            long serverLeaveAt = leaveAt(joinAt, pid, now);
             long ourLeaveAt = serverLeaveAt;
             if (prevLeaveAt != null) {
                 // this is the actual staggering algorithm
@@ -156,12 +156,17 @@ public final class Staggerer {
         }
     }
 
-    private static long inDuration(int pid) {
+    private static long leaveAt(long joinTS, int pid, long now) {
+        long leave = joinTS;
         if (pid == 904 || pid == 33170 || pid == 102440 || pid == 102436) { // jewishbanker oremongoloid xz_9 p7k
-            return CRAP_KICK;
+            leave += CRAP_KICK;
         } else {
-            return AUTO_KICK;
+            leave += AUTO_KICK;
         }
+        if (leave < now) {
+            leave = now;
+        }
+        return leave;
     }
 
     private static String format(long ts) {
