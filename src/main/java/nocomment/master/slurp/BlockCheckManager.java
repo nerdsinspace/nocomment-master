@@ -27,6 +27,7 @@ public final class BlockCheckManager {
     private static final Histogram blockPruneLatencies = Histogram.build()
             .name("block_prune_latencies")
             .help("Block prune latencies")
+            .labelNames("dimension")
             .register();
     private static final Gauge checkStatusQueueLength = Gauge.build()
             .name("check_status_queue_length")
@@ -39,6 +40,7 @@ public final class BlockCheckManager {
     private static final Gauge blockCheckStatuses = Gauge.build()
             .name("block_check_statuses_size")
             .help("Size of the block check statuses")
+            .labelNames("dimension")
             .register();
     public final World world;
     private final Long2ObjectOpenHashMap<Long2ObjectOpenHashMap<BlockCheckStatus>> statuses = new Long2ObjectOpenHashMap<>();
@@ -60,7 +62,7 @@ public final class BlockCheckManager {
     public BlockCheckManager(World world) {
         this.world = world;
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::update), 0, 250, TimeUnit.MILLISECONDS);
-        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> blockPruneLatencies.time(this::blockPrune)), PRUNE_INTERVAL, PRUNE_INTERVAL, TimeUnit.MILLISECONDS);
+        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> blockPruneLatencies.labels(world.dim()).time(this::blockPrune)), PRUNE_INTERVAL, PRUNE_INTERVAL, TimeUnit.MILLISECONDS);
     }
 
     private void update() {
@@ -177,7 +179,7 @@ public final class BlockCheckManager {
             int afterSz = cacheSize();
             Map<Integer, Long> countByPriority = statuses.values().stream().map(Map::values).flatMap(Collection::stream).collect(Collectors.groupingBy(bcs -> bcs.highestSubmittedPriority, Collectors.counting()));
             System.out.println("Cache size change should be " + numActuallyRemoved + " but was actually " + (beforeSz - afterSz));
-            blockCheckStatuses.set(afterSz);
+            blockCheckStatuses.labels(world.dim()).set(afterSz);
             System.out.println("FASTER? Block prune in block check manager took " + (System.currentTimeMillis() - now) + "ms. Cache size went from " + beforeSz + " to " + afterSz + ". Maybe but not actually: " + maybeNotNotActually + ". Count by priority: " + countByPriority);
         }
     }
@@ -243,7 +245,7 @@ public final class BlockCheckManager {
             if (!Thread.holdsLock(BlockCheckManager.this)) {
                 throw new IllegalStateException();
             }
-            blockCheckStatuses.inc();
+            blockCheckStatuses.labels(world.dim()).inc();
         }
 
         private boolean maybePrunable(long now) {

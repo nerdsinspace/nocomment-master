@@ -36,6 +36,7 @@ public final class World {
     public final SignManager signManager;
     public final WorldStatistics stats;
     private final SlurpManager slurpManager;
+    private final String dim;
 
     public World(Server server, short dimension) {
         this.server = server;
@@ -53,6 +54,7 @@ public final class World {
         } else {
             this.slurpManager = null;
         }
+        this.dim = dimension + "";
         new Staggerer(this).start();
         NoComment.executor.execute(this::taskSendLoop);
     }
@@ -223,6 +225,6 @@ public final class World {
     }
 
     public String dim() {
-        return dimension + "";
+        return dim;
     }
 }
