@@ -566,6 +566,7 @@ public class SlurpManager {
         cur.setMustBeNewerThan(mustBeNewerThan);
         cur.setResponse(AskStatus.NO_RESPONSE);
         cur.setLastDirectAsk(System.currentTimeMillis());
+        cur.setReceivedAt(0);
         allAsks.put(keyOffHeap, cur);
         doRawAsk(mustBeNewerThan, pos, priority);
     }
