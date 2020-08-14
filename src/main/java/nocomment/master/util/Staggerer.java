@@ -158,11 +158,11 @@ public final class Staggerer {
 
     private static long leaveAt(long joinTS, int pid, long now) {
         long leave = joinTS;
-        if (pid == 904 || pid == 33170 || pid == 102440 || pid == 102436) { // jewishbanker oremongoloid xz_9 p7k
+        /*if (pid == 904 || pid == 33170 || pid == 102440 || pid == 102436) { // jewishbanker oremongoloid xz_9 p7k
             leave += CRAP_KICK;
-        } else {
-            leave += AUTO_KICK;
-        }
+        } else {*/
+        leave += AUTO_KICK;
+        //}
         if (leave < now) {
             leave = now;
         }
