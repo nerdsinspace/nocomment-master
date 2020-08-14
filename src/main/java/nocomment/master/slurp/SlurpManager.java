@@ -404,12 +404,14 @@ public class SlurpManager {
 
     private synchronized void blockRecv(BlockPos pos, OptionalInt state, BlockCheckManager.BlockEventType type, long timestamp, int[] chunkData) {
         long bpos = pos.toLong();
-        AskStatus askStat = allAsks.getUsing(AskStatus.Helper.getAndSetKey(bpos), AskStatus.Helper.ASK_STATUS_VALUE);
+        LongValue keyOffHeap = AskStatus.Helper.getAndSetKey(bpos);
+        AskStatus askStat = allAsks.getUsing(keyOffHeap, AskStatus.Helper.ASK_STATUS_VALUE);
         if (askStat != null) {
             if (askStat.getReceivedAt() == timestamp) {
                 return;
             }
             askStat.setReceivedAt(timestamp);
+            allAsks.put(keyOffHeap, askStat);
         }
         long cpos = BlockPos.blockToChunk(bpos);
         ResumeDataForChunk data = getData(cpos);
@@ -419,7 +421,10 @@ public class SlurpManager {
             // mark it as such, and we'll retry if we ever see this chunk reloaded! :)
             if (askStat != null) {
                 data.failedBlockChecks.put(bpos, new FailedAsk(askStat));
-                askStat.setResponse(AskStatus.NO_RESPONSE);
+                if (askStat.getResponse() != AskStatus.NO_RESPONSE) {
+                    askStat.setResponse(AskStatus.NO_RESPONSE);
+                    allAsks.put(keyOffHeap, askStat);
+                }
             }
             return;
         }
@@ -442,8 +447,9 @@ public class SlurpManager {
             //System.out.println("Shulker (blockstate " + blockState + ") at " + pos);
         }
         int expected = expected(bpos, pos, chunkData);
-        if (askStat != null) {
+        if (askStat != null && askStat.getResponse() != blockState) {
             askStat.setResponse(blockState);
+            allAsks.put(keyOffHeap, askStat);
         }
         // important to remember that there are FOUR things at play here:
         // previous (stored in DB)
