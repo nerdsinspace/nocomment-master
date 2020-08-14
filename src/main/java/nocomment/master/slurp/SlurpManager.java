@@ -51,6 +51,10 @@ public class SlurpManager {
             .name("slurp_metrics_update_latencies")
             .help("Metrics update latencies")
             .register();
+    private static final Gauge allAsksOffHeap = Gauge.build()
+            .name("all_asks_off_heap")
+            .help("Size of the allAsks map off heap")
+            .register();
     private static final long SIGN_AGE = TimeUnit.DAYS.toMillis(3);
     private static final long EXPAND_AGE = TimeUnit.DAYS.toMillis(21);
     private static final long RENEW_AGE = TimeUnit.MINUTES.toMillis(15);
@@ -126,6 +130,7 @@ public class SlurpManager {
 
     private synchronized void updateMetrics() {
         Histogram.Timer timer = metricsUpdateLatencies.startTimer();
+        allAsksOffHeap.set(allAsks.offHeapMemoryUsed());
         slurpData.labels("all_asks").set(allAsks.size());
         slurpData.labels("height_map_cache").set(heightMapCache.size());
         slurpData.labels("cluster_membership_confirmed").set(clusterMembershipConfirmed.size());
