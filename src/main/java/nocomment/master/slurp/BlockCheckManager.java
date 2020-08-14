@@ -36,12 +36,17 @@ public final class BlockCheckManager {
             .name("checks_ran_total")
             .help("Number of checks we have run")
             .register();
+    private static final Gauge blockCheckStatuses = Gauge.build()
+            .name("block_check_statuses_size")
+            .help("Size of the block check statuses")
+            .register();
     public final World world;
     private final Long2ObjectOpenHashMap<Long2ObjectOpenHashMap<BlockCheckStatus>> statuses = new Long2ObjectOpenHashMap<>();
     private final Long2LongOpenHashMap observedUnloaded = new Long2LongOpenHashMap();
     private final LinkedBlockingQueue<BlockCheckStatus.ResultToInsert> results = new LinkedBlockingQueue<>();
     private final Object pruneLock = new Object();
-    public static final long PRUNE_AGE = TimeUnit.MINUTES.toMillis(60);
+    private static final long PRUNE_INTERVAL = TimeUnit.MINUTES.toMillis(15);
+    private static final long PRUNE_AGE = TimeUnit.MINUTES.toMillis(30);
 
     // check status are spammed WAY too fast
     // this executor is for database fetches from blocks or signs
@@ -55,7 +60,7 @@ public final class BlockCheckManager {
     public BlockCheckManager(World world) {
         this.world = world;
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::update), 0, 250, TimeUnit.MILLISECONDS);
-        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> blockPruneLatencies.time(this::blockPrune)), 30, 60, TimeUnit.MINUTES);
+        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> blockPruneLatencies.time(this::blockPrune)), PRUNE_INTERVAL, PRUNE_INTERVAL, TimeUnit.MILLISECONDS);
     }
 
     private void update() {
@@ -142,10 +147,11 @@ public final class BlockCheckManager {
     }
 
     private synchronized void blockPrune() {
-        long now = System.currentTimeMillis();
-        int beforeSz = cacheSize();
         synchronized (pruneLock) {
+            long now = System.currentTimeMillis();
+            int beforeSz = cacheSize();
             int maybeNotNotActually = 0;
+            int numActuallyRemoved = 0;
             ObjectIterator<Long2ObjectMap.Entry<Long2ObjectOpenHashMap<BlockCheckStatus>>> outerIt = statuses.long2ObjectEntrySet().fastIterator();
             while (outerIt.hasNext()) {
                 Long2ObjectMap.Entry<Long2ObjectOpenHashMap<BlockCheckStatus>> outerEntry = outerIt.next();
@@ -157,6 +163,7 @@ public final class BlockCheckManager {
                         synchronized (bcs) {
                             if (bcs.actuallyPrunable(now)) {
                                 innerIt.remove(); // must call remove within bcs lock!!
+                                numActuallyRemoved++;
                             } else {
                                 maybeNotNotActually++;
                             }
@@ -167,8 +174,11 @@ public final class BlockCheckManager {
                     outerIt.remove();
                 }
             }
+            int afterSz = cacheSize();
             Map<Integer, Long> countByPriority = statuses.values().stream().map(Map::values).flatMap(Collection::stream).collect(Collectors.groupingBy(bcs -> bcs.highestSubmittedPriority, Collectors.counting()));
-            System.out.println("FASTER? Block prune in block check manager took " + (System.currentTimeMillis() - now) + "ms. Cache size went from " + beforeSz + " to " + cacheSize() + ". Maybe but not actually: " + maybeNotNotActually + ". Count by priority: " + countByPriority);
+            System.out.println("Cache size change should be " + numActuallyRemoved + " but was actually " + (beforeSz - afterSz));
+            blockCheckStatuses.set(afterSz);
+            System.out.println("FASTER? Block prune in block check manager took " + (System.currentTimeMillis() - now) + "ms. Cache size went from " + beforeSz + " to " + afterSz + ". Maybe but not actually: " + maybeNotNotActually + ". Count by priority: " + countByPriority);
         }
     }
 
@@ -233,6 +243,7 @@ public final class BlockCheckManager {
             if (!Thread.holdsLock(BlockCheckManager.this)) {
                 throw new IllegalStateException();
             }
+            blockCheckStatuses.inc();
         }
 
         private boolean maybePrunable(long now) {

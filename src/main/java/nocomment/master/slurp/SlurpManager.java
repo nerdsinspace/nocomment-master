@@ -58,6 +58,7 @@ public class SlurpManager {
     private static final long BRUSH_AGE = RENEW_AGE; // it's complicated
     private static final long CHECK_MAX_GAP = TimeUnit.SECONDS.toMillis(30);
     private static final long CLUSTER_DATA_CACHE_DURATION = TimeUnit.DAYS.toMillis(1);
+    private static final long PRUNE_AGE = TimeUnit.HOURS.toMillis(2);
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
     private static final long NUM_RENEWALS = 4;
     private static final int MAX_CHECK_STATUS_QUEUE_LENGTH = 5000;
@@ -70,7 +71,8 @@ public class SlurpManager {
             .name("all_asks")
             .constantKeySizeBySample(AskStatus.Helper.LONG_VALUE_KEY)
             .constantValueSizeBySample(AskStatus.Helper.ASK_STATUS_VALUE)
-            .entries(20_000_000) // TODO: figure out what this really does and what it should be? what happens when it hits the limit?
+            .entries(25_000_000)
+            .maxBloatFactor(4)
             .create();
     private final Set<BlockPos> signsAskedFor = new HashSet<>();
     private final LinkedBlockingQueue<ChunkPosWithTimestamp> ingest = new LinkedBlockingQueue<>();
@@ -94,9 +96,9 @@ public class SlurpManager {
         } else {
             this.chunkManager = null;
         }
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneAsks), 12 * 60 + 25, 12 * 60, TimeUnit.MINUTES);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneAsks), 12 * 60 + 10, 12 * 60, TimeUnit.MINUTES);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneClusterData), 1, 1, TimeUnit.HOURS);
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneBlocks), 40, 60, TimeUnit.MINUTES);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneBlocks), 20, 60, TimeUnit.MINUTES);
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> {
             ingestIntoClusterHit();
             scanClusterHit();
@@ -110,7 +112,7 @@ public class SlurpManager {
         Histogram.Timer timer = asksPruneLatencies.startTimer();
         synchronized (world.blockCheckManager) {
             allAsks.forEachEntry(entry -> {
-                if (entry.value().getUsing(AskStatus.Helper.ASK_STATUS_VALUE).getLastDirectAsk() < now - BlockCheckManager.PRUNE_AGE &&
+                if (entry.value().getUsing(AskStatus.Helper.ASK_STATUS_VALUE).getLastDirectAsk() < now - PRUNE_AGE &&
                         world.blockCheckManager.hasBeenRemoved(entry.key().getUsing(AskStatus.Helper.LONG_VALUE_KEY).getValue())) {
                     entry.doRemove();
                 }
@@ -595,14 +597,23 @@ public class SlurpManager {
         int NO_RESPONSE = -1;
 
         int getHighestPriorityAskedAt();
+
         void setHighestPriorityAskedAt(final int highestPriorityAskedAt);
+
         long getMustBeNewerThan();
+
         void setMustBeNewerThan(final long mustBeNewerThan);
+
         int getResponse();
+
         void setResponse(final int response);
+
         long getLastDirectAsk();
+
         void setLastDirectAsk(final long lastDirectAsk);
+
         long getReceivedAt();
+
         void setReceivedAt(final long receivedAt);
 
         class Helper {
