@@ -28,6 +28,9 @@ dependencies {
     compile 'io.prometheus:simpleclient_hotspot:0.9.0'
     compile 'io.prometheus:simpleclient_httpserver:0.9.0'
     compile 'it.unimi.dsi:fastutil:8.1.0'
+    compile 'net.openhft:chronicle-map:3.20.2'
+    compile 'net.openhft:chronicle-values:2.20.6'
+    compile 'net.openhft:chronicle-bytes:2.20.7'
 }
 
 jar {
@@ -52,8 +55,10 @@ task('optimize', type: ProGuardTask, dependsOn: shadowJar) {
 
     // Keep
     keep 'class nocomment.master.NoComment { public static void main(java.lang.String[]); }'
+    keep 'class nocomment.master.slurp.SlurpManager$AskStatus { *; }'
     keep 'class org.apache.commons.logging.** { *; }'
     keep 'class org.postgresql.** { *; }'
+    keep 'class org.openhft.** { *; }'
 
     // Optimization
     optimizationpasses 10
@@ -61,6 +66,15 @@ task('optimize', type: ProGuardTask, dependsOn: shadowJar) {
     // General
     dontwarn('org.postgresql.**')
     dontwarn('org.apache.commons.**')
+    dontwarn('shaded.**')
+    dontwarn('org.slf4j.**')
+    dontwarn('org.osgi.**')
+    dontwarn('net.openhft.sg.**')
+    dontwarn('javax.**')
+    dontwarn('org.eclipse.aether.**')
+    dontwarn('com.thoughtworks.xstream.**')
+    dontwarn('java.lang.invoke.MethodHandle')
+    dontwarn('java.lang.ThreadTrackingGroup')
 }
 
-build.finalizedBy('optimize')
+// TODO: fix proguard w/ new SlurpManager$AskStatus build.finalizedBy('optimize')

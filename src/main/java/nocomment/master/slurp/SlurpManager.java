@@ -5,6 +5,9 @@ import io.prometheus.client.Gauge;
 import io.prometheus.client.Histogram;
 import it.unimi.dsi.fastutil.longs.*;
 import it.unimi.dsi.fastutil.objects.ObjectIterator;
+import net.openhft.chronicle.core.values.LongValue;
+import net.openhft.chronicle.map.ChronicleMap;
+import net.openhft.chronicle.values.Values;
 import nocomment.master.World;
 import nocomment.master.clustering.DBSCAN;
 import nocomment.master.db.Database;
@@ -63,7 +66,12 @@ public class SlurpManager {
     private final Executor blockRecvExecutor = new LoggingExecutor(Executors.newSingleThreadExecutor(), "block_recv"); // blockRecv is synchronized so we only need one
     private final ChunkManager chunkManager;
     private final Long2ObjectOpenHashMap<ResumeDataForChunk> askedAndGotUnloadedResponse = new Long2ObjectOpenHashMap<>(); // long = chunkpos
-    private final Long2ObjectOpenHashMap<AskStatus> allAsks = new Long2ObjectOpenHashMap<>(); // long = blockpos
+    private final ChronicleMap<LongValue, AskStatus> allAsks = ChronicleMap.of(LongValue.class, AskStatus.class) // long = blockpos
+            .name("all_asks")
+            .constantKeySizeBySample(AskStatus.Helper.LONG_VALUE_KEY)
+            .constantValueSizeBySample(AskStatus.Helper.ASK_STATUS_VALUE)
+            .entries(20_000_000) // TODO: figure out what this really does and what it should be? what happens when it hits the limit?
+            .create();
     private final Set<BlockPos> signsAskedFor = new HashSet<>();
     private final LinkedBlockingQueue<ChunkPosWithTimestamp> ingest = new LinkedBlockingQueue<>();
     private final Object ingestLock = new Object();
@@ -101,13 +109,12 @@ public class SlurpManager {
         long now = System.currentTimeMillis();
         Histogram.Timer timer = asksPruneLatencies.startTimer();
         synchronized (world.blockCheckManager) {
-            ObjectIterator<Long2ObjectMap.Entry<AskStatus>> it = allAsks.long2ObjectEntrySet().fastIterator();
-            while (it.hasNext()) {
-                Long2ObjectMap.Entry<AskStatus> entry = it.next();
-                if (entry.getValue().lastDirectAsk < now - BlockCheckManager.PRUNE_AGE && world.blockCheckManager.hasBeenRemoved(entry.getLongKey())) {
-                    it.remove();
+            allAsks.forEachEntry(entry -> {
+                if (entry.value().getUsing(AskStatus.Helper.ASK_STATUS_VALUE).getLastDirectAsk() < now - BlockCheckManager.PRUNE_AGE &&
+                        world.blockCheckManager.hasBeenRemoved(entry.key().getUsing(AskStatus.Helper.LONG_VALUE_KEY).getValue())) {
+                    entry.doRemove();
                 }
-            }
+            });
         }
         timer.observeDuration();
         long mid = System.currentTimeMillis();
@@ -395,12 +402,12 @@ public class SlurpManager {
 
     private synchronized void blockRecv(BlockPos pos, OptionalInt state, BlockCheckManager.BlockEventType type, long timestamp, int[] chunkData) {
         long bpos = pos.toLong();
-        AskStatus askStat = allAsks.get(bpos);
+        AskStatus askStat = allAsks.getUsing(AskStatus.Helper.getAndSetKey(bpos), AskStatus.Helper.ASK_STATUS_VALUE);
         if (askStat != null) {
-            if (askStat.receivedAt == timestamp) {
+            if (askStat.getReceivedAt() == timestamp) {
                 return;
             }
-            askStat.receivedAt = timestamp;
+            askStat.setReceivedAt(timestamp);
         }
         long cpos = BlockPos.blockToChunk(bpos);
         ResumeDataForChunk data = getData(cpos);
@@ -410,7 +417,7 @@ public class SlurpManager {
             // mark it as such, and we'll retry if we ever see this chunk reloaded! :)
             if (askStat != null) {
                 data.failedBlockChecks.put(bpos, new FailedAsk(askStat));
-                askStat.response = OptionalInt.empty();
+                askStat.setResponse(AskStatus.NO_RESPONSE);
             }
             return;
         }
@@ -434,7 +441,7 @@ public class SlurpManager {
         }
         int expected = expected(bpos, pos, chunkData);
         if (askStat != null) {
-            askStat.response = state;
+            askStat.setResponse(blockState);
         }
         // important to remember that there are FOUR things at play here:
         // previous (stored in DB)
@@ -481,9 +488,12 @@ public class SlurpManager {
     }
 
     private synchronized int expected(long bpos, BlockPos pos, int[] chunkData) {
-        AskStatus stat = allAsks.get(bpos);
-        if (stat != null && stat.response.isPresent()) {
-            return stat.response.getAsInt();
+        AskStatus stat = allAsks.getUsing(AskStatus.Helper.getAndSetKey(bpos), AskStatus.Helper.ASK_STATUS_VALUE);
+        if (stat != null) {
+            int response = stat.getResponse();
+            if (response != AskStatus.NO_RESPONSE) {
+                return response;
+            }
         }
         if (chunkData == null) {
             return -1;
@@ -534,19 +544,21 @@ public class SlurpManager {
             return;
         }
         long bpos = pos.toLong();
-        AskStatus cur = allAsks.get(bpos);
+        LongValue keyOffHeap = AskStatus.Helper.getAndSetKey(bpos);
+        AskStatus valueOffHeap = AskStatus.Helper.ASK_STATUS_VALUE;
+        AskStatus cur = allAsks.getUsing(keyOffHeap, valueOffHeap);
         if (cur != null) {
-            if (cur.highestPriorityAskedAt <= priority && cur.mustBeNewerThan >= mustBeNewerThan) {
+            if (cur.getHighestPriorityAskedAt() <= priority && cur.getMustBeNewerThan() >= mustBeNewerThan) {
                 return;
             }
         } else {
-            cur = new AskStatus();
+            cur = valueOffHeap;
         }
-        cur.highestPriorityAskedAt = priority;
-        cur.mustBeNewerThan = mustBeNewerThan;
-        cur.response = OptionalInt.empty();
-        cur.lastDirectAsk = System.currentTimeMillis();
-        allAsks.put(bpos, cur);
+        cur.setHighestPriorityAskedAt(priority);
+        cur.setMustBeNewerThan(mustBeNewerThan);
+        cur.setResponse(AskStatus.NO_RESPONSE);
+        cur.setLastDirectAsk(System.currentTimeMillis());
+        allAsks.put(keyOffHeap, cur);
         doRawAsk(mustBeNewerThan, pos, priority);
     }
 
@@ -569,8 +581,8 @@ public class SlurpManager {
         long mustBeNewerThan;
 
         public FailedAsk(AskStatus stat) {
-            this.priority = stat.highestPriorityAskedAt;
-            this.mustBeNewerThan = stat.mustBeNewerThan;
+            this.priority = stat.getHighestPriorityAskedAt();
+            this.mustBeNewerThan = stat.getMustBeNewerThan();
         }
     }
 
@@ -579,12 +591,34 @@ public class SlurpManager {
         Map<BlockPos, Long> failedSignChecks = new HashMap<>();
     }
 
-    private static class AskStatus {
-        int highestPriorityAskedAt;
-        long mustBeNewerThan;
-        OptionalInt response;
-        long lastDirectAsk;
-        long receivedAt;
+    public interface AskStatus {
+        int NO_RESPONSE = -1;
+
+        int getHighestPriorityAskedAt();
+        void setHighestPriorityAskedAt(final int highestPriorityAskedAt);
+        long getMustBeNewerThan();
+        void setMustBeNewerThan(final long mustBeNewerThan);
+        int getResponse();
+        void setResponse(final int response);
+        long getLastDirectAsk();
+        void setLastDirectAsk(final long lastDirectAsk);
+        long getReceivedAt();
+        void setReceivedAt(final long receivedAt);
+
+        class Helper {
+            public static final LongValue LONG_VALUE_KEY = Values.newHeapInstance(LongValue.class);
+            public static final AskStatus ASK_STATUS_VALUE = Values.newHeapInstance(AskStatus.class);
+
+            static LongValue getAndSetKey(final long keyValue) {
+                final LongValue value = LONG_VALUE_KEY;
+                value.setValue(keyValue); // TODO: figure out how to stop proguard from removing this
+                final long newValue = value.getValue();
+                if (newValue != keyValue) {
+                    throw new IllegalStateException("Unexpected value in LongValue? Expected " + keyValue + " but was " + newValue);
+                }
+                return value;
+            }
+        }
     }
 
     private static class ChunkPosWithTimestamp {
