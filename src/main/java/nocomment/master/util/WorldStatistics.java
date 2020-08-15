@@ -25,6 +25,7 @@ public final class WorldStatistics {
     private static final Histogram taskLatencies = Histogram.build()
             .name("task_latencies")
             .help("Task latencies")
+            .buckets(0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.75, 1, 2, 5, 10)
             .labelNames("dimension", "priority")
             .register();
 
