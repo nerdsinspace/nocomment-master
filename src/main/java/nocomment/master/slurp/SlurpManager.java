@@ -416,7 +416,6 @@ public class SlurpManager {
                 return;
             }
             askStat.setReceivedAt(timestamp);
-            allAsks.put(keyOffHeap, askStat);
         }
         long cpos = BlockPos.blockToChunk(bpos);
         ResumeDataForChunk data = getData(cpos);
@@ -426,10 +425,8 @@ public class SlurpManager {
             // mark it as such, and we'll retry if we ever see this chunk reloaded! :)
             if (askStat != null) {
                 data.failedBlockChecks.put(bpos, new FailedAsk(askStat));
-                if (askStat.getResponse() != AskStatus.NO_RESPONSE) {
-                    askStat.setResponse(AskStatus.NO_RESPONSE);
-                    allAsks.put(keyOffHeap, askStat);
-                }
+                askStat.setResponse(AskStatus.NO_RESPONSE);
+                allAsks.put(keyOffHeap, askStat); // also puts setReceivedAt from earlier
             }
             return;
         }
@@ -452,9 +449,9 @@ public class SlurpManager {
             //System.out.println("Shulker (blockstate " + blockState + ") at " + pos);
         }
         int expected = expected(bpos, pos, chunkData);
-        if (askStat != null && askStat.getResponse() != blockState) {
+        if (askStat != null) {
             askStat.setResponse(blockState);
-            allAsks.put(keyOffHeap, askStat);
+            allAsks.put(keyOffHeap, askStat); // also puts setReceivedAt from earlier
         }
         // important to remember that there are FOUR things at play here:
         // previous (stored in DB)
