@@ -191,6 +191,10 @@ public class SlurpManager {
         askFor(cpos.origin().add(random.nextInt(16), random.nextInt(256), random.nextInt(16)), 56, now - RENEW_AGE);
         slurpChunkSeeds.inc();
         Set<BlockPos> toSeed = new HashSet<>();
+        for (int i = 0; i < 3; i++) {
+            // TODO increase this as we get more hits but failed slurp seedings in this location
+            toSeed.add(cpos.origin().add(random.nextInt(16), random.nextInt(256), random.nextInt(16)));
+        }
         for (int i = 0; i < NUM_RENEWALS; i++) {
             int dx = random.nextInt(16);
             int dz = random.nextInt(16);
