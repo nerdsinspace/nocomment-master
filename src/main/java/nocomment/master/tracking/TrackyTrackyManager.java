@@ -39,12 +39,12 @@ public class TrackyTrackyManager {
         // scan up to 25k (200k overworld) every 40 seconds
         new HighwayScanner(nether.world, 100, 25_000, 40_000, nether::ingestGenericNewHit).submitTasks();
         // scan the 2k ring road every 4 seconds
-        new RingScanner(nether.world, 99, 2000, 16_000, nether::ingestGenericNewHit).submitTasks();
+        new RingScanner(nether.world, 99, 1000, 6_000, nether::ingestGenericNewHit).submitTasks();
         System.out.println("Overworld:");
         // scan up to 25k overworld every 40 seconds
         new HighwayScanner(overworld.world, 100, 25_000, 40_000, overworld::ingestGenericNewHit).submitTasks();
         // scan the 2k ring road every 16 seconds
-        new RingScanner(overworld.world, 99, 2000, 16_000, overworld::ingestGenericNewHit).submitTasks();
+        new RingScanner(overworld.world, 51, 2000, 16_000, overworld::ingestGenericNewHit).submitTasks();
     }
 
     private void clusters() {
