@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 public final class Database {
 
     private static final BasicDataSource POOL;
+
     static {
         System.out.println("Connecting to database...");
         POOL = new BasicDataSource();
@@ -79,6 +80,7 @@ public final class Database {
             stmt.executeUpdate();
         } catch (SQLException ex) {
             ex.printStackTrace();
+            System.exit(-1);
             throw new RuntimeException(ex);
         }
     }
