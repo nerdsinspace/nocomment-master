@@ -38,7 +38,7 @@ if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
             -f docker-compose.ci.yml \
             run --rm \
             --user "$(id -u):$(id -g)" \
-            nocom-master build
+            nocom-master shadowJar 
 
         if [ "x${GIT_BRANCH}" = "xmaster" ] || [ "x${GIT_BRANCH}" = "xHEAD" ]; then
             docker build -t "registry.gitlab.com/nerdsinc/nocomment-master:master" -t "registry.gitlab.com/nerdsinc/nocomment-master:latest" .
