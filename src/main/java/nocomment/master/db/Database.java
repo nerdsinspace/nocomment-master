@@ -22,7 +22,7 @@ public final class Database {
             Maintenance.scheduleMaintenance();
             DBSCAN.INSTANCE.beginIncrementalDBSCANThread();
             Associator.INSTANCE.beginIncrementalAssociatorThread();
-            TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(Database::pruneStaleStatuses), 0, 1, TimeUnit.MINUTES);
+            TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> pruneStaleStatuses(POOL)), 0, 1, TimeUnit.MINUTES);
             TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(TableSizeMetrics::update), 0, 5, TimeUnit.SECONDS);
         }
     }
@@ -60,7 +60,7 @@ public final class Database {
         POOL.setRollbackOnReturn(true);
         POOL.setDefaultReadOnly(NoComment.DRY_RUN);
         try {
-            pruneStaleStatuses();
+            pruneStaleStatuses(POOL);
         } catch (Throwable th) {
             th.printStackTrace();
             System.out.println("Database ping failed!");
@@ -446,8 +446,8 @@ public final class Database {
         }
     }
 
-    private static void pruneStaleStatuses() {
-        try (Connection connection = POOL.getConnection();
+    private static void pruneStaleStatuses(BasicDataSource pool) {
+        try (Connection connection = pool.getConnection();
              PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET curr_status = 'OFFLINE'::statuses_enum, data = NULL, updated_at = ? WHERE updated_at < ? AND curr_status != 'OFFLINE'::statuses_enum")) {
             stmt.setLong(1, System.currentTimeMillis());
             stmt.setLong(2, System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(1));
