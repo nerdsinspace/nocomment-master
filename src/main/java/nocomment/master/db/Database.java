@@ -19,10 +19,13 @@ public final class Database {
     static {
         System.out.println("Connecting to database...");
         POOL = new BasicDataSource();
-        POOL.setUsername("nocom");
-        POOL.setPassword("6bf40e917cdc202f627398c433899a0cc9aa8880a6dc25aacc4342779eccd227");
+        POOL.setUsername(Objects.requireNonNull(NoComment.getRuntimeVariable("PSQL_USER", null),
+                "Missing username for database"));
+        POOL.setPassword(Objects.requireNonNull(NoComment.getRuntimeVariable("PSQL_PASS", null),
+                "Missing password for database"));
         POOL.setDriverClassName("org.postgresql.Driver");
-        POOL.setUrl("jdbc:postgresql://localhost:5432/nocom?sslmode=disable");
+        POOL.setUrl(Objects.requireNonNull(NoComment.getRuntimeVariable("PSQL_URL", null),
+                "Missing url for database"));
         POOL.setInitialSize(1);
         POOL.setMaxTotal(75);
         POOL.setAutoCommitOnReturn(true); // make absolutely sure

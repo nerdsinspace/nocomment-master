@@ -23,4 +23,12 @@ public final class NoComment {
             System.exit(1);
         }
     }
+
+    public static String getRuntimeVariable(final String key, final String defaultValue) {
+        String value = System.getenv(key);
+        if (value == null) {
+            value = System.getProperty(key, defaultValue);
+        }
+        return value;
+    }
 }
