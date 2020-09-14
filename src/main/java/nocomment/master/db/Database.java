@@ -17,8 +17,35 @@ public final class Database {
     private static final BasicDataSource POOL;
 
     static {
+        POOL = connect();
+        if (!NoComment.DRY_RUN) {
+            Maintenance.scheduleMaintenance();
+            DBSCAN.INSTANCE.beginIncrementalDBSCANThread();
+            Associator.INSTANCE.beginIncrementalAssociatorThread();
+            TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(Database::pruneStaleStatuses), 0, 1, TimeUnit.MINUTES);
+            TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(TableSizeMetrics::update), 0, 5, TimeUnit.SECONDS);
+        }
+    }
+
+    private static BasicDataSource connect() {
+        for (int i = 0; i < 60; i++) {
+            try {
+                return tryConnect();
+            } catch (Throwable th) {
+                System.out.println("Waiting 1 second then trying again...");
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException ex) {}
+            }
+        }
+        System.out.println("Unable to connect, giving up.");
+        System.exit(-1);
+        return null;
+    }
+
+    private static BasicDataSource tryConnect() {
         System.out.println("Connecting to database...");
-        POOL = new BasicDataSource();
+        BasicDataSource POOL = new BasicDataSource();
         POOL.setUsername(Objects.requireNonNull(NoComment.getRuntimeVariable("PSQL_USER", null),
                 "Missing username for database"));
         POOL.setPassword(Objects.requireNonNull(NoComment.getRuntimeVariable("PSQL_PASS", null),
@@ -32,27 +59,18 @@ public final class Database {
         POOL.setDefaultTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
         POOL.setRollbackOnReturn(true);
         POOL.setDefaultReadOnly(NoComment.DRY_RUN);
-        System.out.println("Connected.");
         try {
             pruneStaleStatuses();
         } catch (Throwable th) {
             th.printStackTrace();
-            System.out.println("Database ping failed! Exiting.");
+            System.out.println("Database ping failed!");
             try {
                 POOL.close();
-            } catch (SQLException ex) {
-
-            }
-            System.exit(-1);
+            } catch (SQLException ex) {}
             throw th;
         }
-        if (!NoComment.DRY_RUN) {
-            Maintenance.scheduleMaintenance();
-            DBSCAN.INSTANCE.beginIncrementalDBSCANThread();
-            Associator.INSTANCE.beginIncrementalAssociatorThread();
-            TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(Database::pruneStaleStatuses), 0, 1, TimeUnit.MINUTES);
-            TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(TableSizeMetrics::update), 0, 5, TimeUnit.SECONDS);
-        }
+        System.out.println("Connected.");
+        return POOL;
     }
 
     static void saveHit(Hit hit, Connection connection) throws SQLException {
