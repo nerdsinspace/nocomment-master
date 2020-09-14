@@ -33,6 +33,19 @@ public final class Database {
         POOL.setRollbackOnReturn(true);
         POOL.setDefaultReadOnly(NoComment.DRY_RUN);
         System.out.println("Connected.");
+        try {
+            pruneStaleStatuses();
+        } catch (Throwable th) {
+            th.printStackTrace();
+            System.out.println("Database ping failed! Exiting.");
+            try {
+                POOL.close();
+            } catch (SQLException ex) {
+
+            }
+            System.exit(-1);
+            throw th;
+        }
         if (!NoComment.DRY_RUN) {
             Maintenance.scheduleMaintenance();
             DBSCAN.INSTANCE.beginIncrementalDBSCANThread();
