@@ -1,0 +1,64 @@
+#!/bin/bash
+
+set -e
+
+if [[ -n "${NOCOM-HTTP_DEBUG}" ]]; then
+    set -x
+fi
+
+DIR="$(dirname "$0")"
+
+function usage() {
+    echo -n \
+"Usage: $(basename "$0") COMMAND OPTION[S]
+Execute ansible deployment for nocom-http.
+"
+}
+
+if [[ -n "${GIT_COMMIT}" ]]; then
+    GIT_COMMIT="${GIT_COMMIT:0:7}"
+else
+    GIT_COMMIT="$(git rev-parse --short HEAD)"
+fi
+
+if [[ -n "${GIT_BRANCH}" ]]; then
+    :
+else
+    GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+fi
+
+if [[ -n "${SSH_PRIVATE_KEY_PATH}" ]]; then
+    :
+else
+    echo -n \
+"The path to the ssh private key is missing!
+"
+    exit 1
+fi
+
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    if [ "${1:-}" = "--help" ]; then
+        usage
+    else
+        if [ ! "x${GIT_BRANCH}" = "xmaster" ]; then
+            echo "Not deploying dev build"
+            exit 0
+        fi
+        ANSIBLE_DIR="${DIR}/../deployment/ansible"
+        echo
+        echo "Attempting to deploy nocom-http version [${GIT_COMMIT}]..."
+        echo "-----------------------------------------------------"
+        echo
+    fi
+
+    pushd $ANSIBLE_DIR
+
+    ansible-galaxy install -r roles.yml
+    if [[ -n "${NOCOM-HTTP_DEBUG}" ]]; then
+        ansible-playbook -vvvv --private-key=$SSH_PRIVATE_KEY_PATH nocom-http.yml
+    else
+        ansible-playbook --private-key=$SSH_PRIVATE_KEY_PATH nocom-http.yml
+    fi
+
+    popd
+fi

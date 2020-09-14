@@ -1,0 +1,49 @@
+#!/bin/bash
+
+set -e
+set -x
+
+function usage() {
+    echo -n \
+    "Usage: $(basename "$0")
+Build application for staging or a release.
+"
+}
+
+if [[ -n "${GIT_COMMIT}" ]]; then
+    GIT_COMMIT="${GIT_COMMIT:0:7}"
+else
+    GIT_COMMIT="$(git rev-parse --short HEAD)"
+fi
+
+if [[ -n "${GIT_BRANCH}" ]]; then
+    :
+else
+    GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+fi
+
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    if [ "${1:-}" = "--help" ]; then
+        usage
+    else    
+        mkdir -p .gradle
+
+        docker-compose \
+            -f docker-compose.ci.yml \
+            run --rm \
+            --user "$(id -u):$(id -g)" \
+            nocom-master clean --stacktrace
+
+        GIT_COMMIT="${GIT_COMMIT}" docker-compose \
+            -f docker-compose.ci.yml \
+            run --rm \
+            --user "$(id -u):$(id -g)" \
+            nocom-master build
+
+        if [ "x${GIT_BRANCH}" = "xmaster" ] || [ "x${GIT_BRANCH}" = "xHEAD" ]; then
+            docker build -t "registry.gitlab.com/nerdsinc/nocomment-master:master" -t "registry.gitlab.com/nerdsinc/nocomment-master:latest" .
+        else
+            docker build -t "registry.gitlab.com/nerdsinc/nocomment-master:${GIT_BRANCH}" .
+        fi
+    fi
+fi

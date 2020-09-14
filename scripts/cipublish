@@ -1,0 +1,32 @@
+#!/bin/bash
+
+set -e
+
+function usage() {
+    echo -n \
+"Usage: $(basename "$0")
+Publish container images.
+"
+}
+
+if [[ -n "${GIT_BRANCH}" ]]; then
+    :
+else
+    GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+fi
+
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    if [ "${1:-}" = "--help" ]; then
+        usage
+    else
+        docker \
+            login -u "${GITLAB_USER}" -p "${GITLAB_PASSWORD}" registry.gitlab.com;
+
+        if [ "x${GIT_BRANCH}" = "xmaster" ] || [ "x${GIT_BRANCH}" = "xHEAD" ]; then
+            docker push "registry.gitlab.com/nerdsinc/nocomment-master:master"
+            docker push "registry.gitlab.com/nerdsinc/nocomment-master:latest"
+        else
+            docker push "registry.gitlab.com/nerdsinc/nocomment-master:${GIT_BRANCH}"
+        fi
+    fi
+fi

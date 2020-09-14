@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -e
+
+if [[ -n "${NOCOM-HTTP_DEBUG}" ]]; then
+    set -x
+fi
+
+function usage() {
+    echo -n \
+         "Usage: $(basename "$0")
+Provision bare minimum required to compile a nocom-http.
+"
+}
+
+if [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+    if [ "${1:-}" = "--help" ]; then
+        usage
+    else        
+        mkdir -p .gradle
+        docker-compose \
+            -f docker-compose.ci.yml \
+            run --rm \
+            --user "$(id -u):$(id -g)" \
+            nocom-http clean
+    fi
+fi

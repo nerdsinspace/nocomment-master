@@ -1,0 +1,11 @@
+version: '2.3'
+
+services:
+  nocom-master:
+    image: openjdk:14-alpine
+    network_mode: host
+    volumes: 
+      - ./:/opt/nocomment-master:Z
+      - ./.gradle:/root/.gradle:Z
+    working_dir: /opt/nocomment-master
+    entrypoint: ./gradlew
