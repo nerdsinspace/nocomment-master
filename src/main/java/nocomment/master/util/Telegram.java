@@ -6,6 +6,9 @@ import nocomment.master.NoComment;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 public enum Telegram {
     INSTANCE;
@@ -16,10 +19,43 @@ public enum Telegram {
         bot.execute(new SendMessage(chatID, "Master startup"));
     }
 
+    static int indexOfLeft(String str, char c, int from) {
+        for (int i = from; i >= 0; i--) {
+            if (str.charAt(i) == c) return i;
+        }
+        return -1;
+    }
+
+    static List<String> splitIntoMultipleBigMessages(String str, int maxSize) {
+        if (str.length() <= maxSize) {
+            return Collections.singletonList(str);
+        } else {
+            final int lastNewLine = indexOfLeft(str, '\n', maxSize - 1);
+            final int leftSplit;
+            final int rightSplit;
+            if (lastNewLine == -1) {
+                // troll stacktrace how
+                leftSplit = maxSize;
+                rightSplit = maxSize;
+            } else {
+                // don't include the last newline
+                leftSplit = lastNewLine;
+                rightSplit = lastNewLine + 1;
+            }
+
+            final List<String> out = new ArrayList<>();
+            final String left = str.substring(0, leftSplit);
+            final String right = str.substring(rightSplit);
+            out.add(left);
+            out.addAll(splitIntoMultipleBigMessages(right, maxSize));
+            return out;
+        }
+    }
+
     public void complain(Throwable th) {
         StringWriter errors = new StringWriter();
         th.printStackTrace(new PrintWriter(errors));
-        for (String line : errors.toString().split("\n")) {
+        for (String line : splitIntoMultipleBigMessages(errors.toString(), 4000)) {
             bot.execute(new SendMessage(chatID, line));
         }
     }
