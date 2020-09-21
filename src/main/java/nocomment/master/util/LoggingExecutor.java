@@ -1,6 +1,5 @@
 package nocomment.master.util;
 
-import io.prometheus.client.Counter;
 import io.prometheus.client.Gauge;
 import io.prometheus.client.Histogram;
 import nocomment.master.tracking.TrackyTrackyManager;
@@ -12,10 +11,6 @@ public final class LoggingExecutor implements Executor {
     private static final Gauge globalThreads = Gauge.build()
             .name("global_threads")
             .help("Number of executing threads globally")
-            .register();
-    private static final Counter loggingExecutorExceptions = Counter.build()
-            .name("executor_exceptions_total")
-            .help("Number of executor exceptions globally")
             .register();
 
     private static final Gauge pooledThreads = Gauge.build()
@@ -72,9 +67,9 @@ public final class LoggingExecutor implements Executor {
                     System.exit(1);
                 }
             } catch (Throwable th) {
-                loggingExecutorExceptions.inc();
                 th.printStackTrace();
-                throw th;
+                Telegram.INSTANCE.complain(th);
+                System.exit(1);
             } finally {
                 globalThreads.dec();
             }
