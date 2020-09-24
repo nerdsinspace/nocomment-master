@@ -32,6 +32,12 @@ dependencies {
     compile 'net.openhft:chronicle-values:2.20.6'
     compile 'net.openhft:chronicle-bytes:2.20.7'
     compile 'com.github.pengrad:java-telegram-bot-api:4.9.0'
+
+    testImplementation 'junit:junit:4.13'
+}
+
+test {
+    useJUnit()
 }
 
 jar {
