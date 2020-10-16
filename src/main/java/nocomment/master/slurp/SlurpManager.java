@@ -238,6 +238,7 @@ public class SlurpManager {
             });
         }
         slurpChunkSeeds.inc(toSeed.size());
+        slurpChunkSeeds.inc(toSeedHigh.size());
         // after 2 seconds, we will know if it succeeded or is unloaded
         // so, only send the rest after 2 seconds
         // either it'll work fine (just delayed), or we'll save a dozen or so checks because it'll run up against BlockCheckManager's observedUnloaded cache!

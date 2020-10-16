@@ -1,6 +1,7 @@
 package nocomment.master;
 
 import io.prometheus.client.Gauge;
+import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
 import nocomment.master.network.Connection;
 import nocomment.master.slurp.BlockCheckManager;
 import nocomment.master.slurp.SignManager;
@@ -8,20 +9,19 @@ import nocomment.master.slurp.SlurpManager;
 import nocomment.master.task.PriorityDispatchable;
 import nocomment.master.task.PriorityDispatchableBinaryHeap;
 import nocomment.master.task.Task;
-import nocomment.master.util.BlockPos;
-import nocomment.master.util.ChunkPos;
-import nocomment.master.util.Staggerer;
-import nocomment.master.util.WorldStatistics;
+import nocomment.master.tracking.TrackyTrackyManager;
+import nocomment.master.util.*;
 
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 public final class World {
 
     private static final Gauge worldQueueLength = Gauge.build()
             .name("world_queue_length")
             .help("Length of the world queue")
-            .labelNames("dimension")
+            .labelNames("dimension", "priority")
             .register();
 
     private static final int MAX_BURDEN = 400;
@@ -30,6 +30,7 @@ public final class World {
     private final LinkedBlockingQueue<PriorityDispatchable> toRemove;
     private final Map<Task.InterchangeabilityKey, List<Task>> taskDedup;
     private final PriorityDispatchableBinaryHeap heap;
+    private final Int2LongOpenHashMap priorityCountsOnHeap;
     public final short dimension;
     public final BlockCheckManager blockCheckManager;
     private final LinkedBlockingQueue<Boolean> taskSendSignal;
@@ -42,6 +43,7 @@ public final class World {
         this.server = server;
         this.connections = new ArrayList<>();
         this.heap = new PriorityDispatchableBinaryHeap();
+        this.priorityCountsOnHeap = new Int2LongOpenHashMap();
         this.toRemove = new LinkedBlockingQueue<>();
         this.taskDedup = new HashMap<>();
         this.dimension = dimension;
@@ -57,6 +59,11 @@ public final class World {
         this.dim = dimension + "";
         new Staggerer(this).start();
         NoComment.executor.execute(this::taskSendLoop);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(() -> {
+            synchronized (World.this) {
+                priorityCountsOnHeap.forEach((priority, count) -> worldQueueLength.labels(dim(), priority + "").set(count));
+            }
+        }), 0, 5, TimeUnit.SECONDS);
     }
 
     public synchronized void incomingConnection(Connection connection) {
@@ -82,6 +89,7 @@ public final class World {
         if (dispatch instanceof Task) {
             taskDedup.computeIfAbsent(((Task) dispatch).key(), $ -> new ArrayList<>()).add((Task) dispatch);
         }
+        priorityCountsOnHeap.addTo(dispatch.priority, 1);
         heap.insert(dispatch);
         worldUpdate();
         // don't server update per-task!
@@ -132,6 +140,7 @@ public final class World {
     }
 
     private synchronized void removeFromDedup(PriorityDispatchable dispatch) {
+        priorityCountsOnHeap.addTo(dispatch.priority, -1);
         if (!(dispatch instanceof Task)) {
             return;
         }
@@ -144,7 +153,6 @@ public final class World {
     }
 
     private synchronized void sendTasksOnConnections() {
-        worldQueueLength.labels(dim()).set(heap.size());
         if (connections.isEmpty()) {
             return;
         }
