@@ -160,3 +160,9 @@ with recursive interesting as materialized (select block_state from block_states
 
 july 5, signs
 select x,y,z,array_to_string((select array_agg(trim('"' from (x->'extra'->0->'text')::text)) from json_array_elements(data) as y(x)), '\n') from (select nbt_decode(nbt)::json as data,x,y,z from signs) tmp;
+
+list a given cluster's associations, cli
+select username, sum(association) as assc from associations inner join players on players.id = associations.player_id where cluster_id=207213431 group by username order by assc desc;
+
+locate a player, only using associations from the last 21 days
+select assc, dbscan.x*16 as block_x, dbscan.z*16 as block_z, cluster_id from (select cluster_id, sum(association) as assc from associations where player_id = (select id from players where lower(username)='?') and associations.created_at > (extract(epoch from now())*1000)::bigint - 3600::bigint*1000*24*21 group by cluster_id) tmp inner join dbscan on dbscan.id = tmp.cluster_id order by assc desc;
