@@ -43,6 +43,10 @@ public class SlurpManager {
             .help("Number of times seeding a chunk has been delayed")
             .labelNames("reason")
             .register();
+    private static final Counter clusterHitDirectPrune = Counter.build()
+            .name("slurp_cluster_hit_direct_prune_total")
+            .help("Number of times a chunk has been removed from clusterHitDirect")
+            .register();
     private static final Histogram asksPruneLatencies = Histogram.build()
             .name("slurp_asks_prune_latencies")
             .help("Asks prune latencies")
@@ -50,6 +54,14 @@ public class SlurpManager {
     private static final Histogram metricsUpdateLatencies = Histogram.build()
             .name("slurp_metrics_update_latencies")
             .help("Metrics update latencies")
+            .register();
+    private static final Histogram clusterHitIngestLatencies = Histogram.build()
+            .name("slurp_cluster_hit_ingest_latencies")
+            .help("Cluster hit ingest latencies")
+            .register();
+    private static final Histogram chunkSeedScanLatencies = Histogram.build()
+            .name("slurp_chunk_seed_scan_latencies")
+            .help("Chunk seed scan latencies")
             .register();
     private static final Gauge allAsksOffHeap = Gauge.build()
             .name("all_asks_off_heap")
@@ -66,6 +78,8 @@ public class SlurpManager {
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
     private static final long NUM_RENEWALS = 4;
     private static final int MAX_CHECK_STATUS_QUEUE_LENGTH = 5000;
+    private static final int MIN_PENDING_TO_RECHECK = 50;
+    private static final int MAX_PENDING_CHECKS = 1_000_000;
     private static final Random random = new Random();
     public final World world;
     private final Executor blockRecvExecutor = new LoggingExecutor(Executors.newSingleThreadExecutor(), "block_recv"); // blockRecv is synchronized so we only need one
@@ -81,11 +95,14 @@ public class SlurpManager {
     private final Set<BlockPos> signsAskedFor = new HashSet<>();
     private final LinkedBlockingQueue<ChunkPosWithTimestamp> ingest = new LinkedBlockingQueue<>();
     private final Object ingestLock = new Object();
+    private final Object clusterLock = new Object();
     // long chunkPos
     private final LongOpenHashSet clusterMembershipConfirmed = new LongOpenHashSet();
     // long chunkPos, long time
     private final Long2LongOpenHashMap clusterNonmembershipConfirmedAtCache = new Long2LongOpenHashMap();
     private final Long2LongOpenHashMap clusterHit = new Long2LongOpenHashMap();
+    private final Long2LongOpenHashMap clusterHitDirect = new Long2LongOpenHashMap();
+    private final LinkedBlockingQueue<Long> clusterHitDirectPrunes = new LinkedBlockingQueue<>();
     private final Long2LongOpenHashMap renewalSchedule = new Long2LongOpenHashMap();
     // long = chunkPos
     private final Long2ObjectOpenHashMap<int[][]> heightMapCache = new Long2ObjectOpenHashMap<>();
@@ -104,10 +121,21 @@ public class SlurpManager {
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneClusterData), 1, 1, TimeUnit.HOURS);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::pruneBlocks), 20, 60, TimeUnit.MINUTES);
         TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> {
-            ingestIntoClusterHit();
-            scanClusterHit();
+            synchronized (clusterLock) {
+                Histogram.Timer timer = clusterHitIngestLatencies.startTimer();
+                ingestIntoClusterHit();
+                timer.observeDuration();
+            }
+        }), 10000, 250, TimeUnit.MILLISECONDS);
+        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> {
+            synchronized (clusterLock) {
+                Histogram.Timer timer = chunkSeedScanLatencies.startTimer();
+                scanClusterHit();
+                timer.observeDuration();
+            }
         }), 10000, 10, TimeUnit.MILLISECONDS);
-        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::updateMetrics), 0, 1, TimeUnit.SECONDS);
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(this::updateMetrics), 0, 5, TimeUnit.SECONDS);
+        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::detectUnloaded), 0, 1, TimeUnit.MINUTES);
     }
 
     private synchronized void pruneBlocks() {
@@ -136,6 +164,7 @@ public class SlurpManager {
         slurpData.labels("cluster_membership_confirmed").set(clusterMembershipConfirmed.size());
         slurpData.labels("cluster_nonmembership_confirmed_at_cache").set(clusterNonmembershipConfirmedAtCache.size());
         slurpData.labels("cluster_hit").set(clusterHit.size());
+        slurpData.labels("cluster_hit_direct").set(clusterHitDirect.size());
         slurpData.labels("renewal_schedule").set(renewalSchedule.size());
         // signs :(
         slurpData.labels("asked_and_got_unloaded_response").set(askedAndGotUnloadedResponse.size());
@@ -151,9 +180,32 @@ public class SlurpManager {
         } catch (InterruptedException ex) {}
     }
 
+    private void detectUnloaded() {
+        if (clusterHitDirectPrunes.isEmpty()) {
+            return;
+        }
+        Set<Long> unloaded = new HashSet<>();
+        clusterHitDirectPrunes.drainTo(unloaded);
+        List<Long> toRecheck = new ArrayList<>();
+        world.chunkChecksLookup(unloaded.iterator(), (cpos, count) -> {
+            if (count > MIN_PENDING_TO_RECHECK) {
+                toRecheck.add(cpos); // don't do it in here, we are holding world lock
+            }
+        });
+        Random loc = new Random();
+        toRecheck.forEach(cposSerialized -> {
+            ChunkPos cpos = ChunkPos.fromLong(cposSerialized);
+            askFor(cpos.origin().add(loc.nextInt(16), loc.nextInt(256), loc.nextInt(16)), 55, System.currentTimeMillis() - RENEW_AGE);
+        });
+    }
+
     private void scanClusterHit() {
         if (BlockCheckManager.checkStatusQueue.size() > MAX_CHECK_STATUS_QUEUE_LENGTH) {
             slurpDelay("check_queue_length");
+            return;
+        }
+        if (world.pendingChecks() > MAX_PENDING_CHECKS) {
+            slurpDelay("pending_check_count");
             return;
         }
         long now = System.currentTimeMillis();
@@ -353,9 +405,20 @@ public class SlurpManager {
                     clusterHit.merge(pos.serializedAdd(dx, dz), unboxedTimeStamp, Math::max);
                 }
             }
+            clusterHitDirect.merge(pos.toLong(), unboxedTimeStamp, Math::max);
         });
         long now = System.currentTimeMillis();
         clusterHit.values().removeIf(ts -> ts < now - RENEW_AGE);
+
+        Iterator<Long2LongMap.Entry> it = clusterHitDirect.long2LongEntrySet().fastIterator();
+        while (it.hasNext()) {
+            Long2LongMap.Entry entry = it.next();
+            if (entry.getLongValue() < now - RENEW_AGE) {
+                it.remove();
+                clusterHitDirectPrune.inc();
+                clusterHitDirectPrunes.add(entry.getLongKey());
+            }
+        }
     }
 
     public void clusterUpdate(ChunkPos cpos) { // dbscan informing us of a cluster update

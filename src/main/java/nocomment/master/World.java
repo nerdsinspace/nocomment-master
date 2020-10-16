@@ -2,7 +2,9 @@ package nocomment.master;
 
 import io.prometheus.client.Gauge;
 import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import nocomment.master.network.Connection;
+import nocomment.master.slurp.BlockCheck;
 import nocomment.master.slurp.BlockCheckManager;
 import nocomment.master.slurp.SignManager;
 import nocomment.master.slurp.SlurpManager;
@@ -15,6 +17,7 @@ import nocomment.master.util.*;
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 
 public final class World {
 
@@ -38,6 +41,7 @@ public final class World {
     private final PriorityDispatchableBinaryHeap heap;
     private final Int2LongOpenHashMap priorityCountsOnHeap;
     private final Int2LongOpenHashMap prioritySizesOnHeap;
+    private final Long2IntOpenHashMap blockChecksByChunk;
     public final short dimension;
     public final BlockCheckManager blockCheckManager;
     private final LinkedBlockingQueue<Boolean> taskSendSignal;
@@ -52,6 +56,7 @@ public final class World {
         this.heap = new PriorityDispatchableBinaryHeap();
         this.priorityCountsOnHeap = new Int2LongOpenHashMap();
         this.prioritySizesOnHeap = new Int2LongOpenHashMap();
+        this.blockChecksByChunk = new Long2IntOpenHashMap();
         this.toRemove = new LinkedBlockingQueue<>();
         this.taskDedup = new HashMap<>();
         this.dimension = dimension;
@@ -97,6 +102,9 @@ public final class World {
     public synchronized void submit(PriorityDispatchable dispatch) {
         if (dispatch instanceof Task) {
             taskDedup.computeIfAbsent(((Task) dispatch).key(), $ -> new ArrayList<>()).add((Task) dispatch);
+        }
+        if (dispatch instanceof BlockCheck) {
+            blockChecksByChunk.addTo(BlockPos.blockToChunk(((BlockCheck) dispatch).bpos()), 1);
         }
         priorityCountsOnHeap.addTo(dispatch.priority, 1);
         prioritySizesOnHeap.addTo(dispatch.priority, dispatch.size());
@@ -152,15 +160,34 @@ public final class World {
     private synchronized void removeFromDedup(PriorityDispatchable dispatch) {
         priorityCountsOnHeap.addTo(dispatch.priority, -1);
         prioritySizesOnHeap.addTo(dispatch.priority, -dispatch.size());
-        if (!(dispatch instanceof Task)) {
-            return;
+        if (dispatch instanceof BlockCheck) {
+            blockChecksByChunk.addTo(BlockPos.blockToChunk(((BlockCheck) dispatch).bpos()), -1);
         }
-        Task task = (Task) dispatch;
-        List<Task> dedup = taskDedup.get(task.key());
-        dedup.remove(task);
-        if (dedup.isEmpty()) {
-            taskDedup.remove(task.key());
+        if (dispatch instanceof Task) {
+            Task task = (Task) dispatch;
+            List<Task> dedup = taskDedup.get(task.key());
+            dedup.remove(task);
+            if (dedup.isEmpty()) {
+                taskDedup.remove(task.key());
+            }
         }
+    }
+
+    public synchronized int pendingChecks() {
+        int sum = 0;
+        for (int val : blockChecksByChunk.values()) {
+            sum += val;
+        }
+        return sum;
+    }
+
+    public synchronized void chunkChecksLookup(Iterator<Long> cposItr, BiConsumer<Long, Integer> withPendingBlockChecks) {
+        cposItr.forEachRemaining(cpos -> {
+            int val = blockChecksByChunk.get(cpos.longValue());
+            if (val > 0) {
+                withPendingBlockChecks.accept(cpos, val);
+            }
+        });
     }
 
     private synchronized void sendTasksOnConnections() {
