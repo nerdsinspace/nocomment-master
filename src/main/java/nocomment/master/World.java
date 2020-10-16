@@ -42,6 +42,7 @@ public final class World {
     private final Int2LongOpenHashMap priorityCountsOnHeap;
     private final Int2LongOpenHashMap prioritySizesOnHeap;
     private final Long2IntOpenHashMap blockChecksByChunk;
+    private int blockChecks;
     public final short dimension;
     public final BlockCheckManager blockCheckManager;
     private final LinkedBlockingQueue<Boolean> taskSendSignal;
@@ -105,6 +106,7 @@ public final class World {
         }
         if (dispatch instanceof BlockCheck) {
             blockChecksByChunk.addTo(BlockPos.blockToChunk(((BlockCheck) dispatch).bpos()), 1);
+            blockChecks++;
         }
         priorityCountsOnHeap.addTo(dispatch.priority, 1);
         prioritySizesOnHeap.addTo(dispatch.priority, dispatch.size());
@@ -162,6 +164,7 @@ public final class World {
         prioritySizesOnHeap.addTo(dispatch.priority, -dispatch.size());
         if (dispatch instanceof BlockCheck) {
             blockChecksByChunk.addTo(BlockPos.blockToChunk(((BlockCheck) dispatch).bpos()), -1);
+            blockChecks--;
         }
         if (dispatch instanceof Task) {
             Task task = (Task) dispatch;
@@ -174,11 +177,7 @@ public final class World {
     }
 
     public synchronized int pendingChecks() {
-        int sum = 0;
-        for (int val : blockChecksByChunk.values()) {
-            sum += val;
-        }
-        return sum;
+        return blockChecks;
     }
 
     public synchronized void chunkChecksLookup(Iterator<Long> cposItr, BiConsumer<Long, Integer> withPendingBlockChecks) {
