@@ -7,6 +7,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
@@ -14,7 +15,7 @@ public final class HitRetry {
 
     private static final Random RANDOM = new Random();
 
-    public static ChunkPos clusterTraverse(short serverID, short dimension) {
+    public static Optional<ChunkPos> clusterTraverse(short serverID, short dimension) {
         try (Connection connection = Database.getConnection(); PreparedStatement stmt = connection.prepareStatement("" +
                 "            WITH RECURSIVE initial AS (                                      " +
                 "                SELECT                                                       " +
@@ -75,8 +76,11 @@ public final class HitRetry {
             }
             stmt.setLong(3, mustBeNewerThan);
             try (ResultSet rs = stmt.executeQuery()) {
-                rs.next();
-                return new ChunkPos(rs.getInt("x"), rs.getInt("z"));
+                if (rs.next()) {
+                    return Optional.of(new ChunkPos(rs.getInt("x"), rs.getInt("z")));
+                } else {
+                    return Optional.empty();
+                }
             }
         } catch (SQLException ex) {
             ex.printStackTrace();

@@ -8,6 +8,7 @@ import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.ChunkPos;
 import nocomment.master.util.LoggingExecutor;
 
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -41,8 +42,13 @@ public final class ClusterRetryScanner {
     }
 
     private void submitTask() {
-        ChunkPos pos = HitRetry.clusterTraverse(world.server.serverID, world.dimension);
-        world.submit(new Task(priority, pos, 0, 0, 1) {
+        Optional<ChunkPos> pos = HitRetry.clusterTraverse(world.server.serverID, world.dimension);
+        if (!pos.isPresent()) {
+            System.out.println("DBSCAN not run yet?? ClusterRetry has no results! Waiting 100x the normal duration");
+            TrackyTrackyManager.scheduler.schedule(LoggingExecutor.wrap(this::submitTask), rerunDelayMS * 100, TimeUnit.MILLISECONDS);
+            return;
+        }
+        world.submit(new Task(priority, pos.get(), 0, 0, 1) {
             @Override
             public void hitReceived(Hit hit) {
                 System.out.println("Cluster retry hit " + hit.pos + " in dimension " + world.dimension);
