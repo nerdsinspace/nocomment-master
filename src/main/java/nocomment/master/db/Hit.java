@@ -73,12 +73,14 @@ public final class Hit {
         Hit hit = hits.next();
         synchronized (hit) {
             if (hit.state != State.DONE) {
-                hit.state = State.DONE;
                 Database.saveHit(hit, connection);
             }
             // Y E P
             // that's right, we HOLD ALL PAST SYNCHRONIZED LOCKS
             saveRecursively(hits, connection);
+            if (hit.state != State.DONE) {
+                hit.state = State.DONE;
+            }
         }
     }
 
