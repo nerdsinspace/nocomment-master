@@ -123,6 +123,9 @@ public final class World {
     }
 
     private synchronized void consumeRemovalQueue() {
+        if (toRemove.isEmpty()) {
+            return;
+        }
         List<PriorityDispatchable> queued = new ArrayList<>(toRemove.size());
         toRemove.drainTo(queued);
         queued.forEach(this::remove);

@@ -8,10 +8,7 @@ import nocomment.master.util.LoggingExecutor;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.OptionalInt;
-import java.util.OptionalLong;
+import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -59,7 +56,7 @@ public final class Hit {
             List<Hit> hits = new ArrayList<>(BATCH_SIZE);
             do {
                 toSave.drainTo(hits, BATCH_SIZE);
-                saveRecursively(hits, connection);
+                saveRecursively(hits.iterator(), connection);
                 hits.clear();
             } while (toSave.size() >= BATCH_SIZE);
         } catch (SQLException ex) {
@@ -68,12 +65,12 @@ public final class Hit {
         }
     }
 
-    private static void saveRecursively(List<Hit> hits, Connection connection) throws SQLException {
-        if (hits.isEmpty()) {
+    private static void saveRecursively(Iterator<Hit> hits, Connection connection) throws SQLException {
+        if (!hits.hasNext()) {
             connection.commit();
             return;
         }
-        Hit hit = hits.get(0);
+        Hit hit = hits.next();
         synchronized (hit) {
             if (hit.state != State.DONE) {
                 hit.state = State.DONE;
@@ -81,7 +78,7 @@ public final class Hit {
             }
             // Y E P
             // that's right, we HOLD ALL PAST SYNCHRONIZED LOCKS
-            saveRecursively(hits.subList(1, hits.size()), connection);
+            saveRecursively(hits, connection);
         }
     }
 
