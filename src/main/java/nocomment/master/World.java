@@ -24,6 +24,12 @@ public final class World {
             .labelNames("dimension", "priority")
             .register();
 
+    private static final Gauge worldQueueSize = Gauge.build()
+            .name("world_queue_size")
+            .help("Size of the world queue (including tasks with large counts)")
+            .labelNames("dimension", "priority")
+            .register();
+
     private static final int MAX_BURDEN = 400;
     public final Server server;
     private final List<Connection> connections;
@@ -31,6 +37,7 @@ public final class World {
     private final Map<Task.InterchangeabilityKey, List<Task>> taskDedup;
     private final PriorityDispatchableBinaryHeap heap;
     private final Int2LongOpenHashMap priorityCountsOnHeap;
+    private final Int2LongOpenHashMap prioritySizesOnHeap;
     public final short dimension;
     public final BlockCheckManager blockCheckManager;
     private final LinkedBlockingQueue<Boolean> taskSendSignal;
@@ -44,6 +51,7 @@ public final class World {
         this.connections = new ArrayList<>();
         this.heap = new PriorityDispatchableBinaryHeap();
         this.priorityCountsOnHeap = new Int2LongOpenHashMap();
+        this.prioritySizesOnHeap = new Int2LongOpenHashMap();
         this.toRemove = new LinkedBlockingQueue<>();
         this.taskDedup = new HashMap<>();
         this.dimension = dimension;
@@ -62,6 +70,7 @@ public final class World {
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(() -> {
             synchronized (World.this) {
                 priorityCountsOnHeap.forEach((priority, count) -> worldQueueLength.labels(dim(), priority + "").set(count));
+                prioritySizesOnHeap.forEach((priority, size) -> worldQueueSize.labels(dim(), priority + "").set(size));
             }
         }), 0, 5, TimeUnit.SECONDS);
     }
@@ -90,6 +99,7 @@ public final class World {
             taskDedup.computeIfAbsent(((Task) dispatch).key(), $ -> new ArrayList<>()).add((Task) dispatch);
         }
         priorityCountsOnHeap.addTo(dispatch.priority, 1);
+        prioritySizesOnHeap.addTo(dispatch.priority, dispatch.size());
         heap.insert(dispatch);
         worldUpdate();
         // don't server update per-task!
@@ -141,6 +151,7 @@ public final class World {
 
     private synchronized void removeFromDedup(PriorityDispatchable dispatch) {
         priorityCountsOnHeap.addTo(dispatch.priority, -1);
+        prioritySizesOnHeap.addTo(dispatch.priority, -dispatch.size());
         if (!(dispatch instanceof Task)) {
             return;
         }

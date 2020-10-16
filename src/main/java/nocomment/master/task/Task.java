@@ -59,4 +59,9 @@ public abstract class Task extends PriorityDispatchable {
         dispatchedAt = System.currentTimeMillis();
         onto.acceptTask(this);
     }
+
+    @Override
+    public int size() {
+        return count;
+    }
 }

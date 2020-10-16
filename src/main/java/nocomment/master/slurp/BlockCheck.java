@@ -68,4 +68,9 @@ public final class BlockCheck extends PriorityDispatchable {
     public boolean hasAffinity(Connection connection) {
         return connection.blockAffinity(bpos);
     }
+
+    @Override
+    public int size() {
+        return 1;
+    }
 }

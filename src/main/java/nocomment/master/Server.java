@@ -3,7 +3,6 @@ package nocomment.master;
 import nocomment.master.db.Database;
 import nocomment.master.network.Connection;
 import nocomment.master.task.PriorityDispatchable;
-import nocomment.master.task.Task;
 import nocomment.master.tracking.OnlinePlayerTracker;
 import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.LoggingExecutor;
@@ -47,7 +46,7 @@ public final class Server {
                 Collection<PriorityDispatchable> pending = world.getPending();
                 resp.append(pending.size());
                 resp.append(", total checks ");
-                resp.append(pending.stream().mapToInt(d -> d instanceof Task ? ((Task) d).count : 1).sum());
+                resp.append(pending.stream().mapToInt(PriorityDispatchable::size).sum());
                 resp.append(", connections: ");
                 for (Connection conn : world.getOpenConnections()) {
                     resp.append("\n Connection ").append(conn);

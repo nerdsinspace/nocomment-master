@@ -42,4 +42,6 @@ public abstract class PriorityDispatchable implements Comparable<PriorityDispatc
     public boolean hasAffinity(Connection connection) {
         return false;
     }
+
+    public abstract int size();
 }
