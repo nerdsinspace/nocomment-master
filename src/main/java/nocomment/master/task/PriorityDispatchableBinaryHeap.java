@@ -1,5 +1,6 @@
 package nocomment.master.task;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 
@@ -116,7 +117,7 @@ public final class PriorityDispatchableBinaryHeap {
     }
 
     public final Collection<PriorityDispatchable> copy() {
-        return Arrays.asList(array).subList(1, size + 1);
+        return new ArrayList<>(Arrays.asList(array)).subList(1, size + 1);
     }
 }
 
