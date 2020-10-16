@@ -144,13 +144,17 @@ public class SlurpManager {
         timer.observeDuration();
     }
 
+    private void slurpDelay(String reason) {
+        slurpDelay.labels(reason).inc();
+        try {
+            Thread.sleep(1000); // don't add fuel to the fire
+        } catch (InterruptedException ex) {}
+    }
+
     private void scanClusterHit() {
         if (BlockCheckManager.checkStatusQueue.size() > MAX_CHECK_STATUS_QUEUE_LENGTH) {
-            slurpDelay.labels("check_queue_length").inc();
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException ex) {}
-            return; // don't add fuel to the fire
+            slurpDelay("check_queue_length");
+            return;
         }
         long now = System.currentTimeMillis();
         renewalSchedule.values().removeIf(ts -> ts < now);
@@ -165,18 +169,12 @@ public class SlurpManager {
                 })
                 .max(Comparator.comparingLong(entry -> ChunkPos.distSqSerialized(entry.getLongKey())));
         if (!candidates.isPresent()) {
-            slurpDelay.labels("renewal_schedule").inc();
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException ex) {}
+            slurpDelay("renewal_schedule");
             return;
         }
         long cposSerialized = candidates.get().getLongKey();
         if (ChunkPos.distSqSerialized(cposSerialized) < MIN_DIST_SQ_CHUNKS) {
-            slurpDelay.labels("too_close").inc();
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException ex) {}
+            slurpDelay("too_close");
             return;
         }
         //System.out.println("Beginning slurp on chunk " + cpos);
@@ -191,6 +189,7 @@ public class SlurpManager {
         askFor(cpos.origin().add(random.nextInt(16), random.nextInt(256), random.nextInt(16)), 56, now - RENEW_AGE);
         slurpChunkSeeds.inc();
         Set<BlockPos> toSeed = new HashSet<>();
+        Set<BlockPos> toSeedHigh = new HashSet<>();
         for (int i = 0; i < 3; i++) {
             // TODO increase this as we get more hits but failed slurp seedings in this location
             toSeed.add(cpos.origin().add(random.nextInt(16), random.nextInt(256), random.nextInt(16)));
@@ -204,8 +203,7 @@ public class SlurpManager {
             if (heightMap != null) {
                 BlockPos pos = new BlockPos(x, heightMap[dx][dz], z);
                 // exception for the single most important one; the core gets a priority boost
-                askFor(pos, 57, now - RENEW_AGE);
-                toSeed.add(pos);
+                toSeedHigh.add(pos);
                 toSeed.add(pos.add(0, 1, 0));
             }
 
@@ -244,6 +242,9 @@ public class SlurpManager {
         // so, only send the rest after 2 seconds
         // either it'll work fine (just delayed), or we'll save a dozen or so checks because it'll run up against BlockCheckManager's observedUnloaded cache!
         TrackyTrackyManager.scheduler.schedule(LoggingExecutor.wrap(() -> {
+            for (BlockPos pos : toSeedHigh) {
+                askFor(pos, 57, now - RENEW_AGE);
+            }
             for (BlockPos pos : toSeed) {
                 askFor(pos, 58, now - RENEW_AGE);
             }
