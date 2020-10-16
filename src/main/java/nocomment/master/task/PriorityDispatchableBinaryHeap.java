@@ -117,7 +117,7 @@ public final class PriorityDispatchableBinaryHeap {
     }
 
     public final Collection<PriorityDispatchable> copy() {
-        return new ArrayList<>(Arrays.asList(array)).subList(1, size + 1);
+        return new ArrayList<>(Arrays.asList(array).subList(1, size + 1));
     }
 }
 
