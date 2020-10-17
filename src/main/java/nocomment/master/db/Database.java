@@ -280,22 +280,35 @@ public final class Database {
     public static int createTrack(Hit initialHit, OptionalInt prevTrackID) {
         // make sure that the initialHit has an assigned hit ID
         initialHit.saveToDBBlocking();
-        try (Connection connection = POOL.getConnection();
-             PreparedStatement stmt = connection.prepareStatement("INSERT INTO tracks (first_hit_id, last_hit_id, updated_at, prev_track_id, dimension, server_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id")) {
-            stmt.setLong(1, initialHit.getHitID());
-            stmt.setLong(2, initialHit.getHitID());
-            stmt.setLong(3, initialHit.createdAt);
-            if (prevTrackID.isPresent()) {
-                stmt.setInt(4, prevTrackID.getAsInt());
-            } else {
-                stmt.setNull(4, Types.INTEGER);
+        try (Connection connection = POOL.getConnection()) {
+            connection.setAutoCommit(false);
+            int trackID;
+            try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO tracks (first_hit_id, last_hit_id, updated_at, prev_track_id, dimension, server_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id")) {
+                stmt.setLong(1, initialHit.getHitID());
+                stmt.setLong(2, initialHit.getHitID());
+                stmt.setLong(3, initialHit.createdAt);
+                if (prevTrackID.isPresent()) {
+                    stmt.setInt(4, prevTrackID.getAsInt());
+                } else {
+                    stmt.setNull(4, Types.INTEGER);
+                }
+                stmt.setShort(5, initialHit.dimension);
+                stmt.setShort(6, initialHit.serverID);
+                try (ResultSet rs = stmt.executeQuery()) {
+                    rs.next();
+                    trackID = rs.getInt("id");
+                }
             }
-            stmt.setShort(5, initialHit.dimension);
-            stmt.setShort(6, initialHit.serverID);
-            try (ResultSet rs = stmt.executeQuery()) {
-                rs.next();
-                return rs.getInt("id");
+            // use transaction atomicity to maintain the invariant of tracks and hits referring to each other circularly
+            try (PreparedStatement stmt = connection.prepareStatement("UPDATE hits SET track_id = ? WHERE id = ?")) {
+                // can't call alterHitToBeWithinTrack directly because it requires us to hold the lock on the Hit
+                stmt.setInt(1, trackID);
+                stmt.setLong(2, initialHit.getHitID());
+                stmt.executeUpdate();
             }
+            // note: hits will be updated to set the track_id twice, this is a nonissue, and is a sanity check in case the queues back up
+            connection.commit();
+            return trackID;
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
@@ -309,7 +322,7 @@ public final class Database {
             try (PreparedStatement stmt = connection.prepareStatement("UPDATE hits SET track_id = ? WHERE id = ?")) {
                 stmt.setInt(1, hit.getTrackID().getAsInt());
                 stmt.setLong(2, hit.getHitID());
-                stmt.execute();
+                stmt.executeUpdate();
             }
             connection.commit();
         } catch (SQLException ex) {
