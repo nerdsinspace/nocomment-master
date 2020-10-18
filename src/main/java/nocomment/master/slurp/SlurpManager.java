@@ -196,7 +196,7 @@ public class SlurpManager {
         Random loc = new Random();
         toRecheck.forEach(cposSerialized -> {
             ChunkPos cpos = ChunkPos.fromLong(cposSerialized);
-            askFor(cpos.origin().add(loc.nextInt(16), loc.nextInt(256), loc.nextInt(16)), 55, System.currentTimeMillis() - RENEW_AGE);
+            askFor(cpos.origin().add(loc.nextInt(16), loc.nextInt(256), loc.nextInt(16)), 55, System.currentTimeMillis() - PENDING_RECHECK_AGE);
         });
     }
 
