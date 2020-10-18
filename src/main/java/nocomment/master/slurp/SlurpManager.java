@@ -75,6 +75,7 @@ public class SlurpManager {
     private static final long CHECK_MAX_GAP = TimeUnit.SECONDS.toMillis(30);
     private static final long CLUSTER_DATA_CACHE_DURATION = TimeUnit.DAYS.toMillis(1);
     private static final long PRUNE_AGE = TimeUnit.HOURS.toMillis(2);
+    private static final long PENDING_RECHECK_AGE = TimeUnit.MINUTES.toMillis(2);
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
     private static final long NUM_RENEWALS = 4;
     private static final int MAX_CHECK_STATUS_QUEUE_LENGTH = 5000;
@@ -413,7 +414,7 @@ public class SlurpManager {
         Iterator<Long2LongMap.Entry> it = clusterHitDirect.long2LongEntrySet().fastIterator();
         while (it.hasNext()) {
             Long2LongMap.Entry entry = it.next();
-            if (entry.getLongValue() < now - RENEW_AGE) {
+            if (entry.getLongValue() < now - PENDING_RECHECK_AGE) {
                 it.remove();
                 clusterHitDirectPrune.inc();
                 clusterHitDirectPrunes.add(entry.getLongKey());
