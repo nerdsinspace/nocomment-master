@@ -6,6 +6,7 @@ import nocomment.master.db.Database;
 import nocomment.master.network.NoCommentServer;
 import nocomment.master.util.LoggingExecutor;
 import nocomment.master.util.Telegram;
+import nocomment.master.util.TrackFixup;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -13,16 +14,19 @@ import java.util.concurrent.Executors;
 public final class NoComment {
 
     public static Executor executor = new LoggingExecutor(Executors.newFixedThreadPool(48), "main");
-    public static final boolean DRY_RUN = false;
+    public static final boolean DRY_RUN = true;
 
     public static void main(String[] args) throws Exception {
-        new HTTPServer(1234);
-        DefaultExports.initialize();
         Telegram.INSTANCE.startup();
         if (!DRY_RUN) {
+            new HTTPServer(1234);
+            DefaultExports.initialize();
             new Database();
             LoggingExecutor.wrap(NoCommentServer::listen).run();
             System.exit(1);
+        }
+        try (TrackFixup tf = new TrackFixup()) {
+            tf.fixup();
         }
     }
 

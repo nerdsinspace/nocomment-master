@@ -16,7 +16,11 @@ public enum Telegram {
     private final String chatID = NoComment.getRuntimeVariable("TELEGRAM_CHAT_ID", "");
 
     public void startup() {
-        bot.execute(new SendMessage(chatID, "Master startup"));
+        if (NoComment.DRY_RUN) {
+            bot.execute(new SendMessage(chatID, "DRY RUN startup of master, probably dev env!"));
+        } else {
+            bot.execute(new SendMessage(chatID, "Master startup"));
+        }
     }
 
     static int indexOfLeft(String str, char c, int from) {
