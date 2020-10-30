@@ -415,9 +415,9 @@ public class SlurpManager {
         while (it.hasNext()) {
             Long2LongMap.Entry entry = it.next();
             if (entry.getLongValue() < now - PENDING_RECHECK_AGE) {
-                it.remove();
                 clusterHitDirectPrune.inc();
                 clusterHitDirectPrunes.add(entry.getLongKey());
+                it.remove();
             }
         }
     }

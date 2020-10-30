@@ -60,7 +60,9 @@ public final class Database {
         POOL.setRollbackOnReturn(true);
         POOL.setDefaultReadOnly(NoComment.DRY_RUN);
         try {
-            pruneStaleStatuses(POOL);
+            if (!NoComment.DRY_RUN) {
+                pruneStaleStatuses(POOL);
+            }
         } catch (Throwable th) {
             th.printStackTrace();
             System.out.println("Database ping failed!");
