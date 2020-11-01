@@ -66,6 +66,7 @@ public abstract class Connection {
             }
             clearRecentChecks();
             Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
+            QueueStatus.markIngame(playerID, serverID);
         }), 0, 1, TimeUnit.SECONDS);
         Gauge.Child ctr = activeConnections.labels(world.dim(), world.server.hostname, playerID + "");
         ctr.inc();

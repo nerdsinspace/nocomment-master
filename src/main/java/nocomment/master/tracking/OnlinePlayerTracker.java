@@ -5,6 +5,7 @@ import nocomment.master.NoComment;
 import nocomment.master.Server;
 import nocomment.master.db.Database;
 import nocomment.master.network.Connection;
+import nocomment.master.network.QueueStatus;
 import nocomment.master.util.OnlinePlayer;
 
 import java.util.*;
@@ -58,6 +59,7 @@ public class OnlinePlayerTracker {
             });
 
             Database.addPlayers(server.serverID, toAdd, now);
+            toAdd.forEach(pid -> QueueStatus.markIngame(pid, server.serverID));
         }
         if (!toRemove.isEmpty()) {
             System.out.println("Players left: " + toRemove);

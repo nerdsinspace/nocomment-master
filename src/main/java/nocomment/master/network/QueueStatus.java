@@ -1,5 +1,6 @@
 package nocomment.master.network;
 
+import io.prometheus.client.Gauge;
 import nocomment.master.db.Database;
 import nocomment.master.util.OnlinePlayer;
 
@@ -10,6 +11,12 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public final class QueueStatus {
+
+    private static final Gauge queuePosition = Gauge.build()
+            .name("queue_position")
+            .help("Position in queue")
+            .labelNames("player_id")
+            .register();
 
     // any "queue" messages are about this server
     private static final short QUEUE_SERVER_ID = Database.idForServer("2b2t.org");
@@ -42,6 +49,13 @@ public final class QueueStatus {
         }
     }
 
+    public static void markIngame(int playerID, short serverID) {
+        if (serverID != QUEUE_SERVER_ID) {
+            return;
+        }
+        queuePosition.remove(playerID + "");
+    }
+
     public static void handle(Socket s, DataInputStream in) throws IOException {
         String uuid = in.readUTF();
         int queuePos = in.readInt();
@@ -49,6 +63,7 @@ public final class QueueStatus {
 
         int playerID = Database.idForPlayer(new OnlinePlayer(uuid));
         Database.updateStatus(playerID, QUEUE_SERVER_ID, "QUEUE", Optional.of("Queue position: " + queuePos));
+        queuePosition.labels(playerID + "").set(queuePos);
         synchronized (cache) {
             if (cache.containsKey(playerID)) {
                 long prevTime = cache.get(playerID).timestamp;
