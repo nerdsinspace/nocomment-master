@@ -728,17 +728,23 @@ public class SlurpManager {
     }
 
     private static class HeightmapTimestampedCacheEntryWrapper {
-        private final int[][] data;
+        private final byte[] compactMap;
         private long lastAccess;
 
         private HeightmapTimestampedCacheEntryWrapper(int[][] data) {
-            this.data = data;
+            this.compactMap = new byte[256];
+            for (int x = 0; x < 16; x++) {
+                for (int z = 0; z < 16; z++) {
+                    compactMap[x * 16 + z] = (byte) data[x][z];
+                }
+            }
             this.lastAccess = System.currentTimeMillis();
         }
 
         public int getHeightMapAt(int x, int z) {
             lastAccess = System.currentTimeMillis();
-            return data[x][z];
+            int height = compactMap[x * 16 + z];
+            return height & 0xff;
         }
     }
 }
