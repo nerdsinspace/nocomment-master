@@ -76,6 +76,7 @@ public class SlurpManager {
     private static final long CLUSTER_DATA_CACHE_DURATION = TimeUnit.DAYS.toMillis(1);
     private static final long PRUNE_AGE = TimeUnit.HOURS.toMillis(2);
     private static final long PENDING_RECHECK_AGE = TimeUnit.MINUTES.toMillis(2);
+    private static final long HEIGHT_MAP_CACHE_DURATION = TimeUnit.DAYS.toMillis(1);
     private static final long MIN_DIST_SQ_CHUNKS = 6250L * 6250L; // 100k blocks
     private static final long NUM_RENEWALS = 4;
     private static final int MAX_CHECK_STATUS_QUEUE_LENGTH = 5000;
@@ -106,7 +107,8 @@ public class SlurpManager {
     private final LinkedBlockingQueue<Long> clusterHitDirectPrunes = new LinkedBlockingQueue<>();
     private final Long2LongOpenHashMap renewalSchedule = new Long2LongOpenHashMap();
     // long = chunkPos
-    private final Long2ObjectOpenHashMap<int[][]> heightMapCache = new Long2ObjectOpenHashMap<>();
+    private final Long2ObjectOpenHashMap<HeightmapTimestampedCacheEntryWrapper> heightMapCache = new Long2ObjectOpenHashMap<>();
+    private long lastHeightMapCachePurgeAt;
 
     public SlurpManager(World world) {
         this.world = world;
@@ -236,7 +238,11 @@ public class SlurpManager {
         renewalSchedule.put(cposSerialized, now + RENEW_INTERVAL);
         // blockingly fetch heightmap in the enclosing scope
         // only if we have chunk generation can we do heightmap based queries
-        int[][] heightMap = this.chunkManager != null ? this.heightMapCache.computeIfAbsent(cposSerialized, this::heightMap) : null;
+        HeightmapTimestampedCacheEntryWrapper heightMap = this.chunkManager != null ? this.heightMapCache.computeIfAbsent(cposSerialized, this::heightMap) : null;
+        if (now > lastHeightMapCachePurgeAt + HEIGHT_MAP_CACHE_DURATION) {
+            heightMapCache.values().removeIf(entry -> entry.lastAccess < now - HEIGHT_MAP_CACHE_DURATION);
+            lastHeightMapCachePurgeAt = now;
+        }
         // first, send a random check with high priority
         ChunkPos cpos = ChunkPos.fromLong(cposSerialized);
         askFor(cpos.origin().add(random.nextInt(16), random.nextInt(256), random.nextInt(16)), 56, now - RENEW_AGE);
@@ -254,7 +260,7 @@ public class SlurpManager {
             int z = cpos.getZStart() + dz;
 
             if (heightMap != null) {
-                BlockPos pos = new BlockPos(x, heightMap[dx][dz], z);
+                BlockPos pos = new BlockPos(x, heightMap.getHeightMapAt(dx, dz), z);
                 // exception for the single most important one; the core gets a priority boost
                 toSeedHigh.add(pos);
                 toSeed.add(pos.add(0, 1, 0));
@@ -305,7 +311,7 @@ public class SlurpManager {
         }), 2, TimeUnit.SECONDS);
     }
 
-    private int[][] heightMap(long cpos) {
+    private HeightmapTimestampedCacheEntryWrapper heightMap(long cpos) {
         // return: the Y coordinates of the first non-air block. 0 if fully air
         int[][] ret = new int[16][16];
         int[] data;
@@ -324,7 +330,7 @@ public class SlurpManager {
                 }
             }
         }
-        return ret;
+        return new HeightmapTimestampedCacheEntryWrapper(ret);
     }
 
     private List<Integer> interestingYCoordsFromLastTime(int x, int z) {
@@ -658,8 +664,8 @@ public class SlurpManager {
     }
 
     private static class FailedAsk {
-        int priority;
-        long mustBeNewerThan;
+        private final int priority;
+        private final long mustBeNewerThan;
 
         public FailedAsk(AskStatus stat) {
             this.priority = stat.getHighestPriorityAskedAt();
@@ -668,8 +674,8 @@ public class SlurpManager {
     }
 
     private static class ResumeDataForChunk {
-        Long2ObjectOpenHashMap<FailedAsk> failedBlockChecks = new Long2ObjectOpenHashMap<>();
-        Map<BlockPos, Long> failedSignChecks = new HashMap<>();
+        private final Long2ObjectOpenHashMap<FailedAsk> failedBlockChecks = new Long2ObjectOpenHashMap<>();
+        private final Map<BlockPos, Long> failedSignChecks = new HashMap<>();
     }
 
     public interface AskStatus {
@@ -718,6 +724,21 @@ public class SlurpManager {
         public ChunkPosWithTimestamp(long cpos) {
             this.cpos = cpos;
             this.timestamp = System.currentTimeMillis();
+        }
+    }
+
+    private static class HeightmapTimestampedCacheEntryWrapper {
+        private final int[][] data;
+        private long lastAccess;
+
+        private HeightmapTimestampedCacheEntryWrapper(int[][] data) {
+            this.data = data;
+            this.lastAccess = System.currentTimeMillis();
+        }
+
+        public int getHeightMapAt(int x, int z) {
+            lastAccess = System.currentTimeMillis();
+            return data[x][z];
         }
     }
 }

@@ -36,7 +36,7 @@ public final class ChunkManager {
             .help("Number of chunks received")
             .register();
 
-    private final int MAX_SIZE = 2048; // about 500MB RAM
+    private static final int MAX_SIZE = 2048; // about 500MB RAM
     private final Long2LongOpenHashMap lastAccessed = new Long2LongOpenHashMap(); // ChunkPos, Time
     private final Long2ObjectOpenHashMap<CompletableFuture<int[]>> cache = new Long2ObjectOpenHashMap<>(); // ChunkPos
     private final LinkedBlockingQueue<Long> queue = new LinkedBlockingQueue<>();
