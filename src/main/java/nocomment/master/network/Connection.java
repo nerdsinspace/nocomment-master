@@ -43,6 +43,12 @@ public abstract class Connection {
             .labelNames("identity")
             .register();
 
+    private static final Counter checksSuccessful = Counter.build()
+            .name("received_total")
+            .help("Number of checks received of either type (task or block)")
+            .labelNames("identity")
+            .register();
+
     private static final long MIN_READ_INTERVAL_MS = TimeUnit.SECONDS.toMillis(5);
 
     public Connection(World world) {
@@ -60,10 +66,12 @@ public abstract class Connection {
     private long mostRecentRead = System.currentTimeMillis();
     private Integer identityCache;
     private Counter.Child checksCtr = null;
+    private Counter.Child successCtr = null;
 
     public void readLoop() {
         int playerID = getIdentity();
         checksCtr = checksRan.labels(playerID + "");
+        successCtr = checksSuccessful.labels(playerID + "");
         short serverID = world.server.serverID;
         Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
         Database.setDimension(playerID, serverID, world.dimension);
@@ -140,6 +148,7 @@ public abstract class Connection {
         // this cannot be on another thread / executor because then a hitReceived could possibly be reordered after taskCompleted
         task.hitReceived(hit);
         world.notifyHit(pos, task.priority);
+        successCtr.inc();
     }
 
     protected void taskCompleted(int taskID) {
@@ -180,6 +189,7 @@ public abstract class Connection {
         if (check != null) {
             if (blockState.isPresent()) {
                 world.stats.blockReceived(check.priority);
+                successCtr.inc();
             } else {
                 world.stats.blockUnloaded(check.priority);
             }
