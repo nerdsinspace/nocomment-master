@@ -166,3 +166,6 @@ select username, sum(association) as assc from associations inner join players o
 
 locate a player, only using associations from the last 21 days
 select assc, dbscan.x*16 as block_x, dbscan.z*16 as block_z, cluster_id from (select cluster_id, sum(association) as assc from associations where player_id = (select id from players where lower(username)='?') and associations.created_at > (extract(epoch from now())*1000)::bigint - 3600::bigint*1000*24*21 group by cluster_id) tmp inner join dbscan on dbscan.id = tmp.cluster_id order by assc desc;
+
+strongest associations of the last week nov 22
+select x*16 as block_x, z*16 as block_z, username, sum(association) as assc from associations inner join players on players.id = associations.player_id inner join dbscan on dbscan.id = associations.cluster_id  where created_at > (extract(epoch from now())*1000)::bigint - 3600::bigint*1000*24*7 group by block_x, block_z, username order by assc desc;
