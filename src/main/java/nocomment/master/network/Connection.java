@@ -1,5 +1,6 @@
 package nocomment.master.network;
 
+import io.prometheus.client.Counter;
 import io.prometheus.client.Gauge;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
@@ -36,6 +37,12 @@ public abstract class Connection {
             .labelNames("dimension", "server", "identity")
             .register();
 
+    private static final Counter checksRan = Counter.build()
+            .name("sent_total")
+            .help("Number of checks ran of either type (task or block)")
+            .labelNames("identity")
+            .register();
+
     private static final long MIN_READ_INTERVAL_MS = TimeUnit.SECONDS.toMillis(5);
 
     public Connection(World world) {
@@ -52,9 +59,11 @@ public abstract class Connection {
     private final Set<BlockPos> pendingSignChecks = new HashSet<>();
     private long mostRecentRead = System.currentTimeMillis();
     private Integer identityCache;
+    private Counter.Child checksCtr = null;
 
     public void readLoop() {
         int playerID = getIdentity();
+        checksCtr = checksRan.labels(playerID + "");
         short serverID = world.server.serverID;
         Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
         Database.setDimension(playerID, serverID, world.dimension);
@@ -142,6 +151,7 @@ public abstract class Connection {
         task.completed();
         world.worldUpdate();
         world.stats.taskCompleted(task);
+        checksCtr.inc(task.count);
     }
 
     protected synchronized void playerJoinLeave(boolean join, OnlinePlayer player) {
@@ -173,6 +183,7 @@ public abstract class Connection {
             } else {
                 world.stats.blockUnloaded(check.priority);
             }
+            checksCtr.inc();
         }
     }
 
