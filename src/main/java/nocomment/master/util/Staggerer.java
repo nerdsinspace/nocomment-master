@@ -82,7 +82,8 @@ public final class Staggerer {
         System.out.println("Staggerer observations: " + observedAt);
         observedAt.values().removeIf(ts -> ts < System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(30));
 
-        Collection<Connection> onlineNow = world.getOpenConnections();
+        List<Connection> onlineNow = new ArrayList<>(world.getOpenConnections());
+        onlineNow.removeIf(conn -> conn.getIdentity() == 883);
         onlineNow.forEach(conn -> observedAt.put(conn.getIdentity(), System.currentTimeMillis()));
         Map<Integer, Long> playerJoinTS = new HashMap<>();
         if (world.server.hostname.equals("2b2t.org")) { // i mean this is sorta rart idk
@@ -144,6 +145,10 @@ public final class Staggerer {
             }
             prevLeaveAt = ourLeaveAt;
             System.out.println("Player " + pid + " joined at " + format(joinAt) + " would be kicked at " + format(serverLeaveAt) + " but we'll kick at " + format(ourLeaveAt));
+            long missedTime = serverLeaveAt - ourLeaveAt;
+            if (missedTime > TimeUnit.MINUTES.toMillis(121)) {
+                leaveAtTS.remove(pid);
+            }
         }
         for (Connection conn : onlineNow) {
             Long leaveAt = leaveAtTS.get(conn.getIdentity());
