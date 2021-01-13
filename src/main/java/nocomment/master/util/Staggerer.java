@@ -28,7 +28,6 @@ public final class Staggerer {
             .register();
 
     private static final long AUTO_KICK = TimeUnit.HOURS.toMillis(6);
-    private static final long CRAP_KICK = TimeUnit.HOURS.toMillis(3);
     private static final long STAGGER = AUTO_KICK / 3; // 2 hours
     private static final long STARTUP = System.currentTimeMillis();
     private final World world;
@@ -137,7 +136,7 @@ public final class Staggerer {
             if (prevLeaveAt != null) {
                 // this is the actual staggering algorithm
                 // it just depends on this for loop being in sorted order from youngest to oldest (aka: last connection first, first connection last)
-                long down = prevLeaveAt - STAGGER;
+                long down = prevLeaveAt - Math.min(STAGGER, AUTO_KICK / harem.size());
                 if (down < ourLeaveAt) {
                     leaveAtTS.put(pid, down);
                     ourLeaveAt = down;
@@ -145,10 +144,10 @@ public final class Staggerer {
             }
             prevLeaveAt = ourLeaveAt;
             System.out.println("Player " + pid + " joined at " + format(joinAt) + " would be kicked at " + format(serverLeaveAt) + " but we'll kick at " + format(ourLeaveAt));
-            long missedTime = serverLeaveAt - ourLeaveAt;
+            /*long missedTime = serverLeaveAt - ourLeaveAt;
             if (missedTime > TimeUnit.MINUTES.toMillis(121)) {
                 leaveAtTS.remove(pid);
-            }
+            }*/
         }
         for (Connection conn : onlineNow) {
             Long leaveAt = leaveAtTS.get(conn.getIdentity());
