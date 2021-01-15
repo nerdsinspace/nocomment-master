@@ -81,7 +81,7 @@ public class SlurpManager {
     private static final long NUM_RENEWALS = 4;
     private static final int MAX_CHECK_STATUS_QUEUE_LENGTH = 5000;
     private static final int MIN_PENDING_TO_RECHECK = 50;
-    private static final int MAX_PENDING_CHECKS = 1_000_000;
+    private static final int MAX_PENDING_CHECKS = 250_000;
     private static final Random random = new Random();
     public final World world;
     private final Executor blockRecvExecutor = new LoggingExecutor(Executors.newSingleThreadExecutor(), "block_recv"); // blockRecv is synchronized so we only need one
