@@ -2,6 +2,7 @@ package nocomment.master.util;
 
 import io.prometheus.client.Counter;
 import io.prometheus.client.Histogram;
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import nocomment.master.World;
 import nocomment.master.db.Database;
 import nocomment.master.network.Connection;
@@ -13,9 +14,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
+import java.util.function.IntPredicate;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 public final class Staggerer {
 
@@ -34,17 +34,17 @@ public final class Staggerer {
     private static final long STARTUP = System.currentTimeMillis();
     private final World world;
     private final Map<Integer, Long> observedAt = new HashMap<>();
-    private final Predicate<Integer> identityFilter;
+    private final IntPredicate identityFilter;
 
-    private Staggerer(World world, Predicate<Integer> identityFilter) {
+    private Staggerer(World world, IntPredicate identityFilter) {
         this.world = world;
         this.identityFilter = identityFilter;
     }
 
     public static void beginStaggerer(World world, int[]... staggerGroups) {
-        Set<Integer> inAny = new HashSet<>();
+        IntOpenHashSet inAny = new IntOpenHashSet();
         for (int[] group : staggerGroups) {
-            Set<Integer> thisGroup = IntStream.of(group).boxed().collect(Collectors.toSet());
+            IntOpenHashSet thisGroup = new IntOpenHashSet(group);
             new Staggerer(world, thisGroup::contains).start();
             inAny.addAll(thisGroup);
         }
