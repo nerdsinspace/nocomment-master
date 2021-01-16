@@ -71,7 +71,11 @@ public final class World {
             this.slurpManager = null;
         }
         this.dim = dimension + "";
-        new Staggerer(this).start();
+        if (server.hostname.equals("2b2t.org")) {
+            Staggerer.beginStaggerer2b2tPreset(this);
+        } else {
+            Staggerer.beginStaggerer(this);
+        }
         NoComment.executor.execute(this::taskSendLoop);
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(() -> {
             synchronized (World.this) {

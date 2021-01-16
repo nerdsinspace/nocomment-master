@@ -13,7 +13,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public final class Staggerer {
 
@@ -32,12 +34,31 @@ public final class Staggerer {
     private static final long STARTUP = System.currentTimeMillis();
     private final World world;
     private final Map<Integer, Long> observedAt = new HashMap<>();
+    private final Predicate<Integer> identityFilter;
 
-    public Staggerer(World world) {
+    private Staggerer(World world, Predicate<Integer> identityFilter) {
         this.world = world;
+        this.identityFilter = identityFilter;
     }
 
-    public void start() {
+    public static void beginStaggerer(World world, int[]... staggerGroups) {
+        Set<Integer> inAny = new HashSet<>();
+        for (int[] group : staggerGroups) {
+            Set<Integer> thisGroup = IntStream.of(group).boxed().collect(Collectors.toSet());
+            new Staggerer(world, thisGroup::contains).start();
+            inAny.addAll(thisGroup);
+        }
+        new Staggerer(world, $ -> !inAny.contains($)).start();
+    }
+
+    public static void beginStaggerer2b2tPreset(World world) {
+        beginStaggerer(world,
+                new int[]{167548, 132678}, // 100010, liejurv
+                new int[]{883, 1026} // tulpachan, ufocrossing
+        );
+    }
+
+    private void start() {
         TrackyTrackyManager.scheduler.scheduleAtFixedRate(() -> {
             long start = System.currentTimeMillis();
             staggererLatencies.time(LoggingExecutor.wrap(this::run));
@@ -82,11 +103,14 @@ public final class Staggerer {
         observedAt.values().removeIf(ts -> ts < System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(30));
 
         List<Connection> onlineNow = new ArrayList<>(world.getOpenConnections());
-        onlineNow.removeIf(conn -> conn.getIdentity() == 883);
+        onlineNow.removeIf(conn -> !identityFilter.test(conn.getIdentity()));
         onlineNow.forEach(conn -> observedAt.put(conn.getIdentity(), System.currentTimeMillis()));
         Map<Integer, Long> playerJoinTS = new HashMap<>();
         if (world.server.hostname.equals("2b2t.org")) { // i mean this is sorta rart idk
             for (QueueStat qs : getInQueue()) {
+                if (!identityFilter.test(qs.playerID)) {
+                    continue;
+                }
                 // this is safe since statuses will be reset from QUEUE to OFFLINE within 60s of kick
                 // and getInQueue will only return statuses that are currently QUEUE
                 observedAt.merge(qs.playerID, qs.when, Math::max);
