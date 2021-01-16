@@ -211,6 +211,20 @@ public final class Database {
         }
     }
 
+    public static String getUsername(int playerID) {
+        try (Connection connection = POOL.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("SELECT username FROM players WHERE id = ?")) {
+            stmt.setInt(1, playerID);
+            try (ResultSet rs = stmt.executeQuery()) {
+                rs.next();
+                return rs.getString("username");
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
     private static Optional<Short> idForExistingServer(String hostname) {
         try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT id FROM servers WHERE hostname = ?")) {

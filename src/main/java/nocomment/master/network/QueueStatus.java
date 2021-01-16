@@ -15,7 +15,7 @@ public final class QueueStatus {
     private static final Gauge queuePosition = Gauge.build()
             .name("queue_position")
             .help("Position in queue")
-            .labelNames("player_id")
+            .labelNames("username")
             .register();
 
     // any "queue" messages are about this server
@@ -63,7 +63,7 @@ public final class QueueStatus {
 
         int playerID = Database.idForPlayer(new OnlinePlayer(uuid));
         Database.updateStatus(playerID, QUEUE_SERVER_ID, "QUEUE", Optional.of("Queue position: " + queuePos));
-        queuePosition.labels(playerID + "").set(queuePos);
+        queuePosition.labels(Database.getUsername(playerID)).set(queuePos);
         synchronized (cache) {
             if (cache.containsKey(playerID)) {
                 long prevTime = cache.get(playerID).timestamp;

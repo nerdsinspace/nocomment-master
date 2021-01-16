@@ -26,7 +26,7 @@ public final class Staggerer {
     private static final Counter kicks = Counter.build()
             .name("stagerer_kicks")
             .help("Staggerer kicks")
-            .labelNames("dimension", "server", "identity")
+            .labelNames("dimension", "server", "username")
             .register();
 
     private static final long AUTO_KICK = TimeUnit.HOURS.toMillis(6);
@@ -176,7 +176,7 @@ public final class Staggerer {
         for (Connection conn : onlineNow) {
             Long leaveAt = leaveAtTS.get(conn.getIdentity());
             if (leaveAt != null && leaveAt < System.currentTimeMillis()) {
-                kicks.labels(world.dim(), world.server.hostname, conn.getIdentity() + "").inc();
+                kicks.labels(world.dim(), world.server.hostname, Database.getUsername(conn.getIdentity())).inc();
                 System.out.println("Therefore, kicking " + conn.getIdentity());
                 conn.dispatchDisconnectRequest();
                 return;

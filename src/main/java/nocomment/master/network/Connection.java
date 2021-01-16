@@ -34,19 +34,19 @@ public abstract class Connection {
     private static final Gauge activeConnections = Gauge.build()
             .name("active_connections")
             .help("Number of active and valid connections")
-            .labelNames("dimension", "server", "identity")
+            .labelNames("dimension", "server", "username")
             .register();
 
     private static final Counter checksRan = Counter.build()
             .name("sent_total")
             .help("Number of checks ran of either type (task or block)")
-            .labelNames("identity")
+            .labelNames("username")
             .register();
 
     private static final Counter checksSuccessful = Counter.build()
             .name("received_total")
             .help("Number of checks received of either type (task or block)")
-            .labelNames("identity")
+            .labelNames("username")
             .register();
 
     private static final long MIN_READ_INTERVAL_MS = TimeUnit.SECONDS.toMillis(5);
@@ -70,8 +70,9 @@ public abstract class Connection {
 
     public void readLoop() {
         int playerID = getIdentity();
-        checksCtr = checksRan.labels(playerID + "");
-        successCtr = checksSuccessful.labels(playerID + "");
+        String username = Database.getUsername(playerID);
+        checksCtr = checksRan.labels(username);
+        successCtr = checksSuccessful.labels(username);
         short serverID = world.server.serverID;
         Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
         Database.setDimension(playerID, serverID, world.dimension);
@@ -85,7 +86,7 @@ public abstract class Connection {
             Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
             QueueStatus.markIngame(playerID, serverID);
         }), 0, 1, TimeUnit.SECONDS);
-        Gauge.Child ctr = activeConnections.labels(world.dim(), world.server.hostname, playerID + "");
+        Gauge.Child ctr = activeConnections.labels(world.dim(), world.server.hostname, username);
         ctr.inc();
         while (true) {
             try {
