@@ -146,7 +146,7 @@ public final class Staggerer {
             return;
         }
 
-        if (getInQueue().stream().anyMatch(qs -> qs.pos < 250)) {
+        if (getInQueue().stream().filter(qs -> identityFilter.test(qs.playerID)).anyMatch(qs -> qs.pos < 250)) {
             System.out.println("Awaiting requeue");
             return;
         }
