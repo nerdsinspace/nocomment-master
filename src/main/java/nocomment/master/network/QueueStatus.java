@@ -63,7 +63,7 @@ public final class QueueStatus {
 
         int playerID = Database.idForPlayer(new OnlinePlayer(uuid));
         Database.updateStatus(playerID, QUEUE_SERVER_ID, "QUEUE", Optional.of("Queue position: " + queuePos));
-        queuePosition.labels(Database.getUsername(playerID)).set(queuePos);
+        Database.getUsername(playerID).ifPresent(username -> queuePosition.labels(username).set(queuePos));
         synchronized (cache) {
             if (cache.containsKey(playerID)) {
                 long prevTime = cache.get(playerID).timestamp;

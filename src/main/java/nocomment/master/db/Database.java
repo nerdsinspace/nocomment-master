@@ -211,13 +211,16 @@ public final class Database {
         }
     }
 
-    public static String getUsername(int playerID) {
+    public static Optional<String> getUsername(int playerID) {
         try (Connection connection = POOL.getConnection();
              PreparedStatement stmt = connection.prepareStatement("SELECT username FROM players WHERE id = ?")) {
             stmt.setInt(1, playerID);
             try (ResultSet rs = stmt.executeQuery()) {
-                rs.next();
-                return rs.getString("username");
+                if (rs.next()) {
+                    return Optional.of(rs.getString("username"));
+                } else {
+                    return Optional.empty();
+                }
             }
         } catch (SQLException ex) {
             ex.printStackTrace();

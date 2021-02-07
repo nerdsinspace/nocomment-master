@@ -70,9 +70,11 @@ public abstract class Connection {
 
     public void readLoop() {
         int playerID = getIdentity();
-        String username = Database.getUsername(playerID);
-        checksCtr = checksRan.labels(username);
-        successCtr = checksSuccessful.labels(username);
+        String username = Database.getUsername(playerID).orElse(null);
+        if (username != null) {
+            checksCtr = checksRan.labels(username);
+            successCtr = checksSuccessful.labels(username);
+        }
         short serverID = world.server.serverID;
         Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
         Database.setDimension(playerID, serverID, world.dimension);
@@ -86,8 +88,11 @@ public abstract class Connection {
             Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
             QueueStatus.markIngame(playerID, serverID);
         }), 0, 1, TimeUnit.SECONDS);
-        Gauge.Child ctr = activeConnections.labels(world.dim(), world.server.hostname, username);
-        ctr.inc();
+        Gauge.Child ctr = null;
+        if (username != null) {
+            ctr = activeConnections.labels(world.dim(), world.server.hostname, username);
+            ctr.inc();
+        }
         while (true) {
             try {
                 read();
@@ -97,7 +102,9 @@ public abstract class Connection {
                 closeUnderlying();
                 world.connectionClosed(this); // redistribute tasks to the other connections
                 future.cancel(false);
-                ctr.dec();
+                if (ctr != null) {
+                    ctr.dec();
+                }
                 break;
             }
         }
@@ -149,7 +156,9 @@ public abstract class Connection {
         // this cannot be on another thread / executor because then a hitReceived could possibly be reordered after taskCompleted
         task.hitReceived(hit);
         world.notifyHit(pos, task.priority);
-        successCtr.inc();
+        if (successCtr != null) {
+            successCtr.inc();
+        }
     }
 
     protected void taskCompleted(int taskID) {
@@ -161,7 +170,9 @@ public abstract class Connection {
         task.completed();
         world.worldUpdate();
         world.stats.taskCompleted(task);
-        checksCtr.inc(task.count);
+        if (checksCtr != null) {
+            checksCtr.inc(task.count);
+        }
     }
 
     protected synchronized void playerJoinLeave(boolean join, OnlinePlayer player) {
@@ -190,11 +201,15 @@ public abstract class Connection {
         if (check != null) {
             if (blockState.isPresent()) {
                 world.stats.blockReceived(check.priority);
-                successCtr.inc();
+                if (successCtr != null) {
+                    successCtr.inc();
+                }
             } else {
                 world.stats.blockUnloaded(check.priority);
             }
-            checksCtr.inc();
+            if (checksCtr != null) {
+                checksCtr.inc();
+            }
         }
     }
 

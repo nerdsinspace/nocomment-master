@@ -176,7 +176,7 @@ public final class Staggerer {
         for (Connection conn : onlineNow) {
             Long leaveAt = leaveAtTS.get(conn.getIdentity());
             if (leaveAt != null && leaveAt < System.currentTimeMillis()) {
-                kicks.labels(world.dim(), world.server.hostname, Database.getUsername(conn.getIdentity())).inc();
+                kicks.labels(world.dim(), world.server.hostname, Database.getUsername(conn.getIdentity()).get()).inc();
                 System.out.println("Therefore, kicking " + conn.getIdentity());
                 conn.dispatchDisconnectRequest();
                 return;
