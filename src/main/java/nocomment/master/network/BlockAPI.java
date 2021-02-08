@@ -78,7 +78,7 @@ public final class BlockAPI {
 
     public static void handle(Socket s, World world) throws IOException {
         BlockAPI api = new BlockAPI(s, world);
-        NoComment.executor.execute(api::writeLoop);
+        Connection.networkExecutor.execute(api::writeLoop);
         api.readLoop();
     }
 

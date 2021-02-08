@@ -20,6 +20,8 @@ import nocomment.master.util.OnlinePlayer;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -50,6 +52,8 @@ public abstract class Connection {
             .register();
 
     private static final long MIN_READ_INTERVAL_MS = TimeUnit.SECONDS.toMillis(5);
+
+    public static Executor networkExecutor = new LoggingExecutor(Executors.newCachedThreadPool(), "network");
 
     public Connection(World world) {
         this.world = world;

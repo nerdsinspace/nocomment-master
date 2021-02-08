@@ -88,8 +88,8 @@ public final class World {
     public synchronized void incomingConnection(Connection connection) {
         System.out.println("Connection identified as UUID " + connection.getUUID() + " which is player database ID " + connection.getIdentity());
         connections.add(connection);
-        NoComment.executor.execute(connection::readLoop);
-        NoComment.executor.execute(connection::writeLoop);
+        Connection.networkExecutor.execute(connection::readLoop);
+        Connection.networkExecutor.execute(connection::writeLoop);
         worldUpdate();
         // dont preemptively update server until data comes in tbh
     }
