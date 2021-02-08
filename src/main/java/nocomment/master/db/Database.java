@@ -1,5 +1,6 @@
 package nocomment.master.db;
 
+import io.prometheus.client.Counter;
 import nocomment.master.NoComment;
 import nocomment.master.clustering.DBSCAN;
 import nocomment.master.tracking.TrackyTrackyManager;
@@ -13,6 +14,12 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public final class Database {
+
+    private static final Counter databaseCommits = Counter.build()
+            .name("database_commits_total")
+            .help("Number of commits made to Postgres")
+            .labelNames("type")
+            .register();
 
     private static final BasicDataSource POOL;
 
@@ -114,6 +121,7 @@ public final class Database {
             stmt.setLong(2, Long.MAX_VALUE - 1); // must be -1 since postgres ranges are exclusive on the upper end
             stmt.setShort(3, serverID);
             stmt.executeUpdate();
+            Database.incrementCommitCounter("clear_sessions");
         } catch (SQLException ex) {
             ex.printStackTrace();
             System.exit(-1);
@@ -147,15 +155,16 @@ public final class Database {
     }
 
     private static OptionalInt idForExistingPlayer(OnlinePlayer player) {
+        boolean hasUsername = player.hasUsername();
         try (
                 Connection connection = POOL.getConnection();
                 PreparedStatement stmt = connection.prepareStatement(
-                        player.hasUsername() ?
+                        hasUsername ?
                                 "UPDATE players SET username = ? WHERE uuid = ? RETURNING id"
                                 : "SELECT id FROM players WHERE uuid = ?"
                 )
         ) {
-            if (player.hasUsername()) {
+            if (hasUsername) {
                 stmt.setString(1, player.username);
                 stmt.setObject(2, player.uuid);
             } else {
@@ -163,6 +172,9 @@ public final class Database {
             }
 
             try (ResultSet existing = stmt.executeQuery()) {
+                if (hasUsername) {
+                    Database.incrementCommitCounter("player_username");
+                }
                 if (existing.next()) {
                     return OptionalInt.of(existing.getInt("id"));
                 } else {
@@ -186,6 +198,7 @@ public final class Database {
             stmt.setObject(2, player.uuid);
             try (ResultSet rs = stmt.executeQuery()) {
                 rs.next();
+                Database.incrementCommitCounter("player");
                 return rs.getInt("id");
             }
         } catch (SQLException ex) {
@@ -255,6 +268,7 @@ public final class Database {
             stmt.setString(1, hostname);
             try (ResultSet rs = stmt.executeQuery()) {
                 rs.next();
+                Database.incrementCommitCounter("server");
                 return rs.getShort("id");
             }
         } catch (SQLException ex) {
@@ -271,6 +285,7 @@ public final class Database {
                 stmt.setShort(2, serverID);
                 stmt.setLong(3, now);
                 stmt.execute();
+                Database.incrementCommitCounter("player_sessions_join");
             }
             // note: this doesn't use batch because of https://github.com/pgjdbc/pgjdbc/issues/194
             // as of https://github.com/leijurv/nocomment-master/commit/0ed24f993100241d6467d1e21dbbfd5efff82f61
@@ -289,6 +304,7 @@ public final class Database {
                 stmt.setInt(3, playerID);
                 stmt.setShort(4, serverID);
                 stmt.executeUpdate();
+                Database.incrementCommitCounter("player_sessions_leave");
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -327,6 +343,7 @@ public final class Database {
             }
             // note: hits will be updated to set the track_id twice, this is a nonissue, and is a sanity check in case the queues back up
             connection.commit();
+            Database.incrementCommitCounter("create_track");
             return trackID;
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -344,6 +361,7 @@ public final class Database {
                 stmt.executeUpdate();
             }
             connection.commit();
+            Database.incrementCommitCounter("hit_alter_track");
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
@@ -484,6 +502,7 @@ public final class Database {
             stmt.setLong(1, System.currentTimeMillis());
             stmt.setLong(2, System.currentTimeMillis() - TimeUnit.MINUTES.toMillis(1));
             stmt.execute();
+            Database.incrementCommitCounter("prune_stale_statuses");
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
@@ -505,6 +524,7 @@ public final class Database {
                 stmt.setShort(5, serverID);
                 int numRows = stmt.executeUpdate();
                 if (numRows > 0) {
+                    Database.incrementCommitCounter("statuses"); // only increment if it actually changed a row
                     return; // success
                 }
             }
@@ -520,6 +540,7 @@ public final class Database {
                     stmt.setNull(5, Types.VARCHAR);
                 }
                 stmt.execute();
+                Database.incrementCommitCounter("statuses");
             }
         } catch (SQLException ex) {
             ex.printStackTrace();
@@ -534,6 +555,7 @@ public final class Database {
             stmt.setInt(2, playerID);
             stmt.setShort(3, serverID);
             stmt.execute();
+            Database.incrementCommitCounter("statuses_dimension");
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
@@ -549,6 +571,7 @@ public final class Database {
             stmt.setLong(4, timestamp);
             stmt.setShort(5, serverID);
             stmt.execute();
+            Database.incrementCommitCounter("chat");
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
@@ -575,5 +598,9 @@ public final class Database {
 
     public static Connection getConnection() throws SQLException {
         return POOL.getConnection();
+    }
+
+    public static void incrementCommitCounter(String type) {
+        databaseCommits.labels(type).inc();
     }
 }

@@ -68,6 +68,7 @@ public final class Hit {
     private static void saveRecursively(Iterator<Hit> hits, Connection connection) throws SQLException {
         if (!hits.hasNext()) {
             connection.commit();
+            Database.incrementCommitCounter("hit_batched");
             return;
         }
         Hit hit = hits.next();
@@ -122,6 +123,7 @@ public final class Hit {
             connection.setAutoCommit(false);
             Database.saveHit(this, connection);
             connection.commit();
+            Database.incrementCommitCounter("hit_blocking");
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);

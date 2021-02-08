@@ -81,6 +81,7 @@ public final class BlockCheckManager {
                     stmt.execute();
                 }
                 connection.commit();
+                Database.incrementCommitCounter("block_batched");
                 toInsert.clear();
             } while (results.size() >= 100);
         } catch (SQLException ex) {

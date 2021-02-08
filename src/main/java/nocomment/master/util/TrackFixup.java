@@ -53,6 +53,7 @@ public class TrackFixup implements AutoCloseable {
         System.out.println("Num broken now: " + brokenNow.size());
         if (brokenNow.isEmpty()) {
             connection.commit();
+            Database.incrementCommitCounter("track_fixup");
         }
         connection.rollback();
     }

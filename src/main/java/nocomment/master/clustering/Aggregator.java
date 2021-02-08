@@ -251,6 +251,7 @@ enum Aggregator {
             }
             System.out.println("DBSCAN aggregator committing");
             connection.commit();
+            Database.incrementCommitCounter("aggregator");
             return true;
         } catch (SQLException ex) {
             ex.printStackTrace();

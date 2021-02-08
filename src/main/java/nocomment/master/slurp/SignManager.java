@@ -72,6 +72,7 @@ public final class SignManager {
             stmt.setShort(6, world.dimension);
             stmt.setShort(7, world.server.serverID);
             stmt.execute();
+            Database.incrementCommitCounter("sign");
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);

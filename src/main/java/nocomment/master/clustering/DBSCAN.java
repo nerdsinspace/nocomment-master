@@ -246,7 +246,7 @@ public enum DBSCAN {
             long c = System.currentTimeMillis();
             Datapoint point = getDatapoint(connection);
             long d = System.currentTimeMillis();
-            if (d - c > 5)
+            if (d - c > 5) // TODO replace all of these old bits of code like "log if greater than 5ms" with prometheus histograms and grafana alerts
                 System.out.println("Took " + (d - c) + "ms to get a point");
             if (point == null) {
                 break;
@@ -319,12 +319,14 @@ public enum DBSCAN {
             }
             if (commit) {
                 connection.commit();
+                Database.incrementCommitCounter("dbscan");
             }
         }
         try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET root_updated_at = last_init_hit WHERE root_updated_at IS NULL AND cluster_parent IS NULL AND disjoint_rank > 0")) {
             stmt.executeUpdate();
         }
         connection.commit();
+        Database.incrementCommitCounter("dbscan_final");
         System.out.println("DBSCAN merger committing");
     }
 

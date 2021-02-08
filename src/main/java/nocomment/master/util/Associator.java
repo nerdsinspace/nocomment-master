@@ -118,6 +118,7 @@ public enum Associator {
                 stmt.execute();
             }
             connection.commit();
+            Database.incrementCommitCounter("associator");
             return true;
         } catch (SQLException ex) {
             ex.printStackTrace();
