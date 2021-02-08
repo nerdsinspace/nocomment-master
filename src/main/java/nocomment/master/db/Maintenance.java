@@ -1,30 +1,38 @@
 package nocomment.master.db;
 
+import io.prometheus.client.Histogram;
 import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.LoggingExecutor;
 
 import java.util.concurrent.TimeUnit;
 
 public final class Maintenance {
+
+    private static final Histogram maintenanceLatencies = Histogram.build()
+            .name("maintenance_latencies")
+            .help("Maintenance latencies")
+            .labelNames("name")
+            .register();
+
     static void scheduleMaintenance() {
         schedule(Database::vacuum, "vacuum", 86400);
         //scheduleReindex("hits_by_track_id");
         //scheduleReindex("hits_pkey");
         scheduleReindex("tracks_pkey");
-        scheduleReindex("track_endings");
+        scheduleReindex("track_endings"); // this one really needs it
         scheduleReindex("tracks_by_first");
         scheduleReindex("tracks_by_prev");
         scheduleReindex("tracks_by_last");
-        scheduleReindex("player_sessions_range", 86400 * 4);
+        scheduleReindex("player_sessions_range", 86400 * 8); // this really does not grow fast at all because most of it is from legacy which never changes
         scheduleReindex("player_sessions_by_leave");
-        scheduleReindex("dbscan_pkey");
+        scheduleReindex("dbscan_pkey", 86400 * 4); // this is a big index, but the pkey to dbscan rarely grows (comparatively)
         scheduleReindex("dbscan_cluster_roots");
-        scheduleReindex("dbscan_ingest");
+        scheduleReindex("dbscan_ingest", 86400 * 4); // same as dbscan_pkey
         scheduleReindex("dbscan_process");
-        scheduleReindex("dbscan_disjoint_traversal");
+        scheduleReindex("dbscan_disjoint_traversal"); // small index, only reindex it for query performance reasons
         scheduleReindex("dbscan_to_update_by_schedule", 3600);
         scheduleReindex("dbscan_to_update_pkey", 3600);
-        scheduleReindex("chat_by_time");
+        //scheduleReindex("chat_by_time"); // this index does not bloat
         scheduleReindex("signs_by_loc");
         scheduleReindex("notes_server_id_dimension_x_z_key");
         /*scheduleReindex("blocks_by_loc");
@@ -49,7 +57,7 @@ public final class Maintenance {
                 new Thread(LoggingExecutor.wrap(() -> { // dont clog up scheduler's fixed thread pool
                     synchronized (Maintenance.class) { // dont run more than one maintenance at a time, even at random. it causes database deadlock
                         long start = System.currentTimeMillis();
-                        runnable.run();
+                        maintenanceLatencies.labels(name).time(runnable);
                         long end = System.currentTimeMillis();
                         System.out.println("Took " + (end - start) + "ms to run maintenance task " + name);
                     }
