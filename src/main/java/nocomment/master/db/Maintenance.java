@@ -12,6 +12,9 @@ public final class Maintenance {
         //scheduleReindex("hits_pkey");
         scheduleReindex("tracks_pkey");
         scheduleReindex("track_endings");
+        scheduleReindex("tracks_by_first");
+        scheduleReindex("tracks_by_prev");
+        scheduleReindex("tracks_by_last");
         scheduleReindex("player_sessions_range", 86400 * 4);
         scheduleReindex("player_sessions_by_leave");
         scheduleReindex("dbscan_pkey");
