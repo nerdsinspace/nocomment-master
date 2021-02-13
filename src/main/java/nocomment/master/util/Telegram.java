@@ -12,8 +12,8 @@ import java.util.List;
 
 public enum Telegram {
     INSTANCE;
-    private final TelegramBot bot = new TelegramBot(NoComment.getRuntimeVariable("TELEGRAM_BOT_TOKEN", ""));
-    private final String chatID = NoComment.getRuntimeVariable("TELEGRAM_CHAT_ID", "");
+    private final TelegramBot bot = new TelegramBot(Config.getRuntimeVariable("TELEGRAM_BOT_TOKEN", ""));
+    private final String chatID = Config.getRuntimeVariable("TELEGRAM_CHAT_ID", "");
 
     public void startup() {
         if (NoComment.DRY_RUN) {

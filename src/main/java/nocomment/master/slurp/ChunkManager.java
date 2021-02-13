@@ -7,6 +7,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import nocomment.master.NoComment;
 import nocomment.master.util.ChunkPos;
+import nocomment.master.util.Config;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
@@ -75,7 +76,7 @@ public final class ChunkManager {
     }
 
     private void fetchLoop() throws IOException, InterruptedException {
-        Socket s = new Socket(NoComment.getRuntimeVariable("GENERATOR_HOST", "localhost"), Integer.parseInt(NoComment.getRuntimeVariable("GENERATOR_PORT", "5021")));
+        Socket s = new Socket(Config.getRuntimeVariable("GENERATOR_HOST", "localhost"), Integer.parseInt(Config.getRuntimeVariable("GENERATOR_PORT", "5021")));
         DataInputStream in = new DataInputStream(new BufferedInputStream(s.getInputStream()));
         DataOutputStream out = new DataOutputStream(s.getOutputStream());
         while (true) {

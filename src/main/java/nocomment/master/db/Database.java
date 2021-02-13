@@ -5,6 +5,7 @@ import nocomment.master.NoComment;
 import nocomment.master.clustering.DBSCAN;
 import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.Associator;
+import nocomment.master.util.Config;
 import nocomment.master.util.LoggingExecutor;
 import nocomment.master.util.OnlinePlayer;
 import org.apache.commons.dbcp2.BasicDataSource;
@@ -53,12 +54,12 @@ public final class Database {
     private static BasicDataSource tryConnect() {
         System.out.println("Connecting to database...");
         BasicDataSource POOL = new BasicDataSource();
-        POOL.setUsername(Objects.requireNonNull(NoComment.getRuntimeVariable("PSQL_USER", null),
+        POOL.setUsername(Objects.requireNonNull(Config.getRuntimeVariable("PSQL_USER", null),
                 "Missing username for database"));
-        POOL.setPassword(Objects.requireNonNull(NoComment.getRuntimeVariable("PSQL_PASS", null),
+        POOL.setPassword(Objects.requireNonNull(Config.getRuntimeVariable("PSQL_PASS", null),
                 "Missing password for database"));
         POOL.setDriverClassName("org.postgresql.Driver");
-        POOL.setUrl(Objects.requireNonNull(NoComment.getRuntimeVariable("PSQL_URL", null),
+        POOL.setUrl(Objects.requireNonNull(Config.getRuntimeVariable("PSQL_URL", null),
                 "Missing url for database"));
         POOL.setInitialSize(1);
         POOL.setMaxTotal(75);
