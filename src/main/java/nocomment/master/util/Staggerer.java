@@ -54,7 +54,10 @@ public final class Staggerer {
     public static void beginStaggerer2b2tPreset(World world) {
         beginStaggerer(world,
                 new int[]{167548, 132678}, // 100010, liejurv
-                new int[]{883, 1026} // tulpachan, ufocrossing
+                new int[]{883, 1026}, // tulpachan, ufocrossing
+                new int[]{25510, 162223}, // hollywoodx, elon_musk
+
+                new int[]{} // empty, for aesthetic reasons
         );
     }
 
