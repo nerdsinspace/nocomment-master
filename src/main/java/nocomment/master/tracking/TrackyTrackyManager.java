@@ -20,11 +20,13 @@ public class TrackyTrackyManager {
     private final Server server;
     private final WorldTrackyTracky overworld;
     private final WorldTrackyTracky nether;
+    private final WorldTrackyTracky end;
 
     public TrackyTrackyManager(Server server) {
         this.server = server;
         this.overworld = new WorldTrackyTracky(server.getWorld((short) 0), this, this::lostTrackingInOverworld);
         this.nether = new WorldTrackyTracky(server.getWorld((short) -1), this, this::lostTrackingInNether);
+        this.end = new WorldTrackyTracky(server.getWorld((short) 1), this, $ -> {});
         highways();
         clusters();
         spiral();
@@ -45,6 +47,8 @@ public class TrackyTrackyManager {
         new HighwayScanner(overworld.world, 100, 25_000, 40_000, overworld::ingestGenericNewHit).submitTasks();
         // scan the 2k ring road every 16 seconds
         new RingScanner(overworld.world, 51, 2000, 16_000, overworld::ingestGenericNewHit).submitTasks();
+        System.out.println("End:");
+        new RingScanner(end.world, 99, 1250, 6_000, end::ingestGenericNewHit).submitTasks();
     }
 
     private void clusters() {
@@ -57,6 +61,8 @@ public class TrackyTrackyManager {
         new SpiralScanner(overworld.world, 1_000_000, 300_000, overworld::ingestGenericNewHit).submitTasks();
 
         new SpiralScanner(nether.world, 1_000_000, 150_000, nether::ingestGenericNewHit).submitTasks();
+
+        new SpiralScanner(end.world, 1_000_000, 200_000, end::ingestGenericNewHit).submitTasks();
     }
 
     private void lostTrackingInOverworld(Track lost) {
@@ -72,25 +78,33 @@ public class TrackyTrackyManager {
     }
 
     public boolean hasActiveFilter(int trackID) {
-        return overworld.hasActiveFilter(trackID) || nether.hasActiveFilter(trackID);
+        return overworld.hasActiveFilter(trackID) || nether.hasActiveFilter(trackID) || end.hasActiveFilter(trackID);
     }
 
     public void attemptResume(TrackResume resumeData) {
         boolean interesting = trackInterestingEnoughToGridResume(resumeData, resumeData.dimension == 0);
         System.out.println("Attempting to resume tracking at " + resumeData.pos + " in dimension " + resumeData.dimension + " in server " + server.hostname + " from track id " + resumeData.prevTrackID + " interesting " + interesting);
+        WorldTrackyTracky tracky;
         switch (resumeData.dimension) {
             case 0: {
-                overworld.ingestApprox(resumeData.pos, OptionalInt.of(resumeData.prevTrackID), false, interesting ? 12 : 15);
+                tracky = overworld;
                 break;
             }
             case -1: {
-                nether.ingestApprox(resumeData.pos, OptionalInt.of(resumeData.prevTrackID), false, interesting ? 12 : 15);
+                tracky = nether;
+                break;
+            }
+            case 1: {
+                tracky = end;
+                interesting = true;
                 break;
             }
             default: {
                 System.out.println("We don't do that here " + resumeData.dimension);
+                return;
             }
         }
+        tracky.ingestApprox(resumeData.pos, OptionalInt.of(resumeData.prevTrackID), false, interesting ? 12 : 15);
     }
 
     private static boolean trackInterestingEnoughToGridResume(TrackResume resumeData, boolean ow) {

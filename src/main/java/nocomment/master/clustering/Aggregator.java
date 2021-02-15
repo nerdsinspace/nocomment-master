@@ -48,19 +48,27 @@ enum Aggregator {
 
     private static List<PastHit> query(long startID, Connection connection) throws SQLException {
         try (PreparedStatement stmt = connection.prepareStatement("" +
-                "                SELECT                                                              " +
-                "                    id, server_id, dimension, x, z, created_at                      " +
-                "                FROM                                                                " +
-                "                    hits                                                            " +
-                "                WHERE                                                               " +
-                "                    id > ?                                                          " +
-                "                    AND ABS(x) > 100                                                " +
-                "                    AND ABS(z) > 100                                                " +
-                "                    AND ABS(ABS(x) - ABS(z)) > 100                                  " +
-                "                    AND x::BIGINT * x::BIGINT + z::BIGINT * z::BIGINT > 1500 * 1500 " +
-                "                    AND dimension <> -1                                             " +
-                "                ORDER BY id                                                         " +
-                "                LIMIT ?                                                             "
+                "                SELECT                                                                            " +
+                "                    id, server_id, dimension, x, z, created_at                                    " +
+                "                FROM                                                                              " +
+                "                    hits                                                                          " +
+                "                WHERE                                                                             " +
+                "                    id > ?                                                                        " +
+                "                    AND                                                                           " +
+                "                    (                                                                             " +
+                "                        (                                                                         " +
+                "                            (                                                                     " +
+                "                                ABS(x) > 100                                                      " +
+                "                                AND ABS(z) > 100                                                  " +
+                "                                AND ABS(ABS(x) - ABS(z)) > 100                                    " +
+                "                                AND x::BIGINT * x::BIGINT + z::BIGINT * z::BIGINT > 1500 * 1500   " +
+                "                            )                                                                     " +
+                "                            AND dimension <> -1                                                   " +
+                "                        )                                                                         " +
+                "                        OR dimension = 1                                                          " +
+                "                    )                                                                             " +
+                "                ORDER BY id                                                                       " +
+                "                LIMIT ?                                                                           " +
         )) {
             stmt.setLong(1, startID);
             stmt.setInt(2, LIMIT_SZ);
