@@ -48,13 +48,14 @@ public class TrackyTrackyManager {
         // scan the 2k ring road every 16 seconds
         new RingScanner(overworld.world, 51, 2000, 16_000, overworld::ingestGenericNewHit).submitTasks();
         System.out.println("End:");
-        new RingScanner(end.world, 99, 1250, 6_000, end::ingestGenericNewHit).submitTasks();
+        new RingScanner(end.world, 99, 1250, 5_000, end::ingestGenericNewHit).submitTasks();
     }
 
     private void clusters() {
         new ClusterRetryScanner(overworld.world, 50, 5, 1000, overworld::ingestGenericNewHit).submitTasks();
 
         //new ClusterRetryScanner(nether.world, 50, 2, 1000, nether::ingestGenericNewHit).submitTasks();
+        new ClusterRetryScanner(end.world, 50, 1, 1000, end::ingestGenericNewHit).submitTasks();
     }
 
     private void spiral() {

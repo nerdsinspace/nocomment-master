@@ -68,7 +68,7 @@ enum Aggregator {
                 "                        OR dimension = 1                                                          " +
                 "                    )                                                                             " +
                 "                ORDER BY id                                                                       " +
-                "                LIMIT ?                                                                           " +
+                "                LIMIT ?                                                                           "
         )) {
             stmt.setLong(1, startID);
             stmt.setInt(2, LIMIT_SZ);
