@@ -3,7 +3,7 @@ package nocomment.master.util;
 import nocomment.master.NoComment;
 
 public class Config {
-    static {
+    public static void checkSafety() {
         if (getRuntimeVariable("SAFETY", "false").equals("true") && !NoComment.DRY_RUN) {
             throw new IllegalStateException("Safety!");
         }

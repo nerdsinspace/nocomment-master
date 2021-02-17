@@ -417,3 +417,22 @@ CREATE TABLE generator_cache
 );
 
 CREATE UNIQUE INDEX generator_cache_by_loc ON generator_cache (server_id, dimension, x, z);
+
+CREATE TABLE generator_hash
+(
+    hash_1    BIGINT   NOT NULL,
+    hash_2    BIGINT   NOT NULL,
+    hash_3    BIGINT   NOT NULL,
+    hash_4    BIGINT   NOT NULL,
+    x         INTEGER  NOT NULL,
+    z         INTEGER  NOT NULL,
+    dimension SMALLINT NOT NULL,
+    server_id SMALLINT NOT NULL,
+
+    FOREIGN KEY (dimension) REFERENCES dimensions (ordinal)
+        ON UPDATE RESTRICT ON DELETE RESTRICT,
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX generator_hash_by_loc ON generator_hash (server_id, dimension, x, z);

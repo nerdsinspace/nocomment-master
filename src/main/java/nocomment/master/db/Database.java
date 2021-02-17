@@ -579,6 +579,35 @@ public final class Database {
         }
     }
 
+    public static Optional<long[]> fetchHash(long[] hash, int x, int z, short serverID, short dimension) {
+        if (hash.length != 4) {
+            throw new IllegalArgumentException();
+        }
+        try (Connection connection = POOL.getConnection();
+             PreparedStatement stmt = connection.prepareStatement("WITH input_rows(hash_1, hash_2, hash_3, hash_4, server_id, dimension, x, z) AS (VALUES (?::BIGINT, ?::BIGINT, ?::BIGINT, ?::BIGINT, ?::SMALLINT, ?::SMALLINT, ?::INTEGER, ?::INTEGER)), insert_cte AS (INSERT INTO generator_hash (hash_1, hash_2, hash_3, hash_4, server_id, dimension, x, z) SELECT hash_1, hash_2, hash_3, hash_4, server_id, dimension, x, z FROM input_rows ON CONFLICT (x, z, server_id, dimension) DO NOTHING RETURNING hash_1, hash_2, hash_3, hash_4, x, z, server_id, dimension) SELECT FALSE AS existing, hash_1, hash_2, hash_3, hash_4 FROM insert_cte UNION ALL SELECT TRUE as existing, generator_hash.hash_1, generator_hash.hash_2, generator_hash.hash_3, generator_hash.hash_4 FROM input_rows JOIN generator_hash USING (server_id, dimension, x, z)")) {
+            // https://stackoverflow.com/a/42217872/2277831
+            stmt.setLong(1, hash[0]);
+            stmt.setLong(2, hash[1]);
+            stmt.setLong(3, hash[2]);
+            stmt.setLong(4, hash[3]);
+            stmt.setShort(5, serverID);
+            stmt.setShort(6, dimension);
+            stmt.setInt(7, x);
+            stmt.setInt(8, z);
+            try (ResultSet rs = stmt.executeQuery()) {
+                rs.next();
+                if (rs.getBoolean("existing")) {
+                    return Optional.of(new long[]{rs.getLong("hash_1"), rs.getLong("hash_2"), rs.getLong("hash_3"), rs.getLong("hash_4")});
+                } else {
+                    return Optional.empty();
+                }
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            throw new RuntimeException(ex);
+        }
+    }
+
     static void vacuum() {
         try (Connection connection = POOL.getConnection(); PreparedStatement stmt = connection.prepareStatement("VACUUM ANALYZE")) {
             stmt.execute();

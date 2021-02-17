@@ -4,6 +4,7 @@ import io.prometheus.client.exporter.HTTPServer;
 import io.prometheus.client.hotspot.DefaultExports;
 import nocomment.master.db.Database;
 import nocomment.master.network.NoCommentServer;
+import nocomment.master.util.Config;
 import nocomment.master.util.LoggingExecutor;
 import nocomment.master.util.Telegram;
 
@@ -17,6 +18,7 @@ public final class NoComment {
 
     public static void main(String[] args) throws Exception {
         Telegram.INSTANCE.startup();
+        LoggingExecutor.wrap(Config::checkSafety).run();
         if (!DRY_RUN) {
             new HTTPServer(1234);
             DefaultExports.initialize();

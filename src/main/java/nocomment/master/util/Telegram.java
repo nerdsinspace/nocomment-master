@@ -59,7 +59,11 @@ public enum Telegram {
     public void complain(Throwable th) {
         StringWriter errors = new StringWriter();
         th.printStackTrace(new PrintWriter(errors));
-        for (String line : splitIntoMultipleBigMessages(errors.toString(), 4000)) {
+        sendMessage(errors.toString());
+    }
+
+    public void sendMessage(String msg) {
+        for (String line : splitIntoMultipleBigMessages(msg, 4000)) {
             bot.execute(new SendMessage(chatID, line));
         }
     }

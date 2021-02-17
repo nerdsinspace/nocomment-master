@@ -41,6 +41,7 @@ public final class Maintenance {
         scheduleReindex("associations_cluster_id");
         scheduleReindex("associations_player_and_cluster");
         scheduleReindex("associations_player_id");
+        scheduleReindex("generator_cache_by_loc");
     }
 
     private static void scheduleReindex(String indexName) {
