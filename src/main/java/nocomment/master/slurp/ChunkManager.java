@@ -37,6 +37,7 @@ public final class ChunkManager {
     private static final Counter chunkResponses = Counter.build()
             .name("chunk_manager_responses_total")
             .help("Number of chunks received")
+            .labelNames("existing")
             .register();
 
     private static final int MAX_SIZE = 2048; // about 500MB RAM
@@ -98,10 +99,10 @@ public final class ChunkManager {
             for (int i = 0; i < ret.length; i++) {
                 ret[i] = in.readInt();
             }
-            onChunk(ret, pos.x, pos.z, (short) 1, (short) 0);
+            boolean existing = onChunk(ret, pos.x, pos.z, (short) 1, (short) 0);
             //System.out.println("Received chunk from world gen: " + pos);
             //System.out.println("Cache map size is " + cache.size() + " and total age is " + num);
-            chunkResponses.inc();
+            chunkResponses.labels(existing + "").inc();
             synchronized (this) {
                 cache.get(cpos).complete(ret);
                 while (cache.size() - queue.size() > MAX_SIZE) { // obv can't use cache.size
@@ -119,7 +120,7 @@ public final class ChunkManager {
         }
     }
 
-    private static void onChunk(int[] contents, int x, int z, short serverID, short dimension) {
+    private static boolean onChunk(int[] contents, int x, int z, short serverID, short dimension) {
         byte[] hash = sha256(contents);
         Optional<long[]> prev = Database.fetchHash(hashToPacked(hash), x, z, serverID, dimension);
         if (prev.isPresent()) {
@@ -127,7 +128,9 @@ public final class ChunkManager {
             if (!Arrays.equals(hash, prevHash)) {
                 Telegram.INSTANCE.sendMessage(x + "," + z + " used to be " + bytesToHex(prevHash) + " but is now " + bytesToHex(hash));
             }
+            return true;
         }
+        return false;
     }
 
     private static byte[] sha256(int[] chunkData) {
