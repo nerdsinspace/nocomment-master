@@ -68,6 +68,7 @@ public final class ChunkManager {
                     } catch (IOException ex) {
                         ex.printStackTrace();
                     }
+                    Telegram.INSTANCE.sendMessage("Disconnected from generator");
                     Thread.sleep(TimeUnit.SECONDS.toMillis(60));
                 }
             } catch (InterruptedException ex) {
@@ -98,7 +99,6 @@ public final class ChunkManager {
                 ret[i] = in.readInt();
             }
             onChunk(ret, pos.x, pos.z, (short) 1, (short) 0);
-            onChunk(ret, pos.x, pos.z, (short) 1, (short) 0);
             //System.out.println("Received chunk from world gen: " + pos);
             //System.out.println("Cache map size is " + cache.size() + " and total age is " + num);
             chunkResponses.inc();
@@ -127,7 +127,6 @@ public final class ChunkManager {
             if (!Arrays.equals(hash, prevHash)) {
                 Telegram.INSTANCE.sendMessage(x + "," + z + " used to be " + bytesToHex(prevHash) + " but is now " + bytesToHex(hash));
             }
-            System.out.println(x + "," + z + " is " + bytesToHex(hash));
         }
     }
 
