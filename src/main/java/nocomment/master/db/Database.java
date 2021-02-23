@@ -510,42 +510,34 @@ public final class Database {
         }
     }
 
-    public static void updateStatus(int playerID, short serverID, String currStatus, Optional<String> data) {
-        long now = System.currentTimeMillis();
-        try (Connection connection = POOL.getConnection()) {
-            try (PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET curr_status = ?::statuses_enum, updated_at = ?, data = ? WHERE player_id = ? AND server_id = ?")) {
-                stmt.setString(1, currStatus);
-                stmt.setLong(2, now);
-                if (data.isPresent()) {
-                    stmt.setString(3, data.get());
-                } else {
-                    stmt.setNull(3, Types.VARCHAR);
-                }
-                stmt.setInt(4, playerID);
-                stmt.setShort(5, serverID);
-                int numRows = stmt.executeUpdate();
-                if (numRows > 0) {
-                    Database.incrementCommitCounter("statuses"); // only increment if it actually changed a row
-                    return; // success
-                }
+    public static void updateStatus(Connection connection, int playerID, short serverID, String currStatus, Optional<String> data, long now) throws SQLException {
+        try (PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET curr_status = ?::statuses_enum, updated_at = ?, data = ? WHERE player_id = ? AND server_id = ?")) {
+            stmt.setString(1, currStatus);
+            stmt.setLong(2, now);
+            if (data.isPresent()) {
+                stmt.setString(3, data.get());
+            } else {
+                stmt.setNull(3, Types.VARCHAR);
             }
-            // update hit 0 rows, so we need to insert
-            try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO statuses (player_id, server_id, curr_status, updated_at, data) VALUES (?, ?, ?::statuses_enum, ?, ?)")) {
-                stmt.setInt(1, playerID);
-                stmt.setShort(2, serverID);
-                stmt.setString(3, currStatus);
-                stmt.setLong(4, now);
-                if (data.isPresent()) {
-                    stmt.setString(5, data.get());
-                } else {
-                    stmt.setNull(5, Types.VARCHAR);
-                }
-                stmt.execute();
-                Database.incrementCommitCounter("statuses");
+            stmt.setInt(4, playerID);
+            stmt.setShort(5, serverID);
+            int numRows = stmt.executeUpdate();
+            if (numRows > 0) {
+                return; // success
             }
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            throw new RuntimeException(ex);
+        }
+        // update hit 0 rows, so we need to insert
+        try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO statuses (player_id, server_id, curr_status, updated_at, data) VALUES (?, ?, ?::statuses_enum, ?, ?)")) {
+            stmt.setInt(1, playerID);
+            stmt.setShort(2, serverID);
+            stmt.setString(3, currStatus);
+            stmt.setLong(4, now);
+            if (data.isPresent()) {
+                stmt.setString(5, data.get());
+            } else {
+                stmt.setNull(5, Types.VARCHAR);
+            }
+            stmt.execute();
         }
     }
 
@@ -563,16 +555,14 @@ public final class Database {
         }
     }
 
-    public static void saveChat(String chat, short chatType, int playerID, short serverID, long timestamp) {
-        try (Connection connection = POOL.getConnection();
-             PreparedStatement stmt = connection.prepareStatement("INSERT INTO chat (data, chat_type, reported_by, created_at, server_id) VALUES (CAST(? AS JSON), ?, ?, ?, ?)")) {
+    public static void saveChat(Connection connection, String chat, short chatType, int playerID, short serverID, long timestamp) throws SQLException {
+        try (PreparedStatement stmt = connection.prepareStatement("INSERT INTO chat (data, chat_type, reported_by, created_at, server_id) VALUES (CAST(? AS JSON), ?, ?, ?, ?)")) {
             stmt.setString(1, chat);
             stmt.setShort(2, chatType);
             stmt.setInt(3, playerID);
             stmt.setLong(4, timestamp);
             stmt.setShort(5, serverID);
             stmt.execute();
-            Database.incrementCommitCounter("chat");
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);

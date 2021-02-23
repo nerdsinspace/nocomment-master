@@ -7,6 +7,7 @@ import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import nocomment.master.NoComment;
 import nocomment.master.World;
+import nocomment.master.db.AsyncBatchCommitter;
 import nocomment.master.db.Database;
 import nocomment.master.db.Hit;
 import nocomment.master.slurp.BlockCheck;
@@ -80,16 +81,17 @@ public abstract class Connection {
             successCtr = checksSuccessful.labels(username);
         }
         short serverID = world.server.serverID;
-        Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
+        long start = System.currentTimeMillis();
+        AsyncBatchCommitter.submit(conn -> Database.updateStatus(conn, playerID, serverID, "ONLINE", Optional.empty(), start));
         Database.setDimension(playerID, serverID, world.dimension);
         ScheduledFuture<?> future = TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(() -> {
-            long time = System.currentTimeMillis() - mostRecentRead;
-            if (time > MIN_READ_INTERVAL_MS) {
+            long now = System.currentTimeMillis();
+            if (now - mostRecentRead > MIN_READ_INTERVAL_MS) {
                 System.out.println("NO DATA!");
                 closeUnderlying();
             }
             clearRecentChecks();
-            Database.updateStatus(playerID, serverID, "ONLINE", Optional.empty());
+            AsyncBatchCommitter.submit(conn -> Database.updateStatus(conn, playerID, serverID, "ONLINE", Optional.empty(), now));
             QueueStatus.markIngame(playerID, serverID);
         }), 0, 1, TimeUnit.SECONDS);
         Gauge.Child ctr = null;
@@ -229,7 +231,7 @@ public abstract class Connection {
 
     protected void chatMessage(String msg, byte chatType) {
         long now = System.currentTimeMillis();
-        NoComment.executor.execute(() -> Database.saveChat(msg, chatType, getIdentity(), world.server.serverID, now));
+        AsyncBatchCommitter.submit(conn -> Database.saveChat(conn, msg, chatType, getIdentity(), world.server.serverID, now));
     }
 
     public synchronized void addOnlinePlayers(Collection<OnlinePlayer> collection) {

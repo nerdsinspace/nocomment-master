@@ -1,6 +1,7 @@
 package nocomment.master.network;
 
 import io.prometheus.client.Gauge;
+import nocomment.master.db.AsyncBatchCommitter;
 import nocomment.master.db.Database;
 import nocomment.master.util.OnlinePlayer;
 
@@ -62,7 +63,7 @@ public final class QueueStatus {
         long now = System.currentTimeMillis();
 
         int playerID = Database.idForPlayer(new OnlinePlayer(uuid));
-        Database.updateStatus(playerID, QUEUE_SERVER_ID, "QUEUE", Optional.of("Queue position: " + queuePos));
+        AsyncBatchCommitter.submit(conn -> Database.updateStatus(conn, playerID, QUEUE_SERVER_ID, "QUEUE", Optional.of("Queue position: " + queuePos), now));
         Database.getUsername(playerID).ifPresent(username -> queuePosition.labels(username).set(queuePos));
         synchronized (cache) {
             if (cache.containsKey(playerID)) {
