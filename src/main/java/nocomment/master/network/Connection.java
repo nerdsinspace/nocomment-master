@@ -82,8 +82,10 @@ public abstract class Connection {
         }
         short serverID = world.server.serverID;
         long start = System.currentTimeMillis();
-        AsyncBatchCommitter.submit(conn -> Database.updateStatus(conn, playerID, serverID, "ONLINE", Optional.empty(), start));
-        Database.setDimension(playerID, serverID, world.dimension);
+        AsyncBatchCommitter.submit(conn -> {
+            Database.updateStatus(conn, playerID, serverID, "ONLINE", Optional.empty(), start);
+            Database.setDimension(conn, playerID, serverID, world.dimension);
+        });
         ScheduledFuture<?> future = TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(() -> {
             long now = System.currentTimeMillis();
             if (now - mostRecentRead > MIN_READ_INTERVAL_MS) {

@@ -541,17 +541,12 @@ public final class Database {
         }
     }
 
-    public static void setDimension(int playerID, short serverID, short dimension) {
-        try (Connection connection = POOL.getConnection();
-             PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET dimension = ? WHERE player_id = ? AND server_id = ?")) {
+    public static void setDimension(Connection connection, int playerID, short serverID, short dimension) throws SQLException {
+        try (PreparedStatement stmt = connection.prepareStatement("UPDATE statuses SET dimension = ? WHERE player_id = ? AND server_id = ?")) {
             stmt.setShort(1, dimension);
             stmt.setInt(2, playerID);
             stmt.setShort(3, serverID);
             stmt.execute();
-            Database.incrementCommitCounter("statuses_dimension");
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            throw new RuntimeException(ex);
         }
     }
 
@@ -563,9 +558,6 @@ public final class Database {
             stmt.setLong(4, timestamp);
             stmt.setShort(5, serverID);
             stmt.execute();
-        } catch (SQLException ex) {
-            ex.printStackTrace();
-            throw new RuntimeException(ex);
         }
     }
 
