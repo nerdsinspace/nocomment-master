@@ -6,16 +6,15 @@ import it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import nocomment.master.NoComment;
-import nocomment.master.db.Database;
 import nocomment.master.util.ChunkPos;
 import nocomment.master.util.Config;
 import nocomment.master.util.Telegram;
 
-import java.io.*;
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.net.Socket;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -37,7 +36,6 @@ public final class ChunkManager {
     private static final Counter chunkResponses = Counter.build()
             .name("chunk_manager_responses_total")
             .help("Number of chunks received")
-            .labelNames("existing")
             .register();
 
     private static final int MAX_SIZE = 2048; // about 500MB RAM
@@ -99,10 +97,9 @@ public final class ChunkManager {
             for (int i = 0; i < ret.length; i++) {
                 ret[i] = in.readInt();
             }
-            boolean existing = onChunk(ret, pos.x, pos.z, (short) 1, (short) 0);
             //System.out.println("Received chunk from world gen: " + pos);
             //System.out.println("Cache map size is " + cache.size() + " and total age is " + num);
-            chunkResponses.labels(existing + "").inc();
+            chunkResponses.inc();
             synchronized (this) {
                 cache.get(cpos).complete(ret);
                 while (cache.size() - queue.size() > MAX_SIZE) { // obv can't use cache.size
@@ -117,66 +114,6 @@ public final class ChunkManager {
                 }
             }
             queue.poll();
-        }
-    }
-
-    private static boolean onChunk(int[] contents, int x, int z, short serverID, short dimension) {
-        byte[] hash = sha256(contents);
-        Optional<long[]> prev = Database.fetchHash(hashToPacked(hash), x, z, serverID, dimension);
-        if (prev.isPresent()) {
-            byte[] prevHash = packedToHash(prev.get());
-            if (!Arrays.equals(hash, prevHash)) {
-                Telegram.INSTANCE.sendMessage(x + "," + z + " used to be " + bytesToHex(prevHash) + " but is now " + bytesToHex(hash));
-            }
-            return true;
-        }
-        return false;
-    }
-
-    private static byte[] sha256(int[] chunkData) {
-        try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            DataOutputStream dOut = new DataOutputStream(out);
-            for (int block : chunkData) {
-                dOut.writeInt(block);
-            }
-            return MessageDigest.getInstance("SHA-256").digest(out.toByteArray());
-        } catch (NoSuchAlgorithmException | IOException ex) {
-            ex.printStackTrace();
-            throw new RuntimeException(ex);
-        }
-    }
-
-    private static String bytesToHex(byte[] data) {
-        StringBuilder ret = new StringBuilder(data.length * 2);
-        for (byte b : data) {
-            ret.append(String.format("%02X", b));
-        }
-        return ret.toString();
-    }
-
-    private static long[] hashToPacked(byte[] data) {
-        try {
-            ByteArrayInputStream in = new ByteArrayInputStream(data);
-            DataInputStream dIn = new DataInputStream(in);
-            return new long[]{dIn.readLong(), dIn.readLong(), dIn.readLong(), dIn.readLong()};
-        } catch (IOException ex) {
-            ex.printStackTrace();
-            throw new RuntimeException(ex);
-        }
-    }
-
-    private static byte[] packedToHash(long[] data) {
-        try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            DataOutputStream dOut = new DataOutputStream(out);
-            for (long l : data) {
-                dOut.writeLong(l);
-            }
-            return out.toByteArray();
-        } catch (IOException ex) {
-            ex.printStackTrace();
-            throw new RuntimeException(ex);
         }
     }
 }
