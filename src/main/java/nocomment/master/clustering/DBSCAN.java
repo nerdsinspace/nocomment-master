@@ -1,5 +1,6 @@
 package nocomment.master.clustering;
 
+import io.prometheus.client.Histogram;
 import nocomment.master.Server;
 import nocomment.master.db.Database;
 import nocomment.master.tracking.TrackyTrackyManager;
@@ -19,6 +20,21 @@ public enum DBSCAN {
     private static final long MAX_LAYER_3_UPDATE_DUR = TimeUnit.HOURS.toMillis(6);
     public static final long MIN_OCCUPANCY_DURATION = TimeUnit.MINUTES.toMillis(90);
     private boolean completed;
+    private static final Histogram dbscanToUpdateFetchLatencies = Histogram.build()
+            .name("dbscan_to_update_fetch_latencies")
+            .help("Fetch point to update from dbscan latencies")
+            .buckets(.001, .005, .01, .02, .03, .04, .05, .1, .2, .5, 1)
+            .register();
+    private static final Histogram dbscanGetNeighborsLatencies = Histogram.build()
+            .name("dbscan_get_neighbors_latencies")
+            .help("Fetch neighbors latencies")
+            .buckets(.001, .005, .01, .02, .03, .04, .05, .1, .2, .5, 1)
+            .register();
+    private static final Histogram dbscanMergeNeighborsLatencies = Histogram.build()
+            .name("dbscan_merge_neighbors_latencies")
+            .help("Merge neighbors latencies")
+            .buckets(.001, .005, .01, .02, .03, .04, .05, .1, .2, .5, 1)
+            .register();
 
     public void beginIncrementalDBSCANThread() {
         // schedule with fixed delay is Very Important, so that we get no overlaps
@@ -243,11 +259,9 @@ public enum DBSCAN {
         connection.setAutoCommit(false);
         int i = 0;
         while (true) {
-            long c = System.currentTimeMillis();
+            Histogram.Timer getPoint = dbscanToUpdateFetchLatencies.startTimer();
             Datapoint point = getDatapoint(connection);
-            long d = System.currentTimeMillis();
-            if (d - c > 5) // TODO replace all of these old bits of code like "log if greater than 5ms" with prometheus histograms and grafana alerts
-                System.out.println("Took " + (d - c) + "ms to get a point");
+            getPoint.observeDuration();
             if (point == null) {
                 break;
             }
@@ -271,15 +285,13 @@ public enum DBSCAN {
             // note: the ONLY case where this function is less than efficient (i.e. does the query twice) is in the moment of promotion from node to core
             // a small price to pay for salvation
             if (point.isCore) {
-                long a = System.currentTimeMillis();
+                Histogram.Timer getNeighbors = dbscanGetNeighborsLatencies.startTimer();
                 List<Datapoint> neighbors = getWithinRange(point, connection); // IMPORTANT: THIS INCLUDES THE POINT ITSELF!
-                long b = System.currentTimeMillis();
-                if (b - a > 30)
-                    System.out.println("Took " + (b - a) + "ms to get " + neighbors.size() + " neighbors of " + point);
+                getNeighbors.observeDuration();
                 if (!neighbors.contains(point)) {
                     throw new IllegalStateException();
                 }
-                long e = System.currentTimeMillis();
+                Histogram.Timer mergeNeighbors = dbscanMergeNeighborsLatencies.startTimer();
                 // initial really fast sanity check
                 Set<Integer> chkParents = new HashSet<>();
                 for (Datapoint neighbor : neighbors) {
@@ -313,9 +325,7 @@ public enum DBSCAN {
                     }
                     commit = true;
                 }
-                long f = System.currentTimeMillis();
-                if (f - e > 5)
-                    System.out.println("Took " + (f - e) + "ms to do all the other shit");
+                mergeNeighbors.observeDuration();
             }
             if (commit) {
                 connection.commit();
