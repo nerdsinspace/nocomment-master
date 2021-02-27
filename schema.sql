@@ -207,6 +207,8 @@ CREATE TABLE dbscan
         ON UPDATE CASCADE ON DELETE CASCADE
 );
 
+CREATE INDEX dbscan_new_cluster_roots
+    ON dbscan (id) WHERE cluster_parent IS NULL AND disjoint_rank > 0 AND root_updated_at IS NULL;
 CREATE INDEX dbscan_cluster_roots
     ON dbscan (server_id, dimension, id) WHERE cluster_parent IS NULL AND disjoint_rank > 0;
 CREATE UNIQUE INDEX dbscan_ingest
