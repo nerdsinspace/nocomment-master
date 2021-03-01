@@ -4,7 +4,6 @@ import io.prometheus.client.Gauge;
 import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap;
 import shaded.org.apache.commons.io.IOUtils;
 
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -64,12 +63,12 @@ public class TableSizeMetrics {
     }
 
     public static Object2LongOpenHashMap<String> getDiskUsageSummary() {
+        Object2LongOpenHashMap<String> map = new Object2LongOpenHashMap<>();
         try {
-            Object2LongOpenHashMap<String> map = new Object2LongOpenHashMap<>();
             IOUtils.readLines(new InputStreamReader(new ProcessBuilder("bash", "-c", "du -s /postgres/base/16385/*").redirectError(ProcessBuilder.Redirect.INHERIT).start().getInputStream())).forEach(line -> map.addTo(line.split("\t")[1].split("\\.")[0].split("/postgres/")[1], Long.parseLong(line.split("\t")[0]) * 1024L));
-            return map;
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        } catch (Throwable th) {
+            th.printStackTrace();
         }
+        return map;
     }
 }
