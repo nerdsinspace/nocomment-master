@@ -298,13 +298,16 @@ public final class Database {
 
     public static void removePlayers(short serverID, Collection<Integer> playerIDs, long now) {
         try (Connection connection = POOL.getConnection();
-             PreparedStatement stmt = connection.prepareStatement("UPDATE player_sessions SET leave = ? WHERE range @> ? AND player_id = ? AND server_id = ?")) {
+             PreparedStatement stmt = connection.prepareStatement("UPDATE player_sessions SET leave = ? WHERE range @> ? AND player_id = ? AND server_id = ? AND leave IS NULL")) {
             for (int playerID : playerIDs) {
                 stmt.setLong(1, now);
                 stmt.setLong(2, Long.MAX_VALUE - 1); // must be -1 since postgres ranges are exclusive on the upper end
                 stmt.setInt(3, playerID);
                 stmt.setShort(4, serverID);
-                stmt.executeUpdate();
+                int numRows = stmt.executeUpdate();
+                if (numRows != 1) {
+                    throw new IllegalStateException("player_sessions illegal state " + serverID + " " + playerID + " " + now + " " + numRows);
+                }
                 Database.incrementCommitCounter("player_sessions_leave");
             }
         } catch (SQLException ex) {
