@@ -25,6 +25,11 @@ public enum DBSCAN {
             .help("Fetch point to update from dbscan latencies")
             .buckets(.001, .005, .01, .02, .03, .04, .05, .1, .2, .5, 1)
             .register();
+    private static final Histogram dbscanNeighborhoodOccupancyLatencies = Histogram.build()
+            .name("dbscan_neighborhood_occupancy_latencies")
+            .help("Neighborhood calculate occupancy latencies")
+            .buckets(.001, .005, .01, .02, .03, .04, .05, .1, .2, .5, 1)
+            .register();
     private static final Histogram dbscanGetNeighborsLatencies = Histogram.build()
             .name("dbscan_get_neighbors_latencies")
             .help("Fetch neighbors latencies")
@@ -270,6 +275,7 @@ public enum DBSCAN {
             if (!point.isCore) {
                 // only if it isn't core, we do the GAMER neighborhood query to maybe promote to core
                 // this one doesn't require potentially hundreds of neighbor nodes to be sent over the network
+                Histogram.Timer neighborhoodOccupancy = dbscanNeighborhoodOccupancyLatencies.startTimer();
                 long occupancyDuration = calculateRangedOccupancyDuration(point.serverID, point.dimension, point.x, point.z, connection);
                 if (occupancyDuration > MIN_OCCUPANCY_DURATION) {
                     System.out.println("DBSCAN promoting " + point + " to core point");
@@ -281,6 +287,7 @@ public enum DBSCAN {
                     updateSoon(point);
                     //commit = true;
                 }
+                neighborhoodOccupancy.observeDuration();
             }
             // note: the ONLY case where this function is less than efficient (i.e. does the query twice) is in the moment of promotion from node to core
             // a small price to pay for salvation
