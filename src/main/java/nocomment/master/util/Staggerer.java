@@ -56,6 +56,7 @@ public final class Staggerer {
                 new int[]{167548, 132678}, // 100010, liejurv
                 new int[]{883, 1026}, // tulpachan, ufocrossing
                 new int[]{25510, 162223}, // hollywoodx, elon_musk
+                new int[]{51246, 227868}, // parrotbot, humanwrongs
 
                 new int[]{} // empty, for aesthetic reasons
         );
