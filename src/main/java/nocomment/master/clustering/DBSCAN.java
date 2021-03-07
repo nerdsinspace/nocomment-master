@@ -235,12 +235,20 @@ public enum DBSCAN {
         if (xRoot.disjointRank < yRoot.disjointRank || (xRoot.disjointRank == yRoot.disjointRank && ((!xRoot.isCore && yRoot.isCore) || (xRoot.isCore == yRoot.isCore && (xRoot.disjointSize < yRoot.disjointSize))))) {
             return merge(yRoot, xRoot, connection); // intentionally swap
         }
+        if (xRoot.clusterParent.isPresent() || yRoot.clusterParent.isPresent()) {
+            throw new IllegalStateException(); // sanity check
+        }
         // merge based on disjoint rank, but maintain disjoint size as well
         System.out.println("Merging cluster " + yRoot + " into " + xRoot);
         // yRoot.disjointRank <= xRoot.disjointRank
         // so, merge yRoot into a new child of xRoot
         yRoot.clusterParent = OptionalInt.of(xRoot.id);
         try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET cluster_parent = ? WHERE id = ?")) {
+            stmt.setInt(1, xRoot.id);
+            stmt.setInt(2, yRoot.id);
+            stmt.execute();
+        }
+        try (PreparedStatement stmt = connection.prepareStatement("UPDATE associations SET cluster_id = ? WHERE cluster_id = ?")) {
             stmt.setInt(1, xRoot.id);
             stmt.setInt(2, yRoot.id);
             stmt.execute();

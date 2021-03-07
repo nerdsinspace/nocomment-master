@@ -169,3 +169,6 @@ select assc, dbscan.x*16 as block_x, dbscan.z*16 as block_z, cluster_id from (se
 
 strongest associations of the last week nov 22
 select x*16 as block_x, z*16 as block_z, username, sum(association) as assc from associations inner join players on players.id = associations.player_id inner join dbscan on dbscan.id = associations.cluster_id  where created_at > (extract(epoch from now())*1000)::bigint - 3600::bigint*1000*24*7 group by block_x, block_z, username order by assc desc;
+
+fix associations root updating, mar 7
+WITH assc AS MATERIALIZED (SELECT DISTINCT cluster_id AS id FROM associations), update_map AS MATERIALIZED (SELECT id AS old_id, cluster_parent AS new_id FROM dbscan INNER JOIN assc USING (id) WHERE cluster_parent IS NOT NULL) UPDATE associations SET cluster_id = (SELECT new_id FROM update_map WHERE old_id = cluster_id) WHERE cluster_id IN (SELECT old_id FROM update_map);
