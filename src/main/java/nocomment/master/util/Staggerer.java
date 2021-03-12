@@ -55,7 +55,7 @@ public final class Staggerer {
         beginStaggerer(world,
                 new int[]{167548, 132678}, // 100010, liejurv
                 new int[]{47299, 1026}, // smibby_smouse, ufocrossing
-                new int[]{6806, 162223}, // babbaj, elon_musk
+                new int[]{6806, 162223, 25510}, // babbaj, elon_musk, hollywoodx
                 new int[]{51246, 227868}, // parrotbot, humanwrongs
 
                 new int[]{} // empty, for aesthetic reasons
@@ -195,6 +195,9 @@ public final class Staggerer {
         } else {*/
         leave += AUTO_KICK;
         //}
+        if (pid == 25510) { // bias towards not kicking hollywoodx
+            leave += TimeUnit.MINUTES.toMillis(2); // only a small bias
+        }
         if (leave < now) {
             leave = now;
         }
