@@ -219,23 +219,32 @@ public final class BlockCheckManager {
         }
     }
 
+    public static final CompletableFuture<Boolean> STATIC_DATABASE_CHECKED_COMPLETION = new CompletableFuture<>();
+
+    static {
+        STATIC_DATABASE_CHECKED_COMPLETION.complete(true);
+    }
+
     public class BlockCheckStatus {
         public final long bpos;
-        public final long cpos;
         private int highestSubmittedPriority = Integer.MAX_VALUE;
-        private final List<BlockListener> listeners;
-        private final List<BlockCheck> inFlight;
+        // split up these two lists into "first" and "rest" to optimize RAM for the common case which are only 0 or 1 entries
+        private BlockListener firstListener;
+        private List<BlockListener> otherListeners;
+        private BlockCheck firstInFlight;
+        private List<BlockCheck> otherInFlight;
         private int blockStateOptional;
-        private boolean blockStateOptionalPresent;
+        private boolean blockStateOptionalPresent; // this optional is "destructured" into an int + a boolean for the same reason - there are tens of millions of these on the heap, and every little thing counts
         private long responseAt;
-        private CompletableFuture<Boolean> checkedDatabaseYet;
+        private CompletableFuture<Boolean> checkedDatabaseYet; // IMPORTANT: this field is overwritten after completion to STATIC_DATABASE_CHECKED_COMPLETION
         private long lastActivity;
 
         private BlockCheckStatus(long bpos) {
-            this.listeners = new ArrayList<>(0);
+            this.firstListener = null;
+            this.otherListeners = null;
             this.bpos = bpos;
-            this.cpos = BlockPos.blockToChunk(bpos);
-            this.inFlight = new ArrayList<>(0);
+            this.firstInFlight = null;
+            this.otherInFlight = null;
             this.checkedDatabaseYet = new CompletableFuture<>();
             lastActivity = System.currentTimeMillis();
             checkStatusQueue.add(this);
@@ -257,7 +266,7 @@ public final class BlockCheckManager {
             if (!Thread.holdsLock(BlockCheckStatus.this)) {
                 throw new IllegalStateException();
             }
-            return maybePrunable(now) && inFlight.isEmpty() && listeners.isEmpty();
+            return maybePrunable(now) && firstListener == null && otherListeners == null && firstInFlight == null && otherInFlight == null;
         }
 
         private synchronized void checkDatabase(PreparedStatement stmt) throws SQLException { // this synchronized is just for peace of mind, it should never actually become necessary
@@ -276,7 +285,13 @@ public final class BlockCheckManager {
                     }
                 }
             } finally {
+                // first, fire all async waiters blocking on checkedDatabaseYet
                 checkedDatabaseYet.complete(true);
+                // it's also okay if .thenAcceptAsync is called right here and races between these two lines - the old checkedDatabaseYet will instantly dispatch since it was previously completed
+                checkedDatabaseYet = STATIC_DATABASE_CHECKED_COMPLETION;
+                // from now on, checkedDatabaseYet just needs to be an insta-dispatching completed Future
+                // this means it doesn't need to be a unique object
+                // therefore, to save RAM, replace it with the singleton
             }
         }
 
@@ -294,7 +309,7 @@ public final class BlockCheckManager {
                 return;
             }
             // then, check if cached unloaded
-            long unloadedAt = isUnloaded(cpos);
+            long unloadedAt = isUnloaded(cpos());
             if (unloadedAt != -1 && unloadedAt > mustBeNewerThan && !(blockStateOptionalPresent && responseAt > unloadedAt)) {
                 // if this is unloaded, since the newer than, and not older than a real response
                 // then that's what we do
@@ -302,12 +317,26 @@ public final class BlockCheckManager {
                 NoComment.executor.execute(() -> listener.accept(OptionalInt.empty(), BlockEventType.UNLOADED, unloadedAt));
                 return;
             }
-            listeners.add(listener);
+            if (firstListener == null) {
+                firstListener = listener;
+            } else {
+                if (otherListeners == null) {
+                    otherListeners = new ArrayList<>(1);
+                }
+                otherListeners.add(listener);
+            }
             if (priority < highestSubmittedPriority) {
                 highestSubmittedPriority = priority;
 
                 BlockCheck check = new BlockCheck(priority, this);
-                inFlight.add(check);
+                if (firstInFlight == null) {
+                    firstInFlight = check;
+                } else {
+                    if (otherInFlight == null) {
+                        otherInFlight = new ArrayList<>(1);
+                    }
+                    otherInFlight.add(check);
+                }
                 NoComment.executor.execute(() -> world.submit(check));
             }
         }
@@ -317,9 +346,9 @@ public final class BlockCheckManager {
             long now = System.currentTimeMillis();
             if (state.isPresent()) {
                 onResponseInternal(state, now);
-                loaded(cpos);
+                loaded(cpos());
             } else {
-                unloadedAt(cpos, now);
+                unloadedAt(cpos(), now);
             }
         }
 
@@ -348,16 +377,33 @@ public final class BlockCheckManager {
                 results.add(new ResultToInsert(state.getAsInt(), responseAt));
             }
             highestSubmittedPriority = Integer.MAX_VALUE; // reset
-            inFlight.forEach(world::cancelAndRemoveAsync); // unneeded
-            inFlight.clear();
-            for (BlockListener listener : listeners) {
-                NoComment.executor.execute(() -> listener.accept(state, type, timestamp));
+            if (firstInFlight != null) {
+                world.cancelAndRemoveAsync(firstInFlight);
+                if (otherInFlight != null) {
+                    otherInFlight.forEach(world::cancelAndRemoveAsync); // unneeded
+                }
             }
-            listeners.clear();
+            if (firstListener != null) {
+                BlockListener localCopy = firstListener;
+                NoComment.executor.execute(() -> localCopy.accept(state, type, timestamp));
+                if (otherListeners != null) {
+                    for (BlockListener listener : otherListeners) {
+                        NoComment.executor.execute(() -> listener.accept(state, type, timestamp));
+                    }
+                }
+            }
+            firstInFlight = null;
+            otherInFlight = null;
+            firstListener = null;
+            otherListeners = null;
         }
 
         public final BlockPos pos() {
             return BlockPos.fromLong(bpos);
+        }
+
+        public final long cpos() {
+            return BlockPos.blockToChunk(bpos);
         }
 
         private class ResultToInsert {
