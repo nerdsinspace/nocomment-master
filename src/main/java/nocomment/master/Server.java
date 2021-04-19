@@ -39,32 +39,33 @@ public final class Server {
         this.onlinePlayers = new OnlinePlayerTracker(this);
         this.tracking = new TrackyTrackyManager(this);
         System.out.println("Constructed server " + hostname + " ID " + serverID);
-        if ("true".equalsIgnoreCase(Config.getRuntimeVariable("SERVER_STATS", "false"))) {
-            TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(() -> {
-                StringBuilder resp = new StringBuilder("\nStatus of server " + hostname + " ID " + serverID + ":");
-                for (World world : getLoadedWorlds()) {
-                    resp.append("\nDimension ").append(world.dimension);
-                    resp.append(", pending ");
-                    Collection<PriorityDispatchable> pending = world.getPending();
-                    resp.append(pending.size());
-                    resp.append(", total checks ");
-                    resp.append(pending.stream().mapToInt(PriorityDispatchable::size).sum());
-                    resp.append(", connections: ");
-                    for (Connection conn : world.getOpenConnections()) {
-                        resp.append("\n Connection ").append(conn);
-                    }
-                    resp.append("\nStats:");
-                    long start = System.currentTimeMillis();
-                    resp.append(world.stats.report().replace("\n", " \n"));
-                    long end = System.currentTimeMillis();
-                    resp.append("\nStats lock held for ");
-                    resp.append(end - start);
-                    resp.append("ms");
+
+        TrackyTrackyManager.scheduler.scheduleAtFixedRate(LoggingExecutor.wrap(() -> {
+            StringBuilder resp = new StringBuilder("\nStatus of server " + hostname + " ID " + serverID + ":");
+            for (World world : getLoadedWorlds()) {
+                resp.append("\nDimension ").append(world.dimension);
+                resp.append(", pending ");
+                Collection<PriorityDispatchable> pending = world.getPending();
+                resp.append(pending.size());
+                resp.append(", total checks ");
+                resp.append(pending.stream().mapToInt(PriorityDispatchable::size).sum());
+                resp.append(", connections: ");
+                for (Connection conn : world.getOpenConnections()) {
+                    resp.append("\n Connection ").append(conn);
                 }
-                resp.append("\nEnd status");
+                resp.append("\nStats:");
+                long start = System.currentTimeMillis();
+                resp.append(world.stats.report().replace("\n", " \n"));
+                long end = System.currentTimeMillis();
+                resp.append("\nStats lock held for ");
+                resp.append(end - start);
+                resp.append("ms");
+            }
+            resp.append("\nEnd status");
+            if ("true".equalsIgnoreCase(Config.getRuntimeVariable("SERVER_STATS", "false"))) {
                 System.out.println(resp.toString().replace("\n", "\n>  "));
-            }), 0, 30, TimeUnit.SECONDS);
-        }
+            }
+        }), 0, 30, TimeUnit.SECONDS);
     }
 
     public synchronized World getWorld(short dimension) {
