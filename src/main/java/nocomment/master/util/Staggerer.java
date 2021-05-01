@@ -101,6 +101,17 @@ public final class Staggerer {
         }
     }
 
+    private boolean nearLodge() {
+        long meetingTime = 248400;
+        long stopKicking = meetingTime - TimeUnit.HOURS.toSeconds(2);
+        long startDoingItAgain = meetingTime + TimeUnit.HOURS.toSeconds(2);
+
+        long nowSecs = System.currentTimeMillis() / TimeUnit.SECONDS.toMillis(1);
+        long offsetIntoEpochWeek = nowSecs % TimeUnit.DAYS.toSeconds(7);
+
+        return offsetIntoEpochWeek > stopKicking && offsetIntoEpochWeek < startDoingItAgain;
+    }
+
     private void run() {
         System.out.println("Staggerer for " + world.dimension);
         System.out.println("Staggerer observations: " + observedAt);
@@ -119,6 +130,10 @@ public final class Staggerer {
                 // and getInQueue will only return statuses that are currently QUEUE
                 observedAt.merge(qs.playerID, qs.when, Math::max);
                 playerJoinTS.put(qs.playerID, qs.when + qs.pos * QueueStatus.getEstimatedMillisecondsPerQueuePosition());
+            }
+            if (world.dimension == 0 && nearLodge()) {
+                System.out.println("Moratorium on kicking enabled due to lodge time in the overworld on 2b2t");
+                return;
             }
         }
         if (onlineNow.size() < 2) {
