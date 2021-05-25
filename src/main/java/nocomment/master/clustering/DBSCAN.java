@@ -62,6 +62,7 @@ public enum DBSCAN {
     }
 
     public class Datapoint {
+
         int id;
         int x;
         int z;
@@ -371,15 +372,19 @@ public enum DBSCAN {
         }
     }
 
-    public boolean clusterMemberWithinRenderDistance(short serverID, short dimension, int x, int z, Connection connection) throws SQLException {
-        try (PreparedStatement stmt = connection.prepareStatement("SELECT SUM((SELECT COUNT(*) FROM dbscan WHERE server_id = ? AND dimension = ? AND x = ser_x.x + ? AND z = ser_z.z + ? AND (is_core OR cluster_parent IS NOT NULL))) AS cnt FROM GENERATE_SERIES(-4, 4) AS ser_x(x) CROSS JOIN GENERATE_SERIES(-4, 4) AS ser_z(z)")) {
+    public OptionalInt clusterMemberWithinRenderDistance(short serverID, short dimension, int x, int z, Connection connection) throws SQLException {
+        try (PreparedStatement stmt = connection.prepareStatement("SELECT MIN((SELECT MIN(cluster_parent) FROM dbscan WHERE server_id = ? AND dimension = ? AND x = ser_x.x + ? AND z = ser_z.z + ? AND (is_core OR cluster_parent IS NOT NULL))) AS one_cluster_parent FROM GENERATE_SERIES(-4, 4) AS ser_x(x) CROSS JOIN GENERATE_SERIES(-4, 4) AS ser_z(z)")) {
             stmt.setShort(1, serverID);
             stmt.setShort(2, dimension);
             stmt.setInt(3, x);
             stmt.setInt(4, z);
             try (ResultSet rs = stmt.executeQuery()) {
                 rs.next();
-                return rs.getInt("cnt") != 0;
+                int ret = rs.getInt("one_cluster_parent");
+                if (rs.wasNull()) {
+                    return OptionalInt.empty();
+                }
+                return OptionalInt.of(ret);
             }
         }
     }

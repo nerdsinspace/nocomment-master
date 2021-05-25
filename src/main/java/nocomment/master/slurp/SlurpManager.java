@@ -3,6 +3,8 @@ package nocomment.master.slurp;
 import io.prometheus.client.Counter;
 import io.prometheus.client.Gauge;
 import io.prometheus.client.Histogram;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
+import it.unimi.dsi.fastutil.ints.IntOpenHashSet;
 import it.unimi.dsi.fastutil.longs.*;
 import it.unimi.dsi.fastutil.objects.ObjectIterator;
 import net.openhft.chronicle.core.values.LongValue;
@@ -25,6 +27,7 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 public class SlurpManager {
+
     private static final Gauge slurpData = Gauge.build()
             .name("slurp_data")
             .help("Sizes of various slurp data structures")
@@ -67,6 +70,10 @@ public class SlurpManager {
             .name("all_asks_off_heap")
             .help("Size of the allAsks map off heap")
             .register();
+    private static final Counter blacklistedClusterSkips = Counter.build()
+            .name("blacklisted_cluster_skips_total")
+            .help("Number of times we have skipped a blacklisted cluster in total")
+            .register();
     private static final long SIGN_AGE = TimeUnit.DAYS.toMillis(3);
     private static final long EXPAND_AGE = TimeUnit.DAYS.toMillis(21);
     private static final long RENEW_AGE = TimeUnit.MINUTES.toMillis(15);
@@ -82,6 +89,11 @@ public class SlurpManager {
     private static final int MAX_CHECK_STATUS_QUEUE_LENGTH = 5000;
     private static final int MIN_PENDING_TO_RECHECK = 50;
     private static final int MAX_PENDING_CHECKS = 250_000;
+    private static final IntOpenHashSet BLACKLISTED_CLUSTERS = new IntOpenHashSet(new IntArrayList(new int[]{
+            218456744, // skymasons 1
+            210410667, // skymasons 2
+            // TODO add other stupid stuff that we don't want to waste time on
+    }));
     private static final Random random = new Random();
     public final World world;
     private final Executor blockRecvExecutor = new LoggingExecutor(Executors.newSingleThreadExecutor(), "block_recv"); // blockRecv is synchronized so we only need one
@@ -392,12 +404,17 @@ public class SlurpManager {
                         it.remove();
                         continue;
                     }
-                    if (DBSCAN.INSTANCE.clusterMemberWithinRenderDistance(world.server.serverID, world.dimension, pos.x, pos.z, connection)) {
-                        clusterMembershipConfirmed.add(cpos);
-                    } else {
-                        it.remove();
-                        clusterNonmembershipConfirmedAtCache.put(cpos, now);
+                    OptionalInt cluster = DBSCAN.INSTANCE.clusterMemberWithinRenderDistance(world.server.serverID, world.dimension, pos.x, pos.z, connection);
+                    if (cluster.isPresent()) {
+                        if (BLACKLISTED_CLUSTERS.contains(cluster.getAsInt())) {
+                            blacklistedClusterSkips.inc();
+                        } else {
+                            clusterMembershipConfirmed.add(cpos);
+                            continue;
+                        }
                     }
+                    it.remove();
+                    clusterNonmembershipConfirmedAtCache.put(cpos, now);
                 }
             }
         } catch (SQLException ex) {
@@ -664,6 +681,7 @@ public class SlurpManager {
     }
 
     private static class FailedAsk {
+
         private final int priority;
         private final long mustBeNewerThan;
 
@@ -674,11 +692,13 @@ public class SlurpManager {
     }
 
     private static class ResumeDataForChunk {
+
         private final Long2ObjectOpenHashMap<FailedAsk> failedBlockChecks = new Long2ObjectOpenHashMap<>();
         private final Map<BlockPos, Long> failedSignChecks = new HashMap<>();
     }
 
     public interface AskStatus {
+
         int NO_RESPONSE = -1;
 
         int getHighestPriorityAskedAt();
@@ -702,6 +722,7 @@ public class SlurpManager {
         void setReceivedAt(final long receivedAt);
 
         class Helper {
+
             public static final LongValue LONG_VALUE_KEY = Values.newHeapInstance(LongValue.class);
             public static final AskStatus ASK_STATUS_VALUE = Values.newHeapInstance(AskStatus.class);
 
@@ -718,6 +739,7 @@ public class SlurpManager {
     }
 
     private static class ChunkPosWithTimestamp {
+
         public final long cpos;
         public final long timestamp;
 
@@ -728,6 +750,7 @@ public class SlurpManager {
     }
 
     private static class HeightmapTimestampedCacheEntryWrapper {
+
         private final byte[] compactMap;
         private long lastAccess;
 
