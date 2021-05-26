@@ -24,6 +24,7 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 public final class BlockCheckManager {
+
     private static final Histogram blockPruneLatencies = Histogram.build()
             .name("block_prune_latencies")
             .help("Block prune latencies")
@@ -32,6 +33,10 @@ public final class BlockCheckManager {
     private static final Gauge checkStatusQueueLength = Gauge.build()
             .name("check_status_queue_length")
             .help("Length of the check status queue")
+            .register();
+    private static final Gauge checkStatusQueueLatency = Gauge.build()
+            .name("check_status_queue_latency")
+            .help("Age of the head of the check status queue")
             .register();
     private static final Counter checksRan = Counter.build()
             .name("checks_ran_total")
@@ -100,6 +105,7 @@ public final class BlockCheckManager {
 
     @FunctionalInterface
     public interface BlockListener {
+
         void accept(OptionalInt state, BlockEventType type, long timestamp);
     }
 
@@ -153,7 +159,7 @@ public final class BlockCheckManager {
         synchronized (pruneLock) {
             long now = System.currentTimeMillis();
             int beforeSz = cacheSize();
-            int maybeNotNotActually = 0;
+            int maybeButNotActually = 0;
             int numActuallyRemoved = 0;
             ObjectIterator<Long2ObjectMap.Entry<Long2ObjectOpenHashMap<BlockCheckStatus>>> outerIt = statuses.long2ObjectEntrySet().fastIterator();
             while (outerIt.hasNext()) {
@@ -168,7 +174,7 @@ public final class BlockCheckManager {
                                 innerIt.remove(); // must call remove within bcs lock!!
                                 numActuallyRemoved++;
                             } else {
-                                maybeNotNotActually++;
+                                maybeButNotActually++;
                             }
                         }
                     }
@@ -181,7 +187,7 @@ public final class BlockCheckManager {
             Map<Integer, Long> countByPriority = statuses.values().stream().map(Map::values).flatMap(Collection::stream).collect(Collectors.groupingBy(bcs -> bcs.highestSubmittedPriority, Collectors.counting()));
             System.out.println("Cache size change should be " + numActuallyRemoved + " but was actually " + (beforeSz - afterSz));
             blockCheckStatuses.labels(world.dim()).set(afterSz);
-            System.out.println("FASTER? Block prune in block check manager took " + (System.currentTimeMillis() - now) + "ms. Cache size went from " + beforeSz + " to " + afterSz + ". Maybe but not actually: " + maybeNotNotActually + ". Count by priority: " + countByPriority);
+            System.out.println("FASTER? Block prune in block check manager took " + (System.currentTimeMillis() - now) + "ms. Cache size went from " + beforeSz + " to " + afterSz + ". Maybe but not actually: " + maybeButNotActually + ". Count by priority: " + countByPriority);
         }
     }
 
@@ -197,12 +203,15 @@ public final class BlockCheckManager {
     }
 
     private static void checkStatusConsumer() {
-        if (checkStatusQueue.isEmpty()) {
+        checkStatusQueueLength.set(checkStatusQueue.size());
+        BlockCheckStatus head = checkStatusQueue.peek();
+        if (head == null) {
+            checkStatusQueueLatency.set(0); // no latency if queue is empty
             return;
         }
-        List<BlockCheckStatus> statuses = new ArrayList<>(100);
-        checkStatusQueue.drainTo(statuses, 100);
-        checkStatusQueueLength.set(checkStatusQueue.size());
+        checkStatusQueueLatency.set((System.currentTimeMillis() - head.constructedAt) / 1000.0d);
+        List<BlockCheckStatus> statuses = new ArrayList<>(200);
+        checkStatusQueue.drainTo(statuses, 200);
         if (statuses.isEmpty()) {
             return;
         }
@@ -226,6 +235,7 @@ public final class BlockCheckManager {
     }
 
     public class BlockCheckStatus {
+
         public final long bpos;
         private int highestSubmittedPriority = Integer.MAX_VALUE;
         // split up these two lists into "first" and "rest" to optimize RAM for the common case which are only 0 or 1 entries
@@ -238,6 +248,7 @@ public final class BlockCheckManager {
         private long responseAt;
         private CompletableFuture<Boolean> checkedDatabaseYet; // IMPORTANT: this field is overwritten after completion to STATIC_DATABASE_CHECKED_COMPLETION
         private long lastActivity;
+        private final long constructedAt;
 
         private BlockCheckStatus(long bpos) {
             this.firstListener = null;
@@ -246,7 +257,9 @@ public final class BlockCheckManager {
             this.firstInFlight = null;
             this.otherInFlight = null;
             this.checkedDatabaseYet = new CompletableFuture<>();
-            lastActivity = System.currentTimeMillis();
+            long now = System.currentTimeMillis();
+            lastActivity = now;
+            constructedAt = now;
             checkStatusQueue.add(this);
             checkStatusQueueLength.set(checkStatusQueue.size());
             if (checkStatusExecutorQueue.size() < 10) {
@@ -407,6 +420,7 @@ public final class BlockCheckManager {
         }
 
         private class ResultToInsert {
+
             private final int blockState;
             private final long timestamp;
 
