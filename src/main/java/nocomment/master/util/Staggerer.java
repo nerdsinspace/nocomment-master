@@ -55,7 +55,7 @@ public final class Staggerer {
         beginStaggerer(world,
                 new int[]{167548, 132678}, // 100010, liejurv
                 new int[]{47299, 1026}, // smibby_smouse, ufocrossing
-                new int[]{6806, 162223, 25510}, // babbaj, elon_musk, hollywoodx
+                new int[]{6806, 162223, 306345}, // babbaj, elon_musk, reaganandbush
                 new int[]{51246, 227868}, // parrotbot, humanwrongs
 
                 new int[]{} // empty, for aesthetic reasons
