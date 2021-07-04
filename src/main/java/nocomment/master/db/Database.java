@@ -4,10 +4,7 @@ import io.prometheus.client.Counter;
 import nocomment.master.NoComment;
 import nocomment.master.clustering.DBSCAN;
 import nocomment.master.tracking.TrackyTrackyManager;
-import nocomment.master.util.Associator;
-import nocomment.master.util.Config;
-import nocomment.master.util.LoggingExecutor;
-import nocomment.master.util.OnlinePlayer;
+import nocomment.master.util.*;
 import org.apache.commons.dbcp2.BasicDataSource;
 
 import java.sql.*;
@@ -30,6 +27,7 @@ public final class Database {
             Maintenance.scheduleMaintenance();
             DBSCAN.INSTANCE.beginIncrementalDBSCANThread();
             Associator.INSTANCE.beginIncrementalAssociatorThread();
+            ChatProcessor.INSTANCE.beginIncrementalChatProcessorThread();
             TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(() -> pruneStaleStatuses(POOL)), 0, 1, TimeUnit.MINUTES);
             TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(TableSizeMetrics::update), 0, 5, TimeUnit.SECONDS);
         }
