@@ -1,5 +1,6 @@
 package nocomment.master.clustering;
 
+import io.prometheus.client.Gauge;
 import nocomment.master.db.Database;
 import nocomment.master.tracking.TrackyTrackyManager;
 import nocomment.master.util.ChunkPos;
@@ -13,6 +14,12 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public final class HitRetry {
+
+    private static final Gauge roots = Gauge.build()
+            .name("dbscan_roots_by_updated_at")
+            .help("Number of dbscan roots")
+            .labelNames("server_id", "dimension", "generation")
+            .register();
 
     private static final Random RANDOM = new Random();
     private static final Map<String, HitRetry> instances = new HashMap<>();
@@ -42,6 +49,9 @@ public final class HitRetry {
                 while (rs.next()) {
                     ret.add(new CachedDBSCANRoot(rs));
                 }
+                saveCount(ret, 0, "all");
+                saveCount(ret, weekThreshold(), "week");
+                saveCount(ret, monthThreshold(), "month");
                 clusterRootCache = ret;
             }
         } catch (SQLException ex) {
@@ -52,6 +62,7 @@ public final class HitRetry {
     }
 
     private static class CachedDBSCANRoot {
+
         private final int id;
         private final int disjointRank;
         private final long rootUpdatedAt;
@@ -72,14 +83,30 @@ public final class HitRetry {
         return Optional.of(cache.get(sampledIndex));
     }
 
+    private void saveCount(List<CachedDBSCANRoot> cache, long timestamp, String generation) {
+        roots.labels(serverID + "", dimension + "", generation).set(countNewerThan(cache, timestamp));
+    }
+
+    private static int countNewerThan(List<CachedDBSCANRoot> cache, long timestamp) {
+        return cache.size() - binarySearch(cache, timestamp).orElse(cache.size());
+    }
+
     private static long sampleAgeThreshold() {
         if (RANDOM.nextBoolean()) {
             return 0;
         }
         if (RANDOM.nextBoolean()) {
-            return System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30);
+            return monthThreshold();
         }
+        return weekThreshold();
+    }
+
+    private static long weekThreshold() {
         return System.currentTimeMillis() - TimeUnit.DAYS.toMillis(7);
+    }
+
+    private static long monthThreshold() {
+        return System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30);
     }
 
     private static OptionalInt binarySearch(List<CachedDBSCANRoot> cache, long mustBeGreaterThan) {
