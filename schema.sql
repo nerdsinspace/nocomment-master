@@ -258,6 +258,8 @@ CREATE TABLE dbscan_progress
 (
     last_processed_hit_id BIGINT NOT NULL
 );
+INSERT INTO dbscan_progress(last_processed_hit_id)
+VALUES (0);
 
 CREATE TABLE dbscan_to_update
 (
@@ -271,7 +273,7 @@ CREATE TABLE dbscan_to_update
 
 CREATE INDEX dbscan_to_update_by_schedule ON dbscan_to_update (LEAST(updatable_lower, updatable_upper));
 
-CREATE UNLOGGED TABLE associations
+CREATE TABLE associations
 (
     cluster_id  INTEGER          NOT NULL,
     player_id   INTEGER          NOT NULL,
@@ -299,7 +301,7 @@ FROM (SELECT cluster_id, player_id, SUM(association) AS association
       GROUP BY player_id, cluster_id) tmp
          INNER JOIN players ON players.id = tmp.player_id);
 
-CREATE UNLOGGED TABLE track_associator_progress
+CREATE TABLE track_associator_progress
 (
     max_updated_at_processed BIGINT NOT NULL
 );
@@ -403,6 +405,8 @@ CREATE TABLE chat
 
 CREATE INDEX chat_by_time
     ON chat (server_id, created_at);
+CREATE INDEX chat_by_time2
+    ON chat (created_at);
 
 CREATE TABLE generator_cache
 (
@@ -419,3 +423,115 @@ CREATE TABLE generator_cache
 );
 
 CREATE UNIQUE INDEX generator_cache_by_loc ON generator_cache (server_id, dimension, x, z);
+
+CREATE TABLE chat_progress
+(
+    max_created_at_processed BIGINT NOT NULL
+);
+INSERT INTO chat_progress(max_created_at_processed)
+VALUES (0);
+
+-- chat that we understand, but isn't worth making a whole table for. e.g. "player left the game" isn't useful because we have player_sessions e.g. "bad command type /help" is useless data
+CREATE TABLE chat_miscellaneous
+(
+    data        JSONB    NOT NULL,
+    kind        TEXT     NOT NULL,
+    extracted   TEXT     NOT NULL,
+    chat_type   SMALLINT NOT NULL,
+    reported_by INTEGER  NOT NULL,
+    created_at  BIGINT   NOT NULL,
+    server_id   SMALLINT NOT NULL,
+
+    FOREIGN KEY (reported_by) REFERENCES players (id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX chat_miscellaneous_by_time
+    ON chat_miscellaneous (created_at);
+
+CREATE TABLE chat_player_message
+(
+    message     TEXT     NOT NULL,
+    author      TEXT     NOT NULL,
+    created_at  BIGINT   NOT NULL,
+    server_id   SMALLINT NOT NULL,
+    message_vec TSVECTOR NOT NULL GENERATED ALWAYS AS (TO_TSVECTOR('english', message)) STORED,
+
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX chat_player_message_by_time
+    ON chat_player_message (created_at);
+CREATE INDEX chat_player_message_by_message
+    ON chat_player_message USING GIN (message_vec);
+CREATE INDEX chat_player_message_by_author
+    ON chat_player_message (author, created_at);
+
+CREATE TABLE chat_server_message
+(
+    message    TEXT     NOT NULL,
+    created_at BIGINT   NOT NULL,
+    server_id  SMALLINT NOT NULL,
+
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX chat_server_message_by_time
+    ON chat_server_message (created_at);
+
+CREATE TABLE chat_whisper
+(
+    message      TEXT     NOT NULL,
+    other_player TEXT     NOT NULL,
+    outgoing     BOOLEAN  NOT NULL,
+    reported_by  INTEGER  NOT NULL,
+    created_at   BIGINT   NOT NULL,
+    server_id    SMALLINT NOT NULL,
+
+    FOREIGN KEY (reported_by) REFERENCES players (id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX chat_whisper_by_time
+    ON chat_whisper (created_at);
+
+CREATE TABLE chat_death
+(
+    template   TEXT     NOT NULL,
+    player_1   TEXT     NOT NULL,
+    player_2   TEXT,
+    created_at BIGINT   NOT NULL,
+    server_id  SMALLINT NOT NULL,
+
+    CHECK (player_2 IS NULL OR LENGTH(player_2) > 0), -- disallow non-null empty string
+
+    FOREIGN KEY (server_id) REFERENCES servers (id)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE INDEX chat_death_by_time
+    ON chat_death (created_at);
+CREATE INDEX chat_death_by_template
+    ON chat_death (template, created_at);
+
+CREATE TABLE death_templates
+(
+    template        TEXT    NOT NULL,
+    killer_is_first BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- insert them all into death_templates
+
+CREATE VIEW deaths AS
+SELECT template,
+       CASE WHEN killer_is_first THEN player_2 ELSE player_1 END                                        AS died,
+       CASE WHEN killer_is_first IS NULL THEN NULL WHEN killer_is_first THEN player_1 ELSE player_2 END AS killed_by,
+       created_at
+FROM chat_death
+         LEFT OUTER JOIN death_templates USING (template);

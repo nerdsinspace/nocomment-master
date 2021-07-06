@@ -178,3 +178,18 @@ with recursive interesting as materialized (select block_state from block_states
 
 may 13, players by online time in the last week
 select tmp.duration/3600000.0 as online_time_hours, players.username from (select player_id, sum(coalesce(leave, (extract(epoch from now())*1000)::bigint)-lower(range)) as duration from player_sessions where range && int8range((extract(epoch from now())*1000)::bigint - 1000*3600*24*7, (extract(epoch from now())*1000)::bigint, '[]') group by player_id) tmp inner join players on tmp.player_id = players.id order by tmp.duration desc;
+
+july 3, check if hause added a new death message
+SELECT * FROM (SELECT DISTINCT template FROM chat_death WHERE player_2 IS NOT NULL) tmp LEFT OUTER JOIN death_templates USING (template) WHERE death_templates.template IS NULL;
+
+july 3, best pvpers
+select killed_by, count(*) from deaths where killed_by is not null group by killed_by order by count desc;
+
+july 3, players that have been killed by another player most often
+select died, count(*) from deaths where killed_by is not null group by died order by count desc;
+
+july 3, search for word
+select * from chat_player_message where message_vec @@ to_tsquery('english', 'baritone');
+
+july 3, most active chatters
+select author, count(*) from chat_player_message group by author order by count desc;
