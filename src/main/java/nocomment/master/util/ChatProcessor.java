@@ -970,7 +970,7 @@ public enum ChatProcessor {
             System.out.println("Chat processor committing " + output.size() + " rows from input of " + rawRows.size() + " rows");
             connection.commit();
             Database.incrementCommitCounter("chat_processor");
-            return true;
+            return !output.isEmpty();
         } catch (SQLException ex) {
             ex.printStackTrace();
             throw new RuntimeException(ex);
