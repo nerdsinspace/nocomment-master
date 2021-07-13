@@ -193,3 +193,6 @@ select * from chat_player_message where message_vec @@ to_tsquery('english', 'ba
 
 july 3, most active chatters
 select author, count(*) from chat_player_message group by author order by count desc;
+
+july 12, highway stats
+explain analyze create table highway_stats as (select direction_x, direction_z, dimension, month, count(*) as num_hits from (select sign(x) as direction_x, sign(z) as direction_z, dimension, created_at / (2592000000::bigint) - 610 as month from hits where (not legacy) and (server_id=1) and (abs(x)>10 or abs(z)>10) and (abs(x)<10 or abs(z)<10 or abs(abs(x)-abs(z))<10) and (dimension=0 or dimension=-1)) tmp group by direction_x, direction_z, dimension, month);
