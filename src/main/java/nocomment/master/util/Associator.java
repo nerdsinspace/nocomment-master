@@ -22,7 +22,7 @@ public enum Associator {
 
     public void beginIncrementalAssociatorThread() {
         // schedule with fixed delay is Very Important, so that we get no overlaps
-        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::incrementalRun), 0, 5, TimeUnit.MINUTES);
+        TrackyTrackyManager.scheduler.scheduleWithFixedDelay(LoggingExecutor.wrap(this::incrementalRun), 1, 5, TimeUnit.MINUTES); // 1 so that fully after dbscan
     }
 
     private synchronized void incrementalRun() {
@@ -33,6 +33,7 @@ public enum Associator {
     }
 
     private static class TrackEnding {
+
         private final int id;
         private final long updatedAt;
         private final short serverID;

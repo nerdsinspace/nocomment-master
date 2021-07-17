@@ -27,6 +27,7 @@ enum Aggregator {
     private final Int2LongOpenHashMap parentAgeCache = new Int2LongOpenHashMap();
 
     private static class PastHit {
+
         long id;
         long created_at;
         short serverID;
@@ -127,7 +128,7 @@ enum Aggregator {
             }
             long lag = lastRealHitID - lastProcessedHitID;
             aggregatorLag.set(lag);
-            if (lag < 10000) {
+            if (lag == 0) {
                 System.out.println("DBSCAN aggregator not running, only " + lag + " hits behind real time");
                 return false;
             }

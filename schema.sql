@@ -535,3 +535,105 @@ SELECT template,
        created_at
 FROM chat_death
          LEFT OUTER JOIN death_templates USING (template);
+
+
+-- winddown table locks
+
+
+CREATE FUNCTION no_change()
+    RETURNS TRIGGER
+AS
+$$
+BEGIN
+    RAISE EXCEPTION 'Table has been locked.';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER lock_april_fools_troll_blocks_backup
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON april_fools_troll_blocks_backup
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_associations
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON associations
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_block_states
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON block_states
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_blocks
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON blocks
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_chat
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON chat
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_chat_death
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON chat_death
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_chat_miscellaneous
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON chat_miscellaneous
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_chat_player_message
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON chat_player_message
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_chat_server_message
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON chat_server_message
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_chat_whisper
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON chat_whisper
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_dbscan
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON dbscan
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_death_templates
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON death_templates
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_dimensions
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON dimensions
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_generator_cache
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON generator_cache
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_hits
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON hits
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_last_by_server
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON last_by_server
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_notes
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON notes
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_player_sessions
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON player_sessions
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_players
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON players
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_servers
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON servers
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_signs
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON signs
+EXECUTE PROCEDURE no_change();
+CREATE TRIGGER lock_tracks
+    BEFORE INSERT OR UPDATE OR DELETE
+    ON tracks
+EXECUTE PROCEDURE no_change();

@@ -918,14 +918,14 @@ public enum ChatProcessor {
                 return false;
             }
             cache.doParseInto(rawRows);
-            long endFence = rawRows.get(rawRows.size() - 1).createdAt - DEDUPLICATE_WITHIN;
-            int firstRowInCoda = binarySearch(rawRows, endFence); // first row with createdAt > endFence. aka, the first row that will be seen the next time this function runs!
+            long endFence = rawRows.get(rawRows.size() - 1).createdAt + DEDUPLICATE_WITHIN;
+            //int firstRowInCoda = binarySearch(rawRows, endFence); // first row with createdAt > endFence. aka, the first row that will be seen the next time this function runs!
 
             ArrayDeque<Deduplication> activeDedups = new ArrayDeque<>();
             List<RawChatRow> output = new ArrayList<>();
             outer:
             for (int i = 0; i < rawRows.size(); i++) {
-                boolean coda = i >= firstRowInCoda;
+                boolean coda = false;
                 RawChatRow row = rawRows.get(i);
                 while (!activeDedups.isEmpty() && activeDedups.peekFirst().start <= row.createdAt - DEDUPLICATE_WITHIN) {
                     output.add(activeDedups.removeFirst().contents.get(0));
@@ -956,8 +956,8 @@ public enum ChatProcessor {
                     }
                 }
             }
-            if (!activeDedups.isEmpty()) {
-                throw new IllegalStateException();
+            while (!activeDedups.isEmpty()) {
+                output.add(activeDedups.removeFirst().contents.get(0));
             }
 
             for (RawChatRow row : output) {

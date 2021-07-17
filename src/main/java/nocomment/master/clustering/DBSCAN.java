@@ -182,7 +182,7 @@ public enum DBSCAN {
 
     private Datapoint getDatapoint(Connection connection) throws SQLException {
         try (PreparedStatement stmt = connection.prepareStatement("WITH removed_id AS (DELETE FROM dbscan_to_update WHERE dbscan_id = (SELECT dbscan_id FROM dbscan_to_update WHERE LEAST(updatable_lower, updatable_upper) < ? ORDER BY LEAST(updatable_lower, updatable_upper) ASC LIMIT 1) RETURNING dbscan_id) SELECT " + COLS + " FROM dbscan WHERE id = (SELECT dbscan_id FROM removed_id)")) {
-            stmt.setLong(1, System.currentTimeMillis());
+            stmt.setLong(1, Long.MAX_VALUE - 1);
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     return new Datapoint(rs);
@@ -348,9 +348,9 @@ public enum DBSCAN {
                 Database.incrementCommitCounter("dbscan");
             }
         }
-        try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET root_updated_at = last_init_hit WHERE root_updated_at IS NULL AND cluster_parent IS NULL AND disjoint_rank > 0")) {
+        /*try (PreparedStatement stmt = connection.prepareStatement("UPDATE dbscan SET root_updated_at = last_init_hit WHERE root_updated_at IS NULL AND cluster_parent IS NULL AND disjoint_rank > 0")) {
             stmt.executeUpdate();
-        }
+        }*/
         connection.commit();
         Database.incrementCommitCounter("dbscan_final");
         System.out.println("DBSCAN merger committing");
