@@ -2,6 +2,9 @@
 
 This is the central controller of nocom.
 
+Q: "What is this?"
+A: See [here](https://github.com/nerdsinspace/nocom-explanation/blob/main/README.md)
+
 Q: "Where are the interesting parts?"
 A: All of it is interesting! But here are some *especially* interesting parts:
 * [The code that defined what areas were scanned on what schedule](src/main/java/nocomment/master/tracking/TrackyTrackyManager.java#L35-L67)
